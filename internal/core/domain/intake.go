@@ -384,13 +384,6 @@ func (f TriggerFiring) checkEvent() error {
 	return nil
 }
 
-// SourceCount is how many of a factory's items came from Source; Source "" counts the items whose
-// creator recorded none.
-type SourceCount struct {
-	Source ItemSource
-	Items  int
-}
-
 // TriggerStat is one trigger's items over a window: how many it created, how many of those have
 // a merged event, and what they cost.
 type TriggerStat struct {
@@ -400,11 +393,10 @@ type TriggerStat struct {
 	SpendUSD float64
 }
 
-// SourceWindow is where a factory's newest items came from: how many of them by source (as
-// SourceCount, by source) and when the oldest (From) and the newest (To) of them were created.
-// From and To are zero without items.
-type SourceWindow struct {
-	Counts   []SourceCount
+// ItemWindow is a factory's newest items: how many there are and when the oldest (From) and the
+// newest (To) of them were created. From and To are zero without items.
+type ItemWindow struct {
+	Items    int
 	From, To time.Time
 }
 

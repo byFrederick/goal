@@ -254,12 +254,6 @@ WHERE f.factory_id = sqlc.arg(factory_id) AND f.trigger = sqlc.arg(trigger) AND 
 ORDER BY f.at DESC, f.id DESC
 LIMIT 1;
 
--- name: ItemSourceTally :many
-SELECT coalesce(source, '')::text AS source, count(*) AS items FROM work_items
-WHERE factory_id = sqlc.arg(factory_id) AND created_at >= sqlc.arg(since)
-GROUP BY 1
-ORDER BY 1;
-
 -- name: OriginTally :many
 -- The factory's items created at or after the instant, by origin: Intake's day counts, which read
 -- no delivery.
@@ -306,20 +300,18 @@ WHERE w.factory_id = sqlc.arg(factory_id) AND w.trigger IS NOT NULL AND w.create
 GROUP BY w.trigger
 ORDER BY w.trigger;
 
--- name: LastItemSources :many
--- The factory's newest items (created_at, then id) by source, with each source's first and last
--- instants.
-WITH last AS (
-  SELECT source, created_at FROM work_items
+-- name: NewestItems :one
+-- How many of the factory's newest items (created_at, then id) there are, with the first and last
+-- instants they were created; no row without items.
+WITH newest AS (
+  SELECT created_at FROM work_items
   WHERE factory_id = sqlc.arg(factory_id)
   ORDER BY created_at DESC, id DESC
   LIMIT sqlc.arg(max_items)
 )
-SELECT coalesce(source, '')::text AS source, count(*) AS items, min(created_at)::timestamptz AS first_at,
-       max(created_at)::timestamptz AS last_at
-FROM last
-GROUP BY 1
-ORDER BY 1;
+SELECT count(*)::bigint AS items, min(created_at)::timestamptz AS first_at, max(created_at)::timestamptz AS last_at
+FROM newest
+HAVING count(*) > 0;
 
 -- name: TriggerDays :many
 -- The factory's firings that created an item, per trigger and UTC day.

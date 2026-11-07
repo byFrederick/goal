@@ -146,14 +146,12 @@ type Intake interface {
 	// OpenItemByDedupe is the newest item the trigger created from an event whose dedupe value is
 	// value and that is neither done nor cancelled (only.dedupe); false when there is none.
 	OpenItemByDedupe(ctx context.Context, factory domain.FactoryID, trigger, value string) (domain.ItemID, bool, error)
-	// SourceTally counts the factory's items created at or after since by source, by source.
-	SourceTally(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.SourceCount, error)
 	// TriggerStats are, for each trigger with items in the factory created at or after since, by
 	// trigger name: how many, how many of those have a merged event, and the sum of their cost.
 	TriggerStats(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.TriggerStat, error)
-	// ItemSources counts the factory's newest last items (by created_at, then id) by source, by
-	// source, with when the oldest and the newest of them were created.
-	ItemSources(ctx context.Context, factory domain.FactoryID, last int) (domain.SourceWindow, error)
+	// NewestItems counts the factory's newest last items (by created_at, then id), with when the
+	// oldest and the newest of them were created.
+	NewestItems(ctx context.Context, factory domain.FactoryID, last int) (domain.ItemWindow, error)
 	// OriginTally counts the factory's items created at or after since by origin, by origin; an
 	// origin without items has no entry.
 	OriginTally(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.OriginCount, error)

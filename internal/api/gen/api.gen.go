@@ -4566,21 +4566,11 @@ type Intake struct {
 	// From The UTC day the oldest of them was created; null without items
 	From *openapi_types.Date `json:"from"`
 
-	// Items How many items the sources count
+	// Items How many of the factory's newest items there are
 	Items int `json:"items"`
 
 	// Origins How many of the factory's items created in the window came from each origin (ADR 0040 decision 2), zero included; always answered. Items filed before origins were recorded count as person, the column's default
 	Origins *IntakeOrigins `json:"origins,omitempty"`
-
-	// Sources How many of the items came from each source, zero included. Items whose creator recorded no source count in items only.
-	Sources struct {
-		Api      int `json:"api"`
-		Cli      int `json:"cli"`
-		Github   int `json:"github"`
-		People   int `json:"people"`
-		Schedule int `json:"schedule"`
-		Webhook  int `json:"webhook"`
-	} `json:"sources"`
 
 	// Suggestions The triggers the definition ships disabled, in definition order: what Intake and the onboarding Intake step offer to turn on, so no client names a station, agent or work type of its own. Each is also in triggers.
 	Suggestions []TriggerSuggestion `json:"suggestions"`
@@ -9047,7 +9037,7 @@ type ListDraftRequestsParams struct {
 
 // GetIntakeParams defines parameters for GetIntake.
 type GetIntakeParams struct {
-	// Items How many of the newest items the sources count (default 48)
+	// Items How many of the newest items `items`, `from` and `to` count (default 48)
 	Items *int `form:"items,omitempty" json:"items,omitempty"`
 
 	// Window The days origins count over, ending now (default 30d)
@@ -10526,9 +10516,9 @@ type ClientInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
 	TestEnvironment(ctx context.Context, org OrgRef, factory FactoryRef, environment string, body TestEnvironmentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetIntake Where the factory's newest items came from, and its triggers
+	// GetIntake The factory's newest items, its origins and its triggers
 	//
-	// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
+	// How many of the factory's newest `items` items (by creation) there are, with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake (the `GetIntake` operationId).
 	GetIntake(ctx context.Context, org OrgRef, factory FactoryRef, params *GetIntakeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -13426,9 +13416,9 @@ func (c *Client) TestEnvironment(ctx context.Context, org OrgRef, factory Factor
 	return c.Client.Do(req)
 }
 
-// GetIntake Where the factory's newest items came from, and its triggers
+// GetIntake The factory's newest items, its origins and its triggers
 //
-// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
+// How many of the factory's newest `items` items (by creation) there are, with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
 //
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/intake (the `GetIntake` operationId).
 func (c *Client) GetIntake(ctx context.Context, org OrgRef, factory FactoryRef, params *GetIntakeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -27869,9 +27859,9 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test (the `TestEnvironment` operationId).
 	TestEnvironmentWithResponse(ctx context.Context, org OrgRef, factory FactoryRef, environment string, body TestEnvironmentJSONRequestBody, reqEditors ...RequestEditorFn) (*TestEnvironmentResponse, error)
 
-	// GetIntakeWithResponse Where the factory's newest items came from, and its triggers
+	// GetIntakeWithResponse The factory's newest items, its origins and its triggers
 	//
-	// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
+	// How many of the factory's newest `items` items (by creation) there are, with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -40210,9 +40200,9 @@ func (c *ClientWithResponses) TestEnvironmentWithResponse(ctx context.Context, o
 	return ParseTestEnvironmentResponse(rsp)
 }
 
-// GetIntakeWithResponse Where the factory's newest items came from, and its triggers
+// GetIntakeWithResponse The factory's newest items, its origins and its triggers
 //
-// The sources of the factory's newest `items` items (by creation) with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
+// How many of the factory's newest `items` items (by creation) there are, with the UTC days the oldest and the newest of them were created, and every trigger of the current definition in definition order, each with the items it created on each of the last 7 UTC days and its problem, if it has one, and the disabled ones again as suggestions. Clients re-read it on `item` and `definition` stream events. It also answers, for the screens of ADR 0040 (decision 22): the items created in the `window` by origin, counted from one grouped read of the factory's items and no read of webhook deliveries; the items that haven't started; the open triage item and the items whose follow-ups will join it; and the organization's webhooks open to the factory. Triggers are edited through the definition's draft and publish operations. 400 for items outside 1 to 500 and for a window other than 7d, 30d or 90d.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -49704,7 +49694,7 @@ type ServerInterface interface {
 	// TestEnvironment Test an environment's MCP servers or a template
 	// (POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test)
 	TestEnvironment(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, environment string)
-	// GetIntake Where the factory's newest items came from, and its triggers
+	// GetIntake The factory's newest items, its origins and its triggers
 	// (GET /v1/orgs/{org}/factories/{factory}/intake)
 	GetIntake(w http.ResponseWriter, r *http.Request, org OrgRef, factory FactoryRef, params GetIntakeParams)
 	// GetIntakeTrigger One trigger with this week's results and its recent events
@@ -67091,7 +67081,7 @@ type StrictServerInterface interface {
 	// TestEnvironment Test an environment's MCP servers or a template
 	// (POST /v1/orgs/{org}/factories/{factory}/environments/{environment}/test)
 	TestEnvironment(ctx context.Context, request TestEnvironmentRequestObject) (TestEnvironmentResponseObject, error)
-	// GetIntake Where the factory's newest items came from, and its triggers
+	// GetIntake The factory's newest items, its origins and its triggers
 	// (GET /v1/orgs/{org}/factories/{factory}/intake)
 	GetIntake(ctx context.Context, request GetIntakeRequestObject) (GetIntakeResponseObject, error)
 	// GetIntakeTrigger One trigger with this week's results and its recent events

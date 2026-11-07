@@ -66,8 +66,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Firing_ReadByItsKey", testFiringByKey},
 		{"Firing_FailureStreakCountsSinceTheLastCreated", testFailureStreak},
 		{"ScheduleLock_OneHolderAtATime", testScheduleLock},
-		{"Tally_SourcesAndTriggerStatsOverAWindow", testTallies},
-		{"Tally_LastItemsSources", testItemSources},
+		{"Tally_TriggerStatsOverAWindow", testTallies},
+		{"Tally_NewestItems", testNewestItems},
 		{"Tally_TriggerDaysByUTCDay", testTriggerDays},
 		{"Firing_ListNewestFirstWithItems", testFirings},
 		{"OtherOrg_ReachesNoEndpoint", testIsolation},
@@ -782,7 +782,6 @@ func testScheduleLock(f *fixture) {
 	}
 }
 
-// SourceTally counts the factory's items since the instant by source, "" for none recorded;
 // TriggerStats counts each trigger's items since then, those merged, and their cost.
 func testTallies(f *fixture) {
 	t := f.t
@@ -813,13 +812,6 @@ func testTallies(f *fixture) {
 		t.Fatal(err)
 	}
 
-	tally, err := f.in.SourceTally(f.ctx(), f.factory, since)
-	want := []domain.SourceCount{{Source: "", Items: 1}, {Source: domain.ItemFromGitHub, Items: 2}, {Source: domain.ItemFromPeople, Items: 1}, {Source: domain.ItemFromSchedule, Items: 1}}
-
-	if err != nil || !slices.Equal(tally, want) {
-		t.Errorf("SourceTally = %v, %v; want %v", tally, err, want)
-	}
-
 	stats, err := f.in.TriggerStats(f.ctx(), f.factory, since)
 	wantStats := []domain.TriggerStat{{Trigger: flaky, Created: 2, Merged: 1, SpendUSD: 1.75}, {Trigger: nightly, Created: 1}}
 
@@ -828,13 +820,13 @@ func testTallies(f *fixture) {
 	}
 }
 
-// ItemSources counts the factory's newest items only, by source, with their first and last
-// instants; a factory without items has none.
-func testItemSources(f *fixture) {
+// NewestItems counts the factory's newest items only, whatever their source, with their first and
+// last instants; a factory without items has none.
+func testNewestItems(f *fixture) {
 	t := f.t
 
-	if got, err := f.in.ItemSources(f.ctx(), f.factory, 48); err != nil || len(got.Counts) != 0 || !got.From.IsZero() || !got.To.IsZero() {
-		t.Errorf("ItemSources of no items = %+v, %v; want none", got, err)
+	if got, err := f.in.NewestItems(f.ctx(), f.factory, 48); err != nil || got != (domain.ItemWindow{}) {
+		t.Errorf("NewestItems of no items = %+v, %v; want none", got, err)
 	}
 
 	f.item(domain.ItemFromPeople, "", t0.Add(-4*time.Hour)) // older than the newest 4
@@ -851,11 +843,13 @@ func testItemSources(f *fixture) {
 		t.Fatal(err)
 	}
 
-	got, err := f.in.ItemSources(f.ctx(), f.factory, 4)
-	want := []domain.SourceCount{{Source: "", Items: 1}, {Source: domain.ItemFromCLI, Items: 1}, {Source: domain.ItemFromGitHub, Items: 2}}
+	got, err := f.in.NewestItems(f.ctx(), f.factory, 4)
+	if err != nil || got.Items != 4 || !got.From.Equal(t0.Add(-3*time.Hour)) || !got.To.Equal(t0) {
+		t.Errorf("NewestItems(4) = %+v, %v; want 4 from %v to %v", got, err, t0.Add(-3*time.Hour), t0)
+	}
 
-	if err != nil || !slices.Equal(got.Counts, want) || !got.From.Equal(t0.Add(-3*time.Hour)) || !got.To.Equal(t0) {
-		t.Errorf("ItemSources(4) = %+v, %v; want %v from %v to %v", got, err, want, t0.Add(-3*time.Hour), t0)
+	if got, err := f.in.NewestItems(f.ctx(), f.factory, 48); err != nil || got.Items != 5 || !got.From.Equal(t0.Add(-4*time.Hour)) {
+		t.Errorf("NewestItems(48) = %+v, %v; want all 5 from %v", got, err, t0.Add(-4*time.Hour))
 	}
 }
 
@@ -1024,10 +1018,6 @@ func testIsolatedReads(f *fixture) {
 		t.Errorf("labs OpenItemByDedupe = %q, %v, %v; want none", got, ok, err)
 	}
 
-	if got, err := f.in.SourceTally(labs, f.factory, t0.Add(-time.Hour)); err != nil || len(got) != 0 {
-		t.Errorf("labs SourceTally = %v, %v; want none", got, err)
-	}
-
 	if got, err := f.in.TriggerStats(labs, f.factory, t0.Add(-time.Hour)); err != nil || len(got) != 0 {
 		t.Errorf("labs TriggerStats = %v, %v; want none", got, err)
 	}
@@ -1035,12 +1025,12 @@ func testIsolatedReads(f *fixture) {
 	f.isolatedIntakeReads(labs)
 }
 
-// isolatedIntakeReads checks that labs reads none of the fixture's sources and trigger days.
+// isolatedIntakeReads checks that labs reads none of the fixture's newest items and trigger days.
 func (f *fixture) isolatedIntakeReads(labs context.Context) {
 	t := f.t
 
-	if got, err := f.in.ItemSources(labs, f.factory, 48); err != nil || len(got.Counts) != 0 || !got.From.IsZero() {
-		t.Errorf("labs ItemSources = %+v, %v; want none", got, err)
+	if got, err := f.in.NewestItems(labs, f.factory, 48); err != nil || got != (domain.ItemWindow{}) {
+		t.Errorf("labs NewestItems = %+v, %v; want none", got, err)
 	}
 
 	if got, err := f.in.TriggerDays(labs, f.factory, t0.Add(-time.Hour)); err != nil || len(got) != 0 {
@@ -1103,9 +1093,8 @@ func testNoOrg(f *fixture) {
 		"OpenItemByDedupe": func() error { _, _, err := f.in.OpenItemByDedupe(ctx, f.factory, flaky, "unit"); return err },
 		"Firing":           func() error { _, _, err := f.in.Firing(ctx, f.factory, flaky, "k"); return err },
 		"FailureStreak":    func() error { _, err := f.in.FailureStreak(ctx, f.factory, flaky, "unit"); return err },
-		"SourceTally":      func() error { _, err := f.in.SourceTally(ctx, f.factory, t0); return err },
 		"TriggerStats":     func() error { _, err := f.in.TriggerStats(ctx, f.factory, t0); return err },
-		"ItemSources":      func() error { _, err := f.in.ItemSources(ctx, f.factory, 48); return err },
+		"NewestItems":      func() error { _, err := f.in.NewestItems(ctx, f.factory, 48); return err },
 		"TriggerDays":      func() error { _, err := f.in.TriggerDays(ctx, f.factory, t0); return err },
 		"OriginTally":      func() error { _, err := f.in.OriginTally(ctx, f.factory, t0); return err },
 		"ComingUp":         func() error { _, _, err := f.in.ComingUp(ctx, f.factory, 10); return err },
