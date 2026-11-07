@@ -168,46 +168,6 @@ func TestCanonicalJSON(t *testing.T) {
 	}
 }
 
-func TestEffectiveToolModes(t *testing.T) {
-	t.Parallel()
-
-	const conn, other ConnectionID = "c-1", "c-2"
-
-	revokedAt, revoker := qt0, LocalUser
-	modes := map[string]ConnectionToolMode{
-		"read_issue": ToolModeAllow, toolCreateComment: ToolModeAsk, toolCloseIssue: ToolModeAsk,
-		toolDeleteRepo: ToolModeOff, toolEditIssue: ToolModeAsk, toolLabelIssue: ToolModeAsk,
-	}
-	rules := []StandingRule{
-		{ConnectionID: conn, Tool: toolCreateComment, Agent: roleArchitect},                                          // active: allow
-		{ConnectionID: conn, Tool: toolCloseIssue, Agent: roleArchitect, RevokedAt: &revokedAt, RevokedBy: &revoker}, // revoked
-		{ConnectionID: conn, Tool: toolEditIssue, Agent: "reviewer"},                                                 // another role
-		{ConnectionID: other, Tool: toolLabelIssue, Agent: roleArchitect},                                            // another connection
-		{ConnectionID: conn, Tool: toolDeleteRepo, Agent: roleArchitect},                                             // never lifts off
-	}
-
-	got := EffectiveToolModes(modes, rules, conn, roleArchitect)
-	want := RunToolModes{
-		Modes: map[string]ConnectionToolMode{
-			toolCloseIssue: ToolModeAsk, toolDeleteRepo: ToolModeOff, toolEditIssue: ToolModeAsk, toolLabelIssue: ToolModeAsk,
-		},
-		AlwaysAllowOffered: []string{toolCloseIssue, toolEditIssue, toolLabelIssue},
-	}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("EffectiveToolModes = %+v; want %+v", got, want)
-	}
-
-	server := []StandingRule{{Factory: "f-1", Environment: DefaultEnvironment, Server: "acme-git", Tool: toolCreateComment, Agent: roleArchitect}}
-	if lifted := EffectiveToolModes(modes, server, "", roleArchitect); lifted.Modes[toolCreateComment] != ToolModeAsk {
-		t.Errorf("EffectiveToolModes with a server's rule = %+v; want %s still asking", lifted, toolCreateComment)
-	}
-
-	if none := EffectiveToolModes(nil, nil, conn, roleArchitect); len(none.Modes) != 0 || len(none.AlwaysAllowOffered) != 0 {
-		t.Errorf("EffectiveToolModes without modes = %+v; want every tool allowed", none)
-	}
-}
-
 // A tool's mode is its most specific matching pattern's, and allow when none matches.
 func TestResolveToolMode(t *testing.T) {
 	t.Parallel()
@@ -289,7 +249,6 @@ func TestServerToolModes(t *testing.T) {
 				other(toolEditIssue, func(r *StandingRule) { r.Server = "acme-docs" }),
 				other(toolEditIssue, func(r *StandingRule) { r.Environment = "staging" }),
 				other(toolEditIssue, func(r *StandingRule) { r.Factory = otherFactory }),
-				{ConnectionID: "c-1", Connection: server, Tool: toolLabelIssue, Agent: roleArchitect},
 			},
 			want: map[string]ConnectionToolMode{
 				toolCreateComment: ToolModeAllow, toolCloseIssue: ToolModeAllow, "close_pr": ToolModeAsk, toolDeleteRepo: ToolModeOff,

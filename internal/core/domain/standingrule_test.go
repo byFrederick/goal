@@ -50,33 +50,6 @@ func TestConnectionToolMode_CheckToolModes(t *testing.T) {
 	}
 }
 
-func TestNewStandingRule_Check(t *testing.T) {
-	t.Parallel()
-
-	valid := NewStandingRule{Connection: "acme-git", Tool: toolCreateComment, Agent: "architect", Item: "00000000-0000-7000-8000-0000000000aa"}
-	if err := valid.Check(); err != nil {
-		t.Fatalf("Check(%+v) = %v; want nil", valid, err)
-	}
-
-	for name, change := range map[string]func(*NewStandingRule){
-		"an empty tool":          func(n *NewStandingRule) { n.Tool = "" },
-		"an over-long tool":      func(n *NewStandingRule) { n.Tool = strings.Repeat("t", MaxToolName+1) },
-		"an empty agent":         func(n *NewStandingRule) { n.Agent = "" },
-		"an over-long agent":     func(n *NewStandingRule) { n.Agent = "a" + strings.Repeat("b", 40) },
-		"an agent in capitals":   func(n *NewStandingRule) { n.Agent = "Architect" },
-		"a malformed connection": func(n *NewStandingRule) { n.Connection = "Acme Git" },
-		"no item":                func(n *NewStandingRule) { n.Item = "" },
-		"an item that is no id":  func(n *NewStandingRule) { n.Item = "item-1" },
-	} {
-		n := valid
-		change(&n)
-
-		if err := n.Check(); !errors.Is(err, ErrInvalid) {
-			t.Errorf("Check with %s = %v; want ErrInvalid", name, err)
-		}
-	}
-}
-
 func TestNewStandingRule_ActiveUntilRevoked(t *testing.T) {
 	t.Parallel()
 

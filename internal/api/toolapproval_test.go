@@ -56,7 +56,7 @@ func (h signedIn) signInOwnerNow() {
 func checkRule(t *testing.T, rules []domain.StandingRule, it domain.Item) {
 	t.Helper()
 
-	if len(rules) != 1 || rules[0].ConnectionID != "" || rules[0].Factory != lineID || rules[0].Environment != domain.DefaultEnvironment ||
+	if len(rules) != 1 || rules[0].Factory != lineID || rules[0].Environment != domain.DefaultEnvironment ||
 		rules[0].Server != approvalConnection || rules[0].Tool != approvalTool ||
 		rules[0].Agent != agBackend || rules[0].ItemID != it.ID || !rules[0].Active() {
 		t.Errorf("rules %+v; want one active rule for backend on repo's create_comment", rules)
@@ -318,8 +318,8 @@ func (h *harness) alwaysAllowed(t *testing.T, header http.Header) gen.StandingRu
 func checkListedRule(t *testing.T, rule gen.StandingRule) {
 	t.Helper()
 
-	if rule.Id == "" || rule.ConnectionId != nil || rule.Connection != nil || deref(rule.FactoryId) != lineID ||
-		deref(rule.Environment) != domain.DefaultEnvironment || deref(rule.Server) != approvalConnection || rule.Tool != approvalTool ||
+	if rule.Id == "" || rule.FactoryId != lineID ||
+		rule.Environment != domain.DefaultEnvironment || rule.Server != approvalConnection || rule.Tool != approvalTool ||
 		rule.Agent != agBackend || rule.CreatedBy.Id != domain.LocalUser.ID || rule.ItemId == "" || rule.RevokedAt != nil || rule.RevokedBy != nil {
 		t.Errorf("rule %+v; want backend's active rule on repo's create_comment", rule)
 	}
@@ -357,7 +357,7 @@ func TestAPI_StandingRulesListAndRevoke(t *testing.T) {
 }
 
 // checkServerRule checks that a rule keyed by server lists with its factory, environment and
-// server and no connection, and revokes like a connection's.
+// server, and revokes.
 func (h *harness) checkServerRule(t *testing.T) {
 	t.Helper()
 
@@ -375,13 +375,13 @@ func (h *harness) checkServerRule(t *testing.T) {
 	}
 
 	r := list.Rules[0]
-	if r.ConnectionId != nil || r.Connection != nil || deref(r.FactoryId) != string(acmeID) || deref(r.Environment) != domain.DefaultEnvironment ||
-		deref(r.Server) != approvalConnection || r.Tool != approvalTool || r.Agent != agBackend {
-		t.Errorf("server rule %+v; want its factory, environment and server, and no connection", r)
+	if r.FactoryId != string(acmeID) || r.Environment != domain.DefaultEnvironment ||
+		r.Server != approvalConnection || r.Tool != approvalTool || r.Agent != agBackend {
+		t.Errorf("server rule %+v; want its factory, environment and server", r)
 	}
 
 	revoked := decode[gen.StandingRule](t, h.request(t, http.MethodDelete, standingRulesPath+"/"+r.Id, "", nil), http.StatusOK)
-	if revoked.Id != r.Id || revoked.RevokedAt == nil || deref(revoked.Server) != approvalConnection {
+	if revoked.Id != r.Id || revoked.RevokedAt == nil || revoked.Server != approvalConnection {
 		t.Errorf("revoked %+v; want the server rule, revoked", revoked)
 	}
 }
