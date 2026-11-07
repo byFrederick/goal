@@ -416,7 +416,6 @@ type WorkItem struct {
 	Paths             []string
 	BaseCommit        *string
 	Trigger           *string
-	Source            *string
 	IntegrationBranch *string
 	IntegrationLandAt *string
 	Origin            string

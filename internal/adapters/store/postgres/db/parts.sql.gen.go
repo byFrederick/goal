@@ -14,7 +14,7 @@ import (
 
 const itemParts = `-- name: ItemParts :many
 
-SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items WHERE parent_id = $1::uuid AND part_key IS NOT NULL ORDER BY number
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items WHERE parent_id = $1::uuid AND part_key IS NOT NULL ORDER BY number
 `
 
 // Assemblies and their parts (ports.Store Assemble, Parts; migration 00059). Lock order: the
@@ -58,7 +58,6 @@ func (q *Queries) ItemParts(ctx context.Context, parentID uuid.UUID) ([]WorkItem
 			&i.Paths,
 			&i.BaseCommit,
 			&i.Trigger,
-			&i.Source,
 			&i.IntegrationBranch,
 			&i.IntegrationLandAt,
 			&i.Origin,

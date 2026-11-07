@@ -13,7 +13,7 @@ import (
 )
 
 const comingUpItems = `-- name: ComingUpItems :many
-SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage, w.branch, n.needs::bigint[] AS needs,
+SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage, w.branch, n.needs::bigint[] AS needs,
   coalesce(src.factory_id::text, '')::text AS from_factory_id, coalesce(src.number, 0)::bigint AS from_number,
   count(*) OVER ()::bigint AS total
 FROM work_items w
@@ -90,7 +90,6 @@ func (q *Queries) ComingUpItems(ctx context.Context, arg ComingUpItemsParams) ([
 			&i.WorkItem.Paths,
 			&i.WorkItem.BaseCommit,
 			&i.WorkItem.Trigger,
-			&i.WorkItem.Source,
 			&i.WorkItem.IntegrationBranch,
 			&i.WorkItem.IntegrationLandAt,
 			&i.WorkItem.Origin,
@@ -210,7 +209,7 @@ RETURNING secret_id, created_at
 type InsertOrgWebhookParams struct {
 	ID             uuid.UUID
 	Name           string
-	Sender         *string
+	Sender         string
 	TokenHeader    *string
 	TokenEventPath *string
 	TokenIDPath    *string
@@ -218,7 +217,7 @@ type InsertOrgWebhookParams struct {
 }
 
 type InsertOrgWebhookRow struct {
-	SecretID  *uuid.UUID
+	SecretID  uuid.UUID
 	CreatedAt time.Time
 }
 
@@ -438,8 +437,8 @@ WHERE e.name = $1
 type OrgWebhookByNameRow struct {
 	ID             uuid.UUID
 	Name           string
-	Sender         *string
-	SecretID       *uuid.UUID
+	Sender         string
+	SecretID       uuid.UUID
 	SecretName     string
 	Enabled        bool
 	TokenHeader    *string
@@ -480,8 +479,8 @@ ORDER BY e.name
 type OrgWebhooksRow struct {
 	ID             uuid.UUID
 	Name           string
-	Sender         *string
-	SecretID       *uuid.UUID
+	Sender         string
+	SecretID       uuid.UUID
 	SecretName     string
 	Enabled        bool
 	TokenHeader    *string
@@ -1192,8 +1191,8 @@ WHERE e.id = $1
 type WebhookEndpointRow struct {
 	ID             uuid.UUID
 	Name           string
-	Sender         *string
-	SecretID       *uuid.UUID
+	Sender         string
+	SecretID       uuid.UUID
 	SecretName     string
 	Enabled        bool
 	TokenHeader    *string
@@ -1248,8 +1247,8 @@ ORDER BY e.name, e.id
 type WebhookEndpointsRow struct {
 	ID             uuid.UUID
 	Name           string
-	Sender         *string
-	SecretID       *uuid.UUID
+	Sender         string
+	SecretID       uuid.UUID
 	SecretName     string
 	Enabled        bool
 	TokenHeader    *string

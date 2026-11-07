@@ -825,21 +825,14 @@ func (in *Intake) PruneFirings(ctx context.Context, factory domain.FactoryID, be
 	return int(n), nil
 }
 
-// endpointFrom is r without its openings (withOpenings). A row without a secret or a sender, a
-// factory endpoint the conversion never reached, reads with neither.
+// endpointFrom is r without its openings (withOpenings).
 func endpointFrom(r db.WebhookEndpointRow) domain.WebhookEndpoint {
-	e := domain.WebhookEndpoint{
+	return domain.WebhookEndpoint{
 		ID: domain.WebhookEndpointID(r.ID.String()), Name: r.Name,
-		Sender: domain.WebhookSender(deref(r.Sender)), Secret: r.SecretName, Enabled: r.Enabled,
+		Sender: domain.WebhookSender(r.Sender), SecretID: domain.SecretID(r.SecretID.String()), Secret: r.SecretName, Enabled: r.Enabled,
 		Token:     domain.TokenSettings{Header: deref(r.TokenHeader), EventPath: deref(r.TokenEventPath), IDPath: deref(r.TokenIDPath)},
 		CreatedAt: r.CreatedAt.UTC(), RotatedAt: utc(r.RotatedAt), PingedAt: utc(r.PingedAt),
 	}
-
-	if r.SecretID != nil {
-		e.SecretID = domain.SecretID(r.SecretID.String())
-	}
-
-	return e
 }
 
 func deliveryFrom(r db.WebhookDeliveriesRow) (domain.WebhookDelivery, error) {

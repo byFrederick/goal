@@ -266,10 +266,10 @@ func seedWebhook(t *testing.T, d connectionsDB, org domain.OrgID, name string) d
 
 // Migration 00115: another organization sees no webhook opening; goal_app cannot change a
 // webhook's token settings, nor an opening's webhook or factory, and its keys refuse a secret or a
-// factory the organization does not have (00117 grants the conversion UPDATE on sender, secret_id
-// and factory_id); the database refuses
-// a reserved name and the delete of a secret a webhook uses, and a rename of the secret follows;
-// goal_connection_key_ids skips the webhook's null key id; the purge removes both.
+// factory the organization does not have (00117 grants the conversion UPDATE on sender and
+// secret_id); the database refuses a reserved name, a webhook without a secret and the delete of
+// a secret a webhook uses, and a rename of the secret follows; goal_connection_key_ids lists the
+// secret's key id only (00136); the purge removes both.
 func TestIntake_OrgWebhooksRLSAndGrants(t *testing.T) {
 	t.Parallel()
 
@@ -292,7 +292,6 @@ func TestIntake_OrgWebhooksRLSAndGrants(t *testing.T) {
 
 	appRefuses(t, d, acme, []string{
 		`UPDATE webhook_endpoints SET secret_id = gen_random_uuid()`,
-		`UPDATE webhook_endpoints SET factory_id = gen_random_uuid()`,
 		`UPDATE webhook_endpoints SET token_header = 'X-Token'`,
 		`UPDATE webhook_openings SET factory_id = gen_random_uuid()`,
 		`UPDATE webhook_openings SET webhook_id = gen_random_uuid()`,
