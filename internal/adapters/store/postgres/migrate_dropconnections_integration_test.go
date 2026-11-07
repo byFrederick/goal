@@ -171,7 +171,7 @@ func TestMigrate_DropsConnections(t *testing.T) {
 	}
 
 	got, err := NewKnowledge(s.store).Sources(ctx)
-	if err != nil || len(got) != 1 || string(got[0].ID) != source.String() || got[0].Secret != acmeGit || got[0].Connection != "" {
+	if err != nil || len(got) != 1 || string(got[0].ID) != source.String() || got[0].Secret != acmeGit {
 		t.Errorf("knowledge sources after 00135 = %+v, %v; want handbook, reading with secret acme-git", got, err)
 	}
 

@@ -265,7 +265,7 @@ func TestSecretsCheck_KnowledgeSources(t *testing.T) {
 		{Name: "open", Kind: domain.SourceRepository, Secret: codeToken, Config: map[string]string{repositoryKey: "https://git.example.com/acme/docs"}},
 		{Name: "self", Kind: domain.SourceRepository, Secret: codeToken, Config: map[string]string{repositoryKey: "https://GIT.example.com/Acme/Review/"}},
 		{
-			Name: "self-synced", Kind: domain.SourceSynced, Connection: "code",
+			Name: "self-synced", Kind: domain.SourceSynced, Secret: codeToken,
 			Config: map[string]string{repositoryKey: "https://git.example.com/acme/review.git", "include": "docs/**"},
 		},
 		{Name: "wiki", Kind: domain.SourceConfluence, Secret: codeToken, Config: map[string]string{"spaces": "ENG"}},

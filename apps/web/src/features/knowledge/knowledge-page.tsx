@@ -299,10 +299,7 @@ function SourceName({ s }: { s: KnowledgeSource }) {
 }
 
 function SyncCell({ s, now }: { s: KnowledgeSource; now: number }) {
-  const at =
-    s.status === 'syncing' || !s.last_synced_at || s.kind === 'live'
-      ? undefined
-      : formatClock(s.last_synced_at, new Date(now));
+  const at = s.status === 'syncing' || !s.last_synced_at ? undefined : formatClock(s.last_synced_at, new Date(now));
   return <StatusText line={sourceStatus(s)} time={at} busy={s.status === 'syncing'} />;
 }
 

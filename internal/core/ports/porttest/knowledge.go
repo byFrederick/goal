@@ -21,7 +21,7 @@ var _ ports.Knowledge = (*Knowledge)(nil)
 const auditKind = "kind"
 
 // Knowledge keeps knowledge bases in memory with the database's rules: names unique per
-// organization, no source on a connection (none exists any more, ADR 0037), leases claimed by
+// organization, leases claimed by
 // time, an audit entry for every change people make, and the files uploaded to upload sources.
 type Knowledge struct {
 	audit ports.Audit
@@ -181,11 +181,6 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 		return domain.KnowledgeSource{}, fmt.Errorf("create knowledge source: %w", err)
 	}
 
-	if n.Connection != "" {
-		// No connection rows exist any more, so the database's foreign key refuses every name.
-		return domain.KnowledgeSource{}, fmt.Errorf("create knowledge source: connection %q: %w", n.Connection, ports.ErrNotFound)
-	}
-
 	if err := k.secret(ctx, n.Secret); err != nil {
 		return domain.KnowledgeSource{}, fmt.Errorf("create knowledge source: %w", err)
 	}
@@ -199,17 +194,13 @@ func (k *Knowledge) CreateSource(ctx context.Context, n domain.NewKnowledgeSourc
 
 		now := time.Now().UTC()
 		s := domain.KnowledgeSource{
-			ID: domain.KnowledgeSourceID(newV7()), Name: n.Name, Title: n.Title, Kind: n.Kind, Connection: n.Connection, Secret: n.Secret,
+			ID: domain.KnowledgeSourceID(newV7()), Name: n.Name, Title: n.Title, Kind: n.Kind, Secret: n.Secret,
 			Config: maps.Clone(n.Config), ReadWhen: n.ReadWhen, SyncEvery: n.Every(), Status: domain.SyncIdle,
-			CreatedBy: by, CreatedAt: now, UpdatedAt: now,
+			NextSyncAt: &now, CreatedBy: by, CreatedAt: now, UpdatedAt: now,
 		}
 
 		if s.Config == nil {
 			s.Config = map[string]string{}
-		}
-
-		if n.Kind != domain.SourceLive {
-			s.NextSyncAt = &now
 		}
 
 		if err := k.audit.Append(ctx, sourceEntry(by, domain.AuditKnowledgeSourceCreated, s.ID,
@@ -298,7 +289,7 @@ func newReadWhen(src *domain.KnowledgeSource, line *string, now time.Time) {
 	switch src.Kind {
 	case domain.SourceUpload, domain.SourceRepository, domain.SourceConfluence:
 		src.NextSyncAt = &now
-	case domain.SourceSynced, domain.SourceLive:
+	case domain.SourceSynced:
 	}
 }
 
@@ -322,7 +313,7 @@ func (k *Knowledge) ConvertSource(ctx context.Context, name string, kind domain.
 		}
 
 		now := time.Now().UTC()
-		s.src.Kind, s.src.Connection = kind, ""
+		s.src.Kind = kind
 		s.src.Config = s.src.ConvertedConfig()
 		s.src.NextSyncAt, s.src.UpdatedAt = &now, now
 		out = o.view(s)
@@ -338,7 +329,7 @@ func (k *Knowledge) ConvertSource(ctx context.Context, name string, kind domain.
 
 // sourceAudit is the data of a new source's created entry: its name, kind and what it reads.
 func sourceAudit(n domain.NewKnowledgeSource) map[string]any {
-	out := map[string]any{auditName: n.Name, auditKind: string(n.Kind), "connection": n.Connection}
+	out := map[string]any{auditName: n.Name, auditKind: string(n.Kind)}
 	if n.Secret != "" {
 		out["secret"] = n.Secret
 	}
@@ -401,10 +392,6 @@ func (k *Knowledge) SyncNow(ctx context.Context, name string) error {
 			return fmt.Errorf("knowledge source %q: %w", name, ports.ErrNotFound)
 		}
 
-		if s.src.Kind == domain.SourceLive {
-			return fmt.Errorf("knowledge source %q is live and never syncs: %w", name, domain.ErrInvalid)
-		}
-
 		now := time.Now().UTC()
 		s.src.NextSyncAt = &now
 
@@ -418,7 +405,7 @@ func patchedNextSync(src domain.KnowledgeSource, now time.Time) *time.Time {
 	switch {
 	case src.SyncEvery == domain.SyncOnDemand:
 		return nil
-	case src.Kind != domain.SourceLive && src.NextSyncAt == nil:
+	case src.NextSyncAt == nil:
 		return &now
 	default:
 		return src.NextSyncAt
@@ -460,10 +447,10 @@ func (k *Knowledge) ClaimSource(_ context.Context, now, until time.Time) (*domai
 	}, nil
 }
 
-// claimable is the claim's rule: not live, its lease ended, and due; an on-demand source waiting
+// claimable is the claim's rule: its lease ended, and due; an on-demand source waiting
 // for Sync never is.
 func claimable(s domain.KnowledgeSource, now time.Time) bool {
-	if s.Kind == domain.SourceLive || s.NextSyncAt == nil || (s.LeaseUntil != nil && s.LeaseUntil.After(now)) {
+	if s.NextSyncAt == nil || (s.LeaseUntil != nil && s.LeaseUntil.After(now)) {
 		return false
 	}
 

@@ -3586,7 +3586,7 @@ export interface paths {
         put?: never;
         /**
          * Add a source to the knowledge base
-         * @description An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces); a live source is a connection whose own tools search, which nothing indexes. Due to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an upload source, a synced source without a secret or reader or with a connection, a live source without a connection, a schedule under 15 minutes), 404 secret-not-found or connection-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
+         * @description An upload source holds files people upload; a synced source reads with a secret, its config naming its reader and what it reads (a repository, a branch and paths; Confluence spaces). Due to sync at once. 400 for a broken rule (a name, a title, a kind not in the list, a secret on an upload source, a synced source without a secret or reader, a schedule under 15 minutes), 404 secret-not-found, 409 knowledge-source-name-taken. Audited as knowledge_source.created.
          */
         post: operations["createKnowledgeSource"];
         delete?: never;
@@ -3623,7 +3623,7 @@ export interface paths {
         head?: never;
         /**
          * Change a source's title, config or schedule
-         * @description config, when present, replaces the source's config. secret, when present, is a synced source's new secret, which moves a source still on its connection over to it (400 for another kind, 404 secret-not-found). The name, kind and connection never change. Audited as knowledge_source.updated.
+         * @description config, when present, replaces the source's config. secret, when present, is a synced source's new secret (400 for another kind, 404 secret-not-found). The name and kind never change. Audited as knowledge_source.updated.
          */
         patch: operations["updateKnowledgeSource"];
         trace?: never;
@@ -3644,7 +3644,7 @@ export interface paths {
         put?: never;
         /**
          * Sync a source now
-         * @description The source is due at once; the next free goald syncs it, and `event: knowledge` on the stream says when that starts and ends. 409 for a live source, which never syncs.
+         * @description The source is due at once; the next free goald syncs it, and `event: knowledge` on the stream says when that starts and ends.
          */
         post: operations["syncKnowledgeSource"];
         delete?: never;
@@ -3815,7 +3815,7 @@ export interface components {
             title: string;
             status: number;
             detail?: string;
-            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections: connection-not-found (404, a knowledge source naming a connection the organization does not have), connections-unavailable (503: goald has no master key, so no secret can be opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Webhooks (ADR 0040): webhook-not-found and webhook-delivery-not-found (404), webhook-invalid (400), webhook-name-taken and webhook-in-use (409; webhook-in-use with triggers naming each trigger that uses it), webhooks-unavailable (503). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), connection-cannot-sync (400), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate). */
+            /** @description A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections: connection-not-found (404, a connection the organization does not have), connections-unavailable (503: goald has no master key, so no secret can be opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Webhooks (ADR 0040): webhook-not-found and webhook-delivery-not-found (404), webhook-invalid (400), webhook-name-taken and webhook-in-use (409; webhook-in-use with triggers naming each trigger that uses it), webhooks-unavailable (503). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate). */
             code?: string;
             /** @description definition-invalid only, every problem of the definition (errors block the publish) */
             problems?: components["schemas"]["DefinitionProblem"][];
@@ -8814,9 +8814,7 @@ export interface components {
             name: components["schemas"]["KnowledgeSourceName"];
             title: string;
             kind: components["schemas"]["KnowledgeSourceKind"];
-            /** @description The connection a live source reads, or a synced one not yet on a secret; absent for an upload source */
-            connection?: string;
-            /** @description The secret a synced source reads with, opened at each sync; absent for an upload or live source and a synced one still on its connection */
+            /** @description The secret a synced source reads with, opened at each sync; absent for an upload source */
             secret?: string;
             /** @description What its reader reads (a repository, a branch and path globs; Confluence spaces and, with root_page, only one page's tree). A synced source on a secret also names its reader (reader: gitdocs or confluence) and, for confluence, the site and the account's email. */
             config: {
@@ -8836,7 +8834,7 @@ export interface components {
             last_synced_at: string | null;
             /**
              * Format: date-time
-             * @description When it is due next; null for a live source, and for an on-demand source (sync_every_seconds 0) until someone presses Sync
+             * @description When it is due next; null for an on-demand source (sync_every_seconds 0) until someone presses Sync
              */
             next_sync_at: string | null;
             /** @description Its newest snapshot; null before the first sync */
@@ -8884,16 +8882,14 @@ export interface components {
             work_types: string[];
         };
         /**
-         * @description upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced and live are the kinds before the cut-over
+         * @description upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced is the kind before the cut-over
          * @enum {string}
          */
-        KnowledgeSourceKind: "upload" | "repository" | "confluence" | "synced" | "live";
+        KnowledgeSourceKind: "upload" | "repository" | "confluence" | "synced";
         NewKnowledgeSource: {
             name: components["schemas"]["KnowledgeSourceName"];
             title: string;
             kind: components["schemas"]["KnowledgeSourceKind"];
-            /** @description The connection a live source reads */
-            connection?: string;
             /** @description The secret a synced source reads with: the code host's token for gitdocs, the API token for confluence. It must be open to all factories. */
             secret?: components["schemas"]["SecretName"];
             /** @description What its reader reads. A synced source names its reader (reader: gitdocs or confluence): gitdocs reads repository (its https URL on one of the organization's code hosts; a sync on any other host fails before the secret is opened, and the kind the host is listed as replaces code_host), branch, include and exclude; confluence reads site, email and spaces (space keys separated by commas), and the optional root_page (a page id: only that page and the pages under it). */

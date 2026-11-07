@@ -4510,11 +4510,9 @@ paths:
       description: >-
         An upload source holds files people upload; a synced source reads with a secret, its
         config naming its reader and what it reads (a repository, a branch and paths; Confluence
-        spaces); a live source is a connection whose own tools search, which nothing indexes. Due
-        to sync at once. 400 for a broken rule (a name, a title, a secret or connection on an
-        upload source, a synced source without a secret or reader or with a connection, a live
-        source without a connection, a schedule under 15 minutes), 404 secret-not-found or
-        connection-not-found, 409 knowledge-source-name-taken. Audited as
+        spaces). Due to sync at once. 400 for a broken rule (a name, a title, a kind not in the
+        list, a secret on an upload source, a synced source without a secret or reader, a schedule
+        under 15 minutes), 404 secret-not-found, 409 knowledge-source-name-taken. Audited as
         knowledge_source.created.
       requestBody:
         required: true
@@ -4552,9 +4550,8 @@ paths:
       summary: Change a source's title, config or schedule
       description: >-
         config, when present, replaces the source's config. secret, when present, is a synced
-        source's new secret, which moves a source still on its connection over to it (400 for
-        another kind, 404 secret-not-found). The name, kind and connection never change. Audited
-        as knowledge_source.updated.
+        source's new secret (400 for another kind, 404 secret-not-found). The name and kind never
+        change. Audited as knowledge_source.updated.
       requestBody:
         required: true
         content:
@@ -4591,7 +4588,7 @@ paths:
       summary: Sync a source now
       description: >-
         The source is due at once; the next free goald syncs it, and `event: knowledge` on the
-        stream says when that starts and ends. 409 for a live source, which never syncs.
+        stream says when that starts and ends.
       responses:
         "202":
           description: The source is due
@@ -4997,8 +4994,8 @@ components:
             fixed body without detail: org-not-found, factory-not-found, item-not-found,
             run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of
             the item's touches.
-            Connections: connection-not-found (404, a knowledge source naming a connection the
-            organization does not have), connections-unavailable (503: goald has no master key,
+            Connections: connection-not-found (404, a connection the organization does not
+            have), connections-unavailable (503: goald has no master key,
             so no secret can be opened).
             Credentials (ADR 0017): credential-not-found (404), credential-invalid (400),
             credential-name-taken and credential-in-use (409, naming the connections),
@@ -5013,7 +5010,7 @@ components:
             environment-server-not-found and template-not-found (404), environment-test-invalid
             (400).
             Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found
-            (404), connection-cannot-sync (400), knowledge-source-name-taken,
+            (404), knowledge-source-name-taken,
             knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413),
             unsupported-document-type (415).
             Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an
@@ -8412,6 +8409,7 @@ components:
         delivery:
           type: string
           enum: [live, next_run]
+          x-enum-varnames: [NoteReceiptDeliveryLive, NoteReceiptDeliveryNextRun]
           description: next_run, the next run's brief carries it (live, to a running agent, comes later)
     RunList:
       type: object
@@ -10967,8 +10965,7 @@ components:
         name: { $ref: "#/components/schemas/KnowledgeSourceName" }
         title: { type: string }
         kind: { $ref: "#/components/schemas/KnowledgeSourceKind" }
-        connection: { type: string, description: "The connection a live source reads, or a synced one not yet on a secret; absent for an upload source" }
-        secret: { type: string, description: "The secret a synced source reads with, opened at each sync; absent for an upload or live source and a synced one still on its connection" }
+        secret: { type: string, description: "The secret a synced source reads with, opened at each sync; absent for an upload source" }
         config:
           type: object
           description: >-
@@ -10985,7 +10982,7 @@ components:
           description: syncing while a goald holds it; failed after a sync that stopped (last_error says why)
         last_error: { type: string }
         last_synced_at: { type: string, format: date-time, nullable: true }
-        next_sync_at: { type: string, format: date-time, nullable: true, description: "When it is due next; null for a live source, and for an on-demand source (sync_every_seconds 0) until someone presses Sync" }
+        next_sync_at: { type: string, format: date-time, nullable: true, description: "When it is due next; null for an on-demand source (sync_every_seconds 0) until someone presses Sync" }
         latest_snapshot:
           description: Its newest snapshot; null before the first sync
           nullable: true
@@ -11031,8 +11028,9 @@ components:
       type: string
       description: >-
         upload, repository and confluence write snapshots of files (ADR 0038 decision 2); synced
-        and live are the kinds before the cut-over
-      enum: [upload, repository, confluence, synced, live]
+        is the kind before the cut-over
+      enum: [upload, repository, confluence, synced]
+      x-enum-varnames: [KnowledgeSourceKindUpload, KnowledgeSourceKindRepository, KnowledgeSourceKindConfluence, KnowledgeSourceKindSynced]
     NewKnowledgeSource:
       type: object
       required: [name, title, kind]
@@ -11040,7 +11038,6 @@ components:
         name: { $ref: "#/components/schemas/KnowledgeSourceName" }
         title: { type: string, minLength: 1, maxLength: 120 }
         kind: { $ref: "#/components/schemas/KnowledgeSourceKind" }
-        connection: { type: string, description: The connection a live source reads }
         secret:
           allOf: [{ $ref: "#/components/schemas/SecretName" }]
           description: >-
