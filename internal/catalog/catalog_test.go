@@ -13,8 +13,8 @@ import (
 	"github.com/byFrederick/goal/internal/core/domain"
 )
 
-// Every template goald ships loads, one for each of today's connection kinds but aws and
-// bedrock, sorted by name, each with a title, a description and a suggested name per secret.
+// Every template goald ships loads, aws and bedrock dropped, sorted by name, each with a title, a
+// description and a suggested name per secret.
 func TestTemplates_LoadAll(t *testing.T) {
 	t.Parallel()
 
