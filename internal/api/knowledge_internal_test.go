@@ -107,7 +107,8 @@ func TestKnowledgeProblem_Codes(t *testing.T) {
 	}{
 		{sourceError(ports.ErrNotFound, kbHandbook), http.StatusNotFound, "knowledge-source-not-found"},
 		{sourceError(ports.ErrNameTaken, kbHandbook), http.StatusConflict, "knowledge-source-name-taken"},
-		{sourceError(domain.ErrConnectionCannotSync, kbHandbook), http.StatusBadRequest, "connection-cannot-sync"},
+		// A refusal the domain still wraps in ErrInvalid answers the generic invalid problem.
+		{sourceError(domain.ErrConnectionCannotSync, kbHandbook), http.StatusBadRequest, ""},
 		{sourceError(domain.ErrInvalid, kbHandbook), http.StatusBadRequest, ""},
 		{sourceError(domain.ErrNotUploadSource, kbHandbook), http.StatusConflict, "not-an-upload-source"},
 		{uploadError(ports.ErrTooLarge), http.StatusRequestEntityTooLarge, "upload-too-large"},

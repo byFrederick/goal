@@ -92,11 +92,8 @@ func knowledgeSources(ctx context.Context, out *printer, getenv func(string) str
 func sourceLine(s gen.KnowledgeSource, now time.Time) string {
 	kind := string(s.Kind)
 
-	switch {
-	case s.Secret != nil:
+	if s.Secret != nil {
 		kind += " (secret " + *s.Secret + ")"
-	case s.Connection != nil:
-		kind += " (" + *s.Connection + ")"
 	}
 
 	users := make([]string, 0, len(s.UsedBy.Factories))
@@ -122,7 +119,7 @@ func sourceLine(s gen.KnowledgeSource, now time.Time) string {
 	return line
 }
 
-// nextSync is when a source syncs next: never for a live source.
+// nextSync is when a source syncs next: never for an on-demand source until someone presses Sync.
 func nextSync(at *time.Time) string {
 	if at == nil {
 		return "never"
