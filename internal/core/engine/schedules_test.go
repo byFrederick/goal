@@ -96,17 +96,12 @@ func TestSchedules_SkippedWhileAnotherHoldsTheLock(t *testing.T) {
 func TestSchedules_PruneOldDeliveries(t *testing.T) {
 	t.Parallel()
 
-	h := intakeHarness(t)
+	h, w := deliveryHarness(t)
 	ctx := inOrg(t)
-
-	s, err := h.intake.CreateEndpoint(ctx, domain.NewWebhookEndpoint{FactoryID: factoryID, Name: "alerts", Kind: domain.WebhookGeneric})
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	for _, at := range []time.Time{t0.Add(-31 * 24 * time.Hour), t0.Add(-29 * 24 * time.Hour)} {
 		if _, err := h.intake.RecordDelivery(ctx, domain.NewWebhookDelivery{
-			EndpointID: s.Endpoint.ID, ReceivedAt: at, Outcome: domain.DeliveryAccepted,
+			EndpointID: w.ID, ReceivedAt: at, Outcome: domain.DeliveryAccepted,
 		}); err != nil {
 			t.Fatal(err)
 		}

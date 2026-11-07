@@ -39,7 +39,7 @@ func TestSecrets_Conformance(t *testing.T) {
 				t.Helper()
 
 				n := domain.NewWebhook{Name: "github-acme", Sender: domain.SenderGitHub, Secret: name}
-				if _, err := NewIntake(d.store, testKey(t, "k1")).CreateWebhook(domain.WithOrg(t.Context(), org), n); err != nil {
+				if _, err := NewIntake(d.store).CreateWebhook(domain.WithOrg(t.Context(), org), n); err != nil {
 					t.Fatal(err)
 				}
 			},

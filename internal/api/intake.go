@@ -223,17 +223,12 @@ func (s *server) triage(ctx context.Context, name string, factory domain.Factory
 	return out, nil
 }
 
-// openWebhooks are the organization's webhooks among endpoints, the ones open to the factory, by
-// name, each with its state as the factory's triggers make it: receiving when it is enabled and
+// openWebhooks are endpoints, the organization's webhooks open to the factory, by name, each with its state as the factory's triggers make it: receiving when it is enabled and
 // an enabled trigger names it, no_trigger when none does, closed when it is turned off.
 func openWebhooks(endpoints []domain.WebhookEndpoint, triggers []domain.Trigger) *[]gen.IntakeWebhook {
 	out := []gen.IntakeWebhook{}
 
 	for _, e := range endpoints {
-		if e.FactoryID != "" {
-			continue
-		}
-
 		state := gen.Closed
 		if e.Enabled {
 			state = gen.NoTrigger
@@ -624,7 +619,7 @@ func (r triggerReads) problem(t domain.Trigger) *struct {
 		return nil
 	case domain.TriggerGitHub:
 		for _, e := range r.endpoints {
-			if e.Kind == domain.WebhookGitHub {
+			if e.Sender == domain.SenderGitHub {
 				mine = append(mine, e)
 			}
 		}

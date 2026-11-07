@@ -270,19 +270,27 @@ func TestIntake_TriggerProblems(t *testing.T) {
 		t.Errorf("problems without endpoints = %v, want %v", got, want)
 	}
 
-	endpoint := func(name string, kind domain.WebhookKind) domain.WebhookEndpointID {
+	endpoint := func(name string, sender domain.WebhookSender) domain.WebhookEndpointID {
 		t.Helper()
 
-		s, err := h.intake.CreateEndpoint(inOrg(t), domain.NewWebhookEndpoint{FactoryID: acmeID, Name: name, Kind: kind})
+		if _, err := h.secrets.Create(inOrg(t), domain.NewSecret{Name: domain.WebhookSecretName(name), Value: "test-secret"}, domain.LocalUser); err != nil {
+			t.Fatal(err)
+		}
+
+		w, err := h.intake.CreateWebhook(inOrg(t), domain.NewWebhook{Name: name, Sender: sender, Secret: domain.WebhookSecretName(name)})
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		return s.Endpoint.ID
+		if _, err := h.intake.PatchWebhook(inOrg(t), w.ID, domain.WebhookPatch{Open: []domain.WebhookOpening{{FactoryID: acmeID}}}); err != nil {
+			t.Fatal(err)
+		}
+
+		return w.ID
 	}
 
-	gh := endpoint("github-app", domain.WebhookGitHub)
-	endpoint("ci-hooks", domain.WebhookGeneric)
+	gh := endpoint("github-app", domain.SenderGitHub)
+	endpoint("ci-hooks", domain.SenderStandard)
 
 	for _, at := range []time.Time{oct(10, 0), oct(20, 0), oct(23, 8)} { // the first is older than 7 days
 		if _, err := h.intake.RecordDelivery(inOrg(t), domain.NewWebhookDelivery{
@@ -811,8 +819,8 @@ func TestIntake_WindowRefused(t *testing.T) {
 }
 
 // The webhooks are the organization's open to acme, by name: receiving when enabled and an
-// enabled trigger names it, no_trigger when none does, closed when turned off. A factory endpoint
-// and a webhook not open to acme are left out.
+// enabled trigger names it, no_trigger when none does, closed when turned off. A webhook not open
+// to acme is left out.
 func TestIntake_OpenWebhooks(t *testing.T) {
 	t.Parallel()
 
@@ -842,10 +850,6 @@ func TestIntake_OpenWebhooks(t *testing.T) {
 	hook("ci-hooks", domain.SenderStandard, domain.WebhookPatch{Open: open}) // only the disabled deploy-failed names it
 	hook("pager", domain.SenderPagerDuty, domain.WebhookPatch{Open: open, Enabled: &off})
 	hook("elsewhere", domain.SenderGitHub, domain.WebhookPatch{Name: new("elsewhere")})
-
-	if _, err := h.intake.CreateEndpoint(inOrg(t), domain.NewWebhookEndpoint{FactoryID: acmeID, Name: "own", Kind: domain.WebhookGeneric}); err != nil {
-		t.Fatal(err)
-	}
 
 	var in gen.Intake
 	if code := h.call(t, http.MethodGet, intakePath, "", &in); code != http.StatusOK || in.Webhooks == nil {
