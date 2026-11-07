@@ -6,6 +6,7 @@ import { eventsQuery, itemQuery, itemRunsQuery } from '../../api/queries';
 import type { Station } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
 import { TopBarSlot } from '../../app/top-bar';
+import { CIWait } from '../../shared/ci-wait';
 import { itemKey, refParam, useFactory, useFactoryParams } from '../../shared/factory';
 import { type ItemControls, ItemDecisions } from '../../shared/item-actions';
 import { pausedNow, pullRequestsOf } from '../../shared/item-state';
@@ -282,6 +283,9 @@ export function ItemPage() {
           waiting={item.state === 'waiting_human'}
           compact={phone}
         />
+        {item.waiting?.kind === 'ci' && (item.state === 'queued' || item.state === 'ready') ? (
+          <CIWait waiting={item.waiting} className="text-secondary text-muted" />
+        ) : null}
         {phone ? (
           <p className="m-0 text-center text-secondary text-muted">
             {summaryOf({ item, flow: item.flow ?? noFlow, now: Date.now() })}
