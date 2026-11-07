@@ -8,7 +8,7 @@ import { ChevronDown, Plus } from 'lucide-react';
 import { useId, useState } from 'react';
 import { jonahOverviewQuery } from '../api/queries';
 import type { OrgSummary } from '../api/types';
-import { findFactory } from '../shared/factory';
+import { factoryTitle, findFactory } from '../shared/factory';
 import { useOrgHolds } from '../shared/org';
 import { cn } from '../ui/cn';
 import { Count } from '../ui/count';
@@ -96,7 +96,7 @@ function FactoryGroup({
           aria-label={nameLabel}
           className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-control px-2 text-body font-control text-ink no-underline hover:bg-hover"
         >
-          <FactoryBadge mark={mark} /> <span className="min-w-0 flex-1 truncate">{factory.name}</span>{' '}
+          <FactoryBadge mark={mark} /> <span className="min-w-0 flex-1 truncate">{factoryTitle(factory)}</span>{' '}
           {attention.waiting > 0 ? <Count value={attention.waiting} label=" waiting on you" /> : null}
           {attention.andon !== null || attention.blocked > 0 ? (
             <span aria-hidden="true" className="mr-1 size-2.5 flex-none rounded-full bg-rework" />
@@ -106,7 +106,7 @@ function FactoryGroup({
           type="button"
           aria-expanded={expanded}
           aria-controls={expanded ? pagesId : undefined}
-          aria-label={`${expanded ? 'Collapse' : 'Expand'} ${factory.name}`}
+          aria-label={`${expanded ? 'Collapse' : 'Expand'} ${factoryTitle(factory)}`}
           onClick={() => setToggled(!expanded)}
           className="flex size-8 flex-none items-center justify-center rounded-control text-muted hover:bg-hover hover:text-ink"
         >
