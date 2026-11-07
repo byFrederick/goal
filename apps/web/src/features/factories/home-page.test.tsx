@@ -475,6 +475,27 @@ describe('Home: the ready state', () => {
     expect(router.state.location.pathname).toContain('/items/');
   });
 
+  it('names a factory by its title on its row and in the spend list, and links by its name', async () => {
+    const titled = { ...factory('f-support-replies', 'support-replies'), title: 'Support replies' };
+    await renderReady({ factories: [week(titled)] });
+
+    const row = screen.getByRole('article', { name: 'Support replies' });
+    const link = within(row).getByRole('link', { name: 'Support replies' });
+    expect(link.getAttribute('href')).toContain('/f/support-replies');
+    const spend = screen.getByRole('region', { name: 'Spend this week' });
+    expect(within(spend).getByText('Support replies')).toBeTruthy();
+    expect(within(spend).getByRole('meter').getAttribute('aria-label')).toMatch(/^Support replies: \$/);
+  });
+
+  it('names a factory without a title by its humanized name', async () => {
+    const untitled = { ...factory('f-release-notes', 'release-notes'), title: '' };
+    await renderReady({ factories: [week(untitled)] });
+
+    expect(
+      within(screen.getByRole('article', { name: 'Release notes' })).getByRole('link', { name: 'Release notes' }),
+    ).toBeTruthy();
+  });
+
   it('shows the week against the summed budgets, a bar per factory and the footnote', async () => {
     await renderReady();
 
