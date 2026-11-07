@@ -159,6 +159,20 @@ describe('the stations table', () => {
   });
 });
 
+describe('inserting from the More menu', () => {
+  it.each(['Insert above', 'Insert below', 'Duplicate'])(
+    'does not hand focus back to the trigger after %s',
+    async (name) => {
+      renderLine();
+      const trigger = await screen.findByRole('button', { name: 'More for Build' });
+      await userEvent.click(trigger);
+      await userEvent.click(await screen.findByRole('menuitem', { name }));
+      await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 50)));
+      expect(document.activeElement).not.toBe(trigger);
+    },
+  );
+});
+
 describe('Checks on this line', () => {
   const validation = {
     checks: [
