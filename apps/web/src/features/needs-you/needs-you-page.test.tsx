@@ -16,6 +16,7 @@ import {
 } from '../../api/client';
 import { factoriesQuery, inboxQuery, keys, orgQuery } from '../../api/queries';
 import type { Inbox, InboxEntry, Item, ItemCard, OrgSummary } from '../../api/types';
+import { formatWeekdayTime } from '../../shared/format';
 import { renderOrgPage } from '../../test/route';
 import { TooltipProvider } from '../../ui/tooltip';
 import { NeedsYouPage } from './needs-you-page';
@@ -1009,5 +1010,56 @@ describe('Needs you: truncated row text carries its full text', () => {
     const where = title.nextElementSibling as HTMLElement;
     expect(where.className).toContain('truncate');
     expect(where.getAttribute('title')).toBe(where.textContent);
+  });
+});
+
+describe('Needs you: a used-up weekly budget', () => {
+  const budget: InboxEntry = {
+    ...alert,
+    id: 'budget:factory-1',
+    kind: 'budget',
+    factory,
+    andon: null,
+    budget: {
+      spent_usd: 1602,
+      weekly_usd: 1600,
+      since: '2026-10-27T08:00:00Z',
+      resumes_at: '2026-11-02T01:00:00Z',
+    },
+  };
+  const seedWith = (can: string[]) =>
+    [
+      [inboxQuery(org.id).queryKey, inbox([budget])],
+      [factoriesQuery(org.id).queryKey, factories(can)],
+    ] as const;
+  const resumes = formatWeekdayTime('2026-11-02T01:00:00Z');
+
+  it('shows its title, the factory and when it resumes, with an info tip', async () => {
+    renderPage({ search: { entry: budget.id, type: 'alert' }, seed: seedWith([]) });
+
+    expect((await screen.findAllByText('Weekly budget used up · $1,602.00 of $1,600')).length).toBeGreaterThan(0);
+    expect(screen.getByText(`About ${resumes}`)).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: 'The weekly budget' })).queryByText(/Resumes about/)).toBeNull();
+    // Used up on an earlier day: the weekday places it.
+    expect(screen.getByText(formatWeekdayTime('2026-10-27T08:00:00Z'))).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'About the weekly budget' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Weekly budget used up/ })).toBeTruthy();
+  });
+
+  it('links to the Budgets and targets section for someone who edits the definition', async () => {
+    renderPage({ search: { entry: budget.id, type: 'alert' }, seed: seedWith(['definition:edit']) });
+
+    const link = await screen.findByRole('link', { name: 'Change the weekly budget' });
+    expect(link.getAttribute('href')).toBe('/o/acme/f/software/settings#budgets');
+    expect(screen.queryByText(/organization admins can change/)).toBeNull();
+  });
+
+  it('says who can change it, with no link, to everyone else', async () => {
+    renderPage({ search: { entry: budget.id, type: 'alert' }, seed: seedWith(['item:decide']) });
+
+    expect(
+      await screen.findByText('Factory editors and organization admins can change the weekly budget.'),
+    ).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Change the weekly budget' })).toBeNull();
   });
 });

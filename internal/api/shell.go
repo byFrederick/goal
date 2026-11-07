@@ -70,6 +70,17 @@ func (s *server) GetOrgAttention(ctx context.Context, _ gen.GetOrgAttentionReque
 	for _, f := range fs {
 		a := attention[domain.FactoryID(f.Metadata.ID)]
 		onYou := s.onYou(ctx, domain.FactoryID(f.Metadata.ID), a.WaitingHuman)
+
+		// A used-up weekly budget is one entry of Needs you, so it counts in the badge.
+		usedUp, err := s.budgetUsedUp(ctx, f)
+		if err != nil {
+			return nil, err
+		}
+
+		if usedUp {
+			onYou++
+		}
+
 		out.WaitingOnYou += onYou
 		out.Factories = append(out.Factories, gen.FactoryAttention{
 			FactoryId: f.Metadata.ID, WaitingOnYou: onYou, BlockedItems: a.Blocked, Andon: andonOf(a.Andon),
@@ -346,4 +357,17 @@ func kindRank(k gen.InboxEntryKind) int {
 	}
 
 	return len(inboxKinds)
+}
+
+// budgetUsedUp reports whether the factory's weekly budget is used up against its current
+// version's cap: the same test that gives the budget entry of the inbox.
+func (s *server) budgetUsedUp(ctx context.Context, f *config.Factory) (bool, error) {
+	l := f.Line()
+	if !l.Runtime.HasWeeklyBudget() {
+		return false, nil
+	}
+
+	_, used, err := s.weeklyBudget(ctx, l, s.clock.Now())
+
+	return used != nil, err
 }

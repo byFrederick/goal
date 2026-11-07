@@ -41,7 +41,6 @@ export function stepPanel({
 }): PreviewSlots {
   const { line, review, basics } = modelOf(model);
   const budget = review.budget;
-  const day = budget?.daily_usd ?? budgetRanges.day.fallback;
   const week = budget?.weekly_usd ?? budgetRanges.week.fallback;
   const stations = line.stations ?? [];
   const panelStations = stations.map((s) => ({ id: s.id, label: stationLabel(s), kind: s.kind, wip: s.wip }));
@@ -63,7 +62,7 @@ export function stepPanel({
     }),
     cards: (
       <>
-        <BudgetCard day={day} week={week} />
+        <BudgetCard week={week} />
         <IntakeCard names={names} />
         <PeopleCard org={org} />
       </>

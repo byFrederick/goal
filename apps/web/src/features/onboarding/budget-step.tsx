@@ -160,7 +160,7 @@ function Budget({ org, search, factory }: { org: OrgSummary; search: OnboardingS
   const client = useQueryClient();
   const navigate = useNavigate();
   const values = useBudgetValues();
-  const { review, line, day, week } = values;
+  const { review, line, week } = values;
   const [pending, setPending] = useState(false);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
   const factoryDetail = useQuery(factoryQuery(org.id, factory)).data;
@@ -257,7 +257,7 @@ function Budget({ org, search, factory }: { org: OrgSummary; search: OnboardingS
         }),
         cards: (
           <>
-            <BudgetCard day={day} week={week} />
+            <BudgetCard week={week} />
             <PreviewPlaceholder className="min-h-37.5" />
             <PreviewPlaceholder className="min-h-37.5" />
           </>
@@ -267,7 +267,7 @@ function Budget({ org, search, factory }: { org: OrgSummary; search: OnboardingS
       <div className="flex flex-col gap-2">
         <h1 className="m-0 text-kpi tracking-display">Set budgets and targets</h1>
         <p className="m-0 text-heading font-normal text-ink-soft">
-          Goal stops starting new work when a budget is spent, so a busy day never surprises you.
+          Goal stops starting new work when the last 7 days’ spend reaches the budget.
         </p>
       </div>
 

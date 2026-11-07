@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { formatDuration, formatDurationCompact, formatHours, formatUsdCost, ordinal } from './format';
+import {
+  formatClockOrWeekday,
+  formatDuration,
+  formatDurationCompact,
+  formatHours,
+  formatUsdCost,
+  ordinal,
+} from './format';
 
 describe('formatHours', () => {
   it('says a duration in hours adaptively, as the Item page does', () => {
@@ -49,5 +56,15 @@ describe('formatUsdCost', () => {
     expect(formatUsdCost(0.0001)).toBe('<$0.01');
     expect(formatUsdCost(0.01)).toBe('$0.01');
     expect(formatUsdCost(2.4)).toBe('$2.40');
+  });
+});
+
+describe('formatClockOrWeekday', () => {
+  const now = new Date(2026, 10, 7, 21, 0);
+  it('says only the time on the same day', () => {
+    expect(formatClockOrWeekday(new Date(2026, 10, 7, 19, 15).toISOString(), now)).toBe('19:15');
+  });
+  it('adds the weekday on an earlier day', () => {
+    expect(formatClockOrWeekday(new Date(2026, 10, 5, 19, 15).toISOString(), now)).toBe('Thu 19:15');
   });
 });

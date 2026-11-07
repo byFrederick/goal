@@ -30,7 +30,7 @@ The Items page at `/o/<org>/f/<factory>/items` lists the same items as a table, 
 
 ## Needs you
 
-`/o/<org>/needs-you` lists what waits on a person, across factories: approvals, decisions, questions and alerts. Work from it, then open each item to act on it. A change Jonah proposed that made its number worse also appears here, naming the proposal and its worse number, with no item. **Undo this change** writes the proposal that reverses it and opens it for you to approve; it is refused when an undo of the change already waits or was published, and when a later edit changed the text the proposal replaced. [Act on an item](../act-on-an-item/) covers the actions.
+`/o/<org>/needs-you` lists what waits on a person, across factories: approvals, decisions, questions and alerts. Work from it, then open each item to act on it. A change Jonah proposed that made its number worse also appears here, naming the proposal and its worse number, with no item. **Undo this change** writes the proposal that reverses it and opens it for you to approve; it is refused when an undo of the change already waits or was published, and when a later edit changed the text the proposal replaced. A factory whose weekly budget is used up appears here too, with no item, until its line has room again: it shows what the last 7 days of runs cost against the cap, since when the budget is used up, and when the line resumes on its own, once the oldest runs leave the 7-day window. The Board's line says the same: "Resumes about Mon 02:00" ends its weekly budget message. Raising the cap in a new version clears it at once. [Act on an item](../act-on-an-item/) covers the actions.
 
 ## The item page and its Timeline
 
