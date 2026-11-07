@@ -25,7 +25,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
       await expect(page.getByRole('region', { name: 'Needs you first' })).toBeVisible();
       await expect(page.getByRole('region', { name: 'Spend this week' }).getByText('Last 7 days')).toBeVisible();
-      await expect(page.getByRole('link', { name: 'Archived factories' })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Archived factories' })).toHaveCount(0);
       await expect(page.getByRole('radio', { name: 'Archived' })).toHaveCount(0);
       await expectNoHorizontalScroll(page);
       if (size.width >= 768)

@@ -33,7 +33,16 @@ const maxSlots = 12;
 
 /** The organization card, first in the grid. */
 export function organizationCard(org: OrgSummary, host: string): ReactNode {
-  return <PreviewCard label="Organization" value={org.name} detail={`${host}/o/${org.slug}`} />;
+  // The address breaks only after a slash, never inside a word.
+  const detail = (
+    <>
+      {host}/<wbr />
+      o/
+      <wbr />
+      {org.slug}
+    </>
+  );
+  return <PreviewCard label="Organization" value={org.name} detail={detail} />;
 }
 
 /** The mark of a repository's host: GitHub's, GitLab's, or a neutral branch icon for any other host. */

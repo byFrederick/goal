@@ -3,8 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { draftModelQuery, factoryQuery } from '../../api/queries';
-import type { Factory } from '../../api/types';
-import { codeCard, FactoryCardOf } from './factory-preview';
+import type { Factory, OrgSummary } from '../../api/types';
+import { codeCard, FactoryCardOf, organizationCard } from './factory-preview';
 
 afterEach(cleanup);
 
@@ -69,5 +69,27 @@ describe('FactoryCardOf', () => {
     card({ name: 'support-replies', title: 'Support replies' });
     expect(await screen.findByText('Support replies')).toBeTruthy();
     expect(screen.queryByText('support-replies')).toBeNull();
+  });
+});
+
+const org: OrgSummary = {
+  id: 'org-1',
+  slug: 'acme-2026-11-07',
+  name: 'Acme',
+  mark: 'A',
+  factory_count: 0,
+  role: 'owner',
+};
+
+describe('the organization card', () => {
+  it('shows the full address and lets it break only after a slash', () => {
+    const { container, getByText } = render(<>{organizationCard(org, 'goal.example.com')}</>);
+
+    const address = getByText(/goal\.example\.com/);
+    expect(address.textContent).toBe('goal.example.com/o/acme-2026-11-07');
+    expect(address.className).not.toContain('break-all');
+    const breaks = [...container.querySelectorAll('wbr')];
+    expect(breaks).toHaveLength(2);
+    for (const wbr of breaks) expect(wbr.previousSibling?.textContent?.endsWith('/')).toBe(true);
   });
 });
