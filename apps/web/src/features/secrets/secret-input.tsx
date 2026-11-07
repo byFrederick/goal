@@ -5,9 +5,7 @@ import { type ComponentProps, useState } from 'react';
 import { cn } from '../../ui/cn';
 import { Input } from '../../ui/field';
 
-// Show is drawn 32 px tall; below md its hit area is a 44 px pseudo-element centred on it.
-const showHitArea =
-  'max-md:before:absolute max-md:before:inset-x-0 max-md:before:top-1/2 max-md:before:h-11 max-md:before:-translate-y-1/2 max-md:before:content-[""]';
+// Show is drawn as a 32 px chip; below md the button around it is a 44 × 44 px box, so the hit area is real.
 
 export function SecretInput({ className, ...props }: Omit<ComponentProps<typeof Input>, 'type' | 'autoComplete'>) {
   const [shown, setShown] = useState(false);
@@ -28,11 +26,12 @@ export function SecretInput({ className, ...props }: Omit<ComponentProps<typeof 
         aria-label="Show the value"
         onClick={() => setShown((s) => !s)}
         className={cn(
-          showHitArea,
-          'absolute top-1/2 right-1.5 inline-flex h-8 -translate-y-1/2 items-center justify-center rounded-chip bg-hover px-2 text-meta font-control text-ink-soft transition-colors duration-(--duration-quick) hover:text-ink',
+          'group absolute top-1/2 right-0 inline-flex -translate-y-1/2 items-center justify-center text-meta font-control text-ink-soft max-md:min-h-11 max-md:min-w-11 md:right-1',
         )}
       >
-        {shown ? 'Hide' : 'Show'}
+        <span className="inline-flex h-8 items-center justify-center rounded-chip bg-hover px-2 transition-colors duration-(--duration-quick) group-hover:text-ink max-md:mr-1">
+          {shown ? 'Hide' : 'Show'}
+        </span>
       </button>
     </span>
   );

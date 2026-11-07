@@ -3,6 +3,7 @@
 // draft as they change. Continue writes the picture's defaults for any field still unset, flushes the draft,
 // publishes it as the factory's first version and starts the line, then goes to step 6. A publish that goald
 // refuses shows its reason on the step, and the step stays.
+
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -10,6 +11,7 @@ import { ApiError } from '../../api/client';
 import { publishDraft } from '../../api/definitions';
 import { defKeys, factoryQuery, keys } from '../../api/queries';
 import type { DefinitionProblem, OrgSummary } from '../../api/types';
+import { factoryTitle } from '../../shared/factory';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { DraftSessionProvider, useDraft, useDraftSession, useSection } from '../factory-editor/draft/use-draft';
@@ -17,7 +19,7 @@ import { stationLabel } from '../factory-editor/line/labels';
 import { defaultEdits } from './budget-draft';
 import { BudgetFields, useBudgetValues } from './budget-fields';
 import { BudgetCard } from './budget-gauge';
-import { type OnboardingSearch, repoOf } from './code-search';
+import type { OnboardingSearch } from './code-search';
 import { codeCard, FactoryCard, organizationCard, previewSlots } from './factory-preview';
 import { OnboardingLayout, PreviewPlaceholder } from './onboarding-layout';
 import { explainProblems, type PublishProblem, stepsToLink } from './publish-problems';
@@ -241,10 +243,13 @@ function Budget({ org, search, factory }: { org: OrgSummary; search: OnboardingS
       preview={{
         ...previewSlots({
           organization: organizationCard(org, host),
-          code: codeCard(repoOf(search.url), search.secret),
+          code: codeCard({ url: search.url, secret: search.secret, done: true }),
           factory: (
             <FactoryCard
-              name={basics.name || factoryDetail?.name || ''}
+              name={factoryTitle({
+                name: basics.name || factoryDetail?.name || '',
+                title: basics.title || factoryDetail?.title,
+              })}
               purpose={basics.purpose ?? ''}
               stations={panelStations}
             />
