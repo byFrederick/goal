@@ -2,11 +2,13 @@
 // organization and code cards from steps 1 and 2, then the factory card with its line. The line is the
 // andon station nodes joined by a rule, each with its WIP slots as small squares. The factory card reads
 // the draft (step 4) or the picked template (step 3, before the factory exists).
+
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { draftModelQuery, factoryQuery } from '../../api/queries';
 import type { OrgSummary } from '../../api/types';
 import { modelOf, type StationKind } from '../../shared/definition/model';
+import { factoryTitle } from '../../shared/factory';
 import { formatUsd } from '../../shared/format';
 import { cn } from '../../ui/cn';
 import { GitHubMark } from '../../ui/github-mark';
@@ -212,7 +214,11 @@ export function FactoryCardOf({ org, factory }: { org: string; factory: string }
   }));
   return (
     <Skeleton ready={ready} placeholder={<FactoryCardPlaceholder />}>
-      <FactoryCard name={detail.data?.name ?? ''} purpose={basics?.purpose ?? ''} stations={stations} />
+      <FactoryCard
+        name={detail.data ? factoryTitle(detail.data) : ''}
+        purpose={basics?.purpose ?? ''}
+        stations={stations}
+      />
     </Skeleton>
   );
 }

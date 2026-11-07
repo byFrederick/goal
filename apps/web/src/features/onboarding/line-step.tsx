@@ -3,12 +3,14 @@
 // lanes and its gate; the models of the agents; and the factory card on the panel. Every value is read from and
 // saved through the line editor and the draft (LineEditorProvider, the draft ops), as the wizard's Line step
 // does. Nothing is published here: step 5 publishes (ADR 0032 decision 4).
+
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { type ReactNode, useId, useRef, useState } from 'react';
 import { factoryQuery } from '../../api/queries';
 import type { OrgSummary } from '../../api/types';
 import type { ModelStation } from '../../shared/definition/model';
+import { factoryTitle } from '../../shared/factory';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { cn } from '../../ui/cn';
@@ -142,7 +144,10 @@ function LineBody({ org, search, factory }: { org: OrgSummary; search: Onboardin
         code: codeCard(repoOf(search.url), search.secret),
         factory: (
           <FactoryCard
-            name={basics.name || factoryDetail?.name || ''}
+            name={factoryTitle({
+              name: basics.name || factoryDetail?.name || '',
+              title: basics.title || factoryDetail?.title,
+            })}
             purpose={basics.purpose ?? ''}
             stations={panelStations}
           />
