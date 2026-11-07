@@ -1,11 +1,9 @@
 // The mock's checks of phase 4's definition forms (spec 4 §4.4), as goald's config and authoring
 // report them: `tools` (tool-spec-invalid), `removed` (field-removed, env-reference-removed and
-// connection-inline-removed, errors since the cutover) and `connections` (connection-unknown,
-// model-connection-missing, connection-not-model, repository-host-mismatch, connection-env-conflict,
-// knowledge-source-unknown and merge-needs-code-host, errors), each problem at its model pointer
-// with goald's fixes.
+// connection-inline-removed, errors since the cutover) and `connections` (knowledge-source-unknown,
+// an error), each problem at its model pointer with goald's fixes. goald no longer checks a
+// definition against organization connections (ADR 0037), so the mock does not either.
 import type { DefinitionProblem, ProblemFix } from '@goal/api-client';
-import type { ConnectionOutline } from './connections.ts';
 import type { Model } from './model.ts';
 
 type Json = Record<string, unknown>;
@@ -57,12 +55,9 @@ const removedKeys: [string, string, string][] = [
   ],
 ];
 
-export function checkConnections(model: Model, conns: ConnectionOutline[], sources: string[], add: Add): void {
+export function checkConnections(model: Model, sources: string[], add: Add): void {
   const basics = isObject(model.basics) ? model.basics : {};
-  const agents = list(isObject(model.agents) ? model.agents.agents : undefined);
   const connections = list(model.connections);
-  const byName = new Map(conns.map((c) => [c.name, c]));
-  const names = [...byName.keys()].sort();
 
   // tools
   strings(basics.tools).forEach((t, i) => {
@@ -84,7 +79,6 @@ export function checkConnections(model: Model, conns: ConnectionOutline[], sourc
       remove(`Remove ${path}`, 'basics', `/${key}`),
     ]);
   }
-  const repository = isObject(basics.repository) ? basics.repository : undefined;
   connections.forEach((c, i) => {
     if (isOrgConnection(c)) return;
     add(
@@ -95,127 +89,6 @@ export function checkConnections(model: Model, conns: ConnectionOutline[], sourc
       `connection ${c.name}: inline connections are removed; create an organization connection named ${c.name}`,
       [replace(`Use the organization’s ${c.name}`, 'connections', `/${i}`, { name: c.name })],
     );
-  });
-
-  // connections: every organization connection it names exists
-  connections.forEach((c, i) => {
-    if (!isOrgConnection(c) || byName.has(String(c.name))) return;
-    const named = agents.some((a) => strings(a.connections).includes(String(c.name)));
-    add(
-      'connection-unknown',
-      'error',
-      'connections',
-      `/connections/${i}`,
-      `connection ${c.name}: the organization has no connection of that name; create it on the Connections page or remove it`,
-      named ? [] : [remove(`Remove ${c.name}`, 'connections', `/${i}`)],
-    );
-  });
-
-  // a model connection a definition still names gives model access (ADR 0037: goald asks for none; runtime.modelKey replaces it)
-  const modelName = typeof basics.model_connection === 'string' ? basics.model_connection : '';
-  const modelFixes = () =>
-    names.filter((n) => byName.get(n)?.model).map((n) => replace(`Use ${n}`, 'basics', '/model_connection', n));
-  const modelTitles = () => [...new Set(conns.filter((x) => x.model).map((x) => x.title))].sort().join(', ');
-  if (modelName) {
-    const fixes = modelFixes();
-    const c = byName.get(modelName);
-    if (!c) {
-      add(
-        'connection-unknown',
-        'error',
-        'connections',
-        '/basics/model_connection',
-        `runtime.modelConnection: the organization has no connection named ${modelName}`,
-        fixes,
-      );
-    } else if (!c.model) {
-      add(
-        'connection-not-model',
-        'error',
-        'connections',
-        '/basics/model_connection',
-        `runtime.modelConnection: ${modelName} is a ${c.title} connection, which gives no model access; choose one of a kind that does (${modelTitles()})`,
-        fixes,
-      );
-    }
-  }
-
-  // its repository's connection signs git in to the repository's host
-  const repoName = typeof repository?.connection === 'string' ? repository.connection : '';
-  if (repoName) {
-    let host = '';
-    try {
-      host = new URL(String(repository?.url ?? '')).host;
-    } catch {}
-    const fixes = [
-      ...names
-        .filter((n) => n !== repoName && host && byName.get(n)?.gitHost.toLowerCase() === host.toLowerCase())
-        .map((n) => replace(`Use ${n}`, 'basics', '/repository/connection', n)),
-      remove('Clone without a connection', 'basics', '/repository/connection'),
-    ];
-    const got = byName.get(repoName);
-    const at = '/basics/repository/connection';
-    if (!got) {
-      add(
-        'connection-unknown',
-        'error',
-        'connections',
-        at,
-        `runtime.repository: the organization has no connection named ${repoName}`,
-        fixes,
-      );
-    } else if (!got.gitHost) {
-      add(
-        'repository-host-mismatch',
-        'error',
-        'connections',
-        at,
-        `runtime.repository: ${repoName} signs git in to no host, so it cannot clone the repository on ${host}`,
-        fixes,
-      );
-    } else if (got.gitHost.toLowerCase() !== host.toLowerCase()) {
-      add(
-        'repository-host-mismatch',
-        'error',
-        'connections',
-        at,
-        `runtime.repository: ${repoName} signs git in to ${got.gitHost}, not to ${host}, the repository's host`,
-        fixes,
-      );
-    }
-  }
-
-  // no two connections an agent's runs get set the same variable
-  const listed = new Set(connections.filter(isOrgConnection).map((c) => String(c.name)));
-  const shared = (a: string, b: string) => {
-    const theirs = byName.get(b)?.env ?? [];
-    return (byName.get(a)?.env ?? []).filter((v) => theirs.includes(v));
-  };
-  const runtime = [...new Set([modelName, repoName].filter((n) => n && byName.has(n)))];
-  agents.forEach((a, i) => {
-    const runs: { name: string; index: number }[] = runtime.map((name) => ({ name, index: -1 }));
-    strings(a.connections).forEach((n, j) => {
-      if (listed.has(n) && byName.has(n) && !runs.some((r) => r.name === n)) runs.push({ name: n, index: j });
-    });
-    runs.forEach((b, y) => {
-      for (const x of runs.slice(0, y)) {
-        if (b.index < 0) continue;
-        const vars = shared(x.name, b.name);
-        if (vars.length === 0) continue;
-        const entry = (c: { index: number }) => `/agents/${i}/connections/${c.index}`;
-        add(
-          'connection-env-conflict',
-          'error',
-          'connections',
-          `/agents${entry(b)}`,
-          `agent ${a.name}: ${x.name} and ${b.name} both set ${vars.join(', ')}; a run gets one value per variable, so keep one`,
-          [
-            remove(`Keep ${x.name}`, 'agents', entry(b)),
-            ...(x.index >= 0 ? [remove(`Keep ${b.name}`, 'agents', entry(x))] : []),
-          ],
-        );
-      }
-    });
   });
 
   // every knowledge source it may search is one of the organization's
@@ -230,38 +103,10 @@ export function checkConnections(model: Model, conns: ConnectionOutline[], sourc
       [remove(`Remove ${source}`, 'basics', `/knowledge_sources/${i}`)],
     );
   });
-
-  // a merge station has a connection whose kind has a code host, listed or the repository's
-  if (connectionNames(model).some((n) => byName.get(n)?.codeHost)) return;
-  const titles = [...new Set(conns.filter((c) => c.codeHost).map((c) => c.title))].sort();
-  list(isObject(model.line) ? model.line.stations : undefined).forEach((s, i) => {
-    if (s.action !== 'merge') return;
-    add(
-      'merge-needs-code-host',
-      'error',
-      'connections',
-      `/line/stations/${i}/action`,
-      `station ${s.id}: action merge needs a connection that merges pull requests, of a kind with a code host (${titles.join(', ')}); add one to connections`,
-      [remove('Remove the merge step', 'line', `/stations/${i}/action`)],
-    );
-  });
 }
 
-/** The connection names a factory model uses: its organization connections, model and repository's. */
 /** The knowledge sources a factory model may search (config.Factory.Knowledge.Sources). */
 export function knowledgeSourceNames(model: Model): string[] {
   const basics = isObject(model.basics) ? model.basics : {};
   return strings(basics.knowledge_sources);
-}
-
-export function connectionNames(model: Model): string[] {
-  const basics = isObject(model.basics) ? model.basics : {};
-  const repository = isObject(basics.repository) ? basics.repository : {};
-  const out = list(model.connections)
-    .filter(isOrgConnection)
-    .map((c) => String(c.name));
-  for (const n of [basics.model_connection, repository.connection]) {
-    if (typeof n === 'string' && n && !out.includes(n)) out.push(n);
-  }
-  return out;
 }

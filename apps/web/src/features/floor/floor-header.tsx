@@ -2,9 +2,11 @@ import { useNavigate } from '@tanstack/react-router';
 import type { Board, Factory, Metrics } from '../../api/types';
 import { usePhone } from '../../app/phone-chrome';
 import { AndonButton, LineStatus } from '../../shared/andon';
+import { useFactory } from '../../shared/factory';
 import { NewItemButton } from '../../shared/new-item';
-import { Chip } from '../../ui/chip';
+import { useOrg } from '../../shared/org';
 import { SegmentedControl } from '../../ui/segmented-control';
+import { LineStateChip } from './line-state-chip';
 import { daysIn, type FloorSearch, lastDaysSearch, rangeLabel, windowOf } from './range';
 
 /** The Floor's route: its search (the range, the type and the touches grouping) is read from it. */
@@ -62,6 +64,8 @@ export function FloorHeader({ board, metrics }: { board: Board; metrics: Metrics
   const days = daysIn(metrics.from, metrics.to);
   const before = days === 1 ? 'the day before' : `the ${days} days before`;
   const andon = board.line.andon;
+  const org = useOrg();
+  const factory = useFactory();
 
   return (
     <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
@@ -70,9 +74,7 @@ export function FloorHeader({ board, metrics }: { board: Board; metrics: Metrics
         {andon ? (
           <LineStatus andon={andon} />
         ) : (
-          <Chip tone="ok" size="lg" dot>
-            Line running
-          </Chip>
+          <LineStateChip org={org.id} factory={factory.id} size="lg" runningText="Line running" />
         )}
         <p className="m-0 text-secondary text-muted tabular-nums">
           {`${rangeLabel(metrics.from, metrics.to)}, compared with ${before}`}

@@ -54,7 +54,7 @@ async function drag(page: Page, from: Locator, to: Locator) {
 
 test('the line is accessible and fits the screen', async ({ page }) => {
   await openLine(page);
-  await expect(page).toHaveTitle('Line · Definition · goal · Acme · Goal');
+  await expect(page).toHaveTitle('Line · Definition · Goal · Acme · Goal');
   expect(await order(page)).toEqual(['Inbox', 'Spec', 'Approve spec', 'Build', 'Review', 'Merge', 'Done']);
   await expect(row(page, 'Build')).toHaveAccessibleName('4. Build, agent station');
   await expect(row(page, 'Build').getByRole('radio', { name: 'Agent' })).toBeChecked();

@@ -39,6 +39,7 @@ goald creates one sandbox per run (`ports.Sandboxes`) and execs, in order:
 | Path | Content |
 | --- | --- |
 | `/goal/spec.json` | the task, without secrets (below) |
+| `/goal/cpu-start-usec` | the box's cgroup v2 `cpu.stat` `usage_usec` when prepare started, which `goal-agent run` subtracts for `cpu_seconds` (stdout protocol); absent when prepare could not read it |
 | `/goal/agent/prompt.md` | the agent's prompt, appended to Claude Code's system prompt |
 | `/goal/agent/skills/<name>/SKILL.md` | one folder per skill that ships in the factory, with its other files |
 | `/goal/agent/output.schema.json` | the station's output contract (JSON Schema, without `$schema`), only when the station has one; for a part (ADR 0012) without the `plan` property and its `required` entry, since a part never plans an assembly |
@@ -327,7 +328,20 @@ One JSON object per line, each with `type` and `at` (RFC 3339). Logs go to stder
 | `message` | `text` (assistant text, cut to 2000 chars) | `agent_message` |
 | `usage` | `input_tokens`, `output_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`: one event per API call (one model turn), with that call's final counts, not a running total. They come from the stream's `message_delta` (`includePartialMessages`): the SDK's assistant messages carry only the opening counts (`output_tokens` 1). The run's totals are in `finished` | `usage` |
 | `note_delivered` | `note_id` (the note's event id), a note handed to the agent during the run (Live notes) | `note_delivered` |
-| `finished` | `status` (`succeeded` or `failed`), `subtype`, `output`, `error`, `cost_usd`, `turns`, `input_tokens`, `output_tokens`, `session_id`, `permission_denials` (`[{tool, id}]`, the calls the policy refused; absent when none), `repositories` (only when spec.json has them, so absent without a repository: one entry per repository prepare cloned or the credential helper recorded, by URL, once: `repo`, `base_commit` and `branch_head` from prepare, `pushed_head` from `git ls-remote` of the item's branch, in the clone's path or by URL for a repository the agent opened itself, and `wrote`, true when the pushed head exists and differs from the branch head prepare saw; a failed lookup leaves that `pushed_head` out and changes neither the status nor the exit code) | the run's result; goald records each denial as a `tool_denied` event, and keeps `output` and `repositories` with the run |
+| `finished` | `status` (`succeeded` or `failed`), `subtype`, `output`, `error`, `cost_usd`, `turns`, `input_tokens`, `output_tokens`, `session_id`, `permission_denials` (`[{tool, id}]`, the calls the policy refused; absent when none), `repositories` (only when spec.json has them, so absent without a repository: one entry per repository prepare cloned or the credential helper recorded, by URL, once: `repo`, `base_commit` and `branch_head` from prepare, `pushed_head` from `git ls-remote` of the item's branch, in the clone's path or by URL for a repository the agent opened itself, and `wrote`, true when the pushed head exists and differs from the branch head prepare saw; a failed lookup leaves that `pushed_head` out and changes neither the status nor the exit code), `cpu_seconds`, `peak_memory_bytes` and `memory_source` (task and check runs; below) | the run's result; goald records each denial as a `tool_denied` event, and keeps `output` and `repositories` with the run |
+
+`finished`'s `cpu_seconds`, `peak_memory_bytes` and `memory_source` come from the box's own counters (`src/cgroup.ts`), the same on Docker Compose and Cloudflare:
+
+- `cpu_seconds` (a number) is the cgroup v2 `cpu.stat`'s `usage_usec` under `/sys/fs/cgroup` when the run ends less the reading prepare saved in `/goal/cpu-start-usec` when it started, divided by 1,000,000. The cgroup is the whole box, so it counts prepare's clones and installs too. A box prepared again for a retry replaces the file, so the run counts from the latest prepare. It is absent when either reading is missing or does not parse, or when the end is below the start.
+- `peak_memory_bytes` (an integer) comes from the first of these sources that can be read. The sampled readings are taken every 5 seconds during the run and once at the end.
+  1. The worker's own cgroup: the path on the `0::<path>` line of `/proc/self/cgroup`, under `/sys/fs/cgroup`, when that path is not `/`. Its `memory.peak` when the run ends, or else the largest `memory.current` sampled. On Cloudflare the worker runs in a child cgroup such as `/cloudchamber`, because the root cgroup of a box that runs as its own VM has `cpu.stat` but no memory files.
+  2. The same two files at `/sys/fs/cgroup`.
+  3. The machine: the largest `MemTotal` less `MemAvailable` sampled from `/proc/meminfo`, in kB times 1,024. A box runs one run at a time, so the machine's memory in use is the run's, though it also counts the kernel's own memory and reads higher than a cgroup would.
+
+  It is absent when no source can be read.
+- `memory_source` is `cgroup` when `peak_memory_bytes` came from source 1 or 2, and `machine` when it came from source 3. It is absent whenever `peak_memory_bytes` is.
+
+A counter that can't be read never fails, delays or changes the run, and adds no event: prepare and run each write at most one line about it to stderr. Grade, definition and Jonah runs report neither field, and nor does a `finished` line for a worker that failed before the run started (`worker setup: …`).
 
 `finished` is always the last line. The exit code is 0 when the agent produced a result (even a failed one) and 1 when the worker crashed; a container that exits without a `finished` line is a failed run quoting the tail of stderr. `goal-agent prepare` writes exactly one line, `prepared` (above), which `domain.DecodeWorkerLine` skips as not one of these.
 

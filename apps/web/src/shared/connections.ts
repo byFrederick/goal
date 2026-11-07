@@ -3,6 +3,7 @@
 // alone, when it was last tested and used, the variables a run gets (the kind's env names with
 // their {{field}} filled in, never a value) and how runs use a kind.
 import type { Connection, ConnectionKind } from '../api/types';
+import { factoryTitle } from './factory';
 import { formatAge } from './format';
 
 export type Tone = 'ok' | 'rework' | 'muted';
@@ -60,7 +61,7 @@ export function namesText(names: readonly string[]): string {
 
 /** What uses it: "goal and sre", or "Nothing yet". */
 export function usedByText(c: Connection): string {
-  const names = [...c.used_by.factories.map((f) => f.name), ...c.used_by.knowledge_sources];
+  const names = [...c.used_by.factories.map((f) => factoryTitle(f)), ...c.used_by.knowledge_sources];
   return names.length > 0 ? namesText(names) : 'Nothing yet';
 }
 

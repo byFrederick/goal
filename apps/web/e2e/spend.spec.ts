@@ -23,10 +23,13 @@ for (const width of [375, 768, 1440]) {
       await expect(windowControl(page)).toBeChecked();
       await expect(page.getByRole('region', { name: 'Spend this week' })).toBeVisible();
 
-      // One budget row: Software, with its daily and weekly caps.
+      // One budget row: Software, which has no weekly budget on Home either.
       const budgets = page.getByRole('heading', { level: 2, name: 'Budgets' }).locator('xpath=ancestor::section[1]');
       await expect(budgets.getByText('Software', { exact: true })).toBeVisible();
-      await expect(budgets.getByText('$150 a day, $800 a week')).toBeVisible();
+      await expect(
+        budgets.getByRole('listitem').filter({ hasText: 'Software' }).getByText('No weekly budget'),
+      ).toBeVisible();
+      await expect(budgets.getByText(/midnight/i)).toHaveCount(0);
 
       // Export CSV is built; the router's Set up is not built yet: disabled, never a live link or button.
       await expect(page.getByRole('button', { name: 'Export CSV' })).not.toHaveAttribute('aria-disabled', 'true');
@@ -34,6 +37,42 @@ for (const width of [375, 768, 1440]) {
 
       await expectAccessible(page);
       await expectNoHorizontalScroll(page);
+    });
+
+    test('a budget row agrees with Home and shows its own factory spend', async ({ page }) => {
+      const num = (text: string | null, re: RegExp) => Number(text?.match(re)?.[1]?.replace(/,/g, ''));
+      const homeToday = async (name: string) => {
+        const card = page.getByRole('article').filter({ has: page.getByRole('heading', { name }) });
+        const text = await card
+          .getByText(/^\$[\d,.]+$/)
+          .first()
+          .textContent();
+        return num(text, /\$([\d,.]+)/);
+      };
+
+      // Home: Software's spend today, and SRE's spend over the last 7 days with its day figure (weekly ÷ 7).
+      await page.goto('/o/acme');
+      const sreCard = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'SRE' }) });
+      await expect(sreCard.getByText('of $57.14')).toBeVisible();
+      const softwareToday = await homeToday('Software');
+      const weekRow = page
+        .locator('#spend-week')
+        .locator('xpath=ancestor::section[1]')
+        .getByRole('listitem')
+        .filter({ hasText: 'SRE' });
+      await expect(weekRow.getByText(/of \$400/)).toBeVisible();
+      const homeWeek = num(await weekRow.textContent(), /\$([\d,.]+) of/);
+      expect(homeWeek).toBeGreaterThan(0);
+
+      await page.goto('/o/acme/spend');
+      const budgets = page.getByRole('heading', { level: 2, name: 'Budgets' }).locator('xpath=ancestor::section[1]');
+      const row = (name: string) => budgets.getByRole('listitem').filter({ hasText: name });
+      await expect(row('SRE').getByText('about $57 a day, $400 a week')).toBeVisible();
+      expect(num(await row('SRE').textContent(), /Last 7 days \$([\d,.]+)/)).toBe(homeWeek);
+
+      // Software's row shows Software's own spend today, as Home does, not the organization's.
+      await expect(row('Software').getByText(/Today \$/)).toBeVisible();
+      expect(num(await row('Software').textContent(), /Today \$([\d,.]+)/)).toBe(softwareToday);
     });
 
     test('the Today label stays inside its box', async ({ page }) => {
@@ -64,6 +103,46 @@ for (const width of [375, 768, 1440]) {
         .click();
       await expect(page).toHaveURL(/\/o\/acme\/spend$/);
       await expect(heading(page)).toBeVisible();
+    });
+  });
+}
+
+// Box usage (the CPU and memory of the window's runs by agent or station), at a phone's 390 px and a desktop's 1440 px.
+for (const width of [390, 1440]) {
+  test.describe(`Box usage at ${width} px`, () => {
+    test.use({ viewport: { width, height: 900 } });
+
+    test('shows the section, switches agents and stations and does not scroll sideways', async ({ page }) => {
+      await page.goto('/o/acme/spend');
+      const box = page.getByRole('region', { name: 'Box usage' });
+      await expect(box).toBeVisible();
+      await expect(box.getByRole('radio', { name: 'Agents' })).toBeChecked();
+      await expect(box.getByText('backend-engineer')).toBeVisible();
+      await expectNoHorizontalScroll(page);
+
+      await box.getByRole('radio', { name: 'Stations' }).click();
+      await expect(box.getByRole('radio', { name: 'Stations' })).toBeChecked();
+      await expect(box.getByText('build').first()).toBeVisible();
+      await expect(box.getByText('backend-engineer')).toHaveCount(0);
+      await expectNoHorizontalScroll(page);
+    });
+  });
+}
+
+for (const width of [375, 1440]) {
+  test.describe(`factory titles at ${width} px`, () => {
+    test.use({ viewport: { width, height: 900 } });
+
+    test('Spend names factories by title in the legend, table, By agent and Box usage', async ({ page }) => {
+      await page.goto('/o/acme/spend');
+      await expect(heading(page)).toBeVisible();
+      const section = (name: string) =>
+        page.getByRole('heading', { level: 2, name }).locator('xpath=ancestor::section[1]');
+      for (const name of ['Spend by day', 'By agent', 'Box usage']) {
+        const body = section(name);
+        await expect(body.getByText(/SRE/).first()).toBeAttached();
+        await expect(body.getByText(/(^|[^\w-])sre([^\w-]|$)/)).toHaveCount(0);
+      }
     });
   });
 }

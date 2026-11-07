@@ -814,7 +814,7 @@ export interface paths {
         };
         /**
          * What waits for a person across the organization's factories
-         * @description The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by kind (decision and question together, then andon, budget, rework_warning, blocked, expedite), then oldest first. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
+         * @description The organization's inbox: one entry per thing a person may act on. Phase 2.2 has no identity, so every entry is everyone's. decision: an item waiting for a person's decision, with its approval brief; question: an item whose agent asked a person a question (ADR 0018), with the question, answered through POST /v1/orgs/{org}/items/{item}/answer; andon: a factory's open andon pull, its line stopped; budget: a factory whose weekly budget is used up, its line starting no new agent work until the rolling window's spend falls below the cap (resumes_at) or the cap rises, which removes the entry at once; rework_warning: a gate one rejection away from its andon policy's rework rate (display only); blocked: a blocked item, with why; expedite: an open item in the expedite lane that waits on nothing else. An item has at most one entry (question, then decision, then blocked, then expedite). Decisions and questions are listed only where the caller has item:decide. Later phases add kinds (tool_approval, sync_failed, proposal), which clients that do not know them render as a generic row. When more entries exist than limit, the most recent ones are kept and truncated is true. Entries are ordered by since, newest first, then by id, whatever their kind. The default limit, 200, is enough for every screen to count what it groups (the Floor's Needs you card, the phone's Items view).
          */
         get: operations["getInbox"];
         put?: never;
@@ -4383,7 +4383,7 @@ export interface components {
             kind: string;
             id: string;
         };
-        /** @description Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job */
+        /** @description Who did something: a person (kind user; id "local" is the local user, named "Local user (before sign-in)" once sign-in is on), an API key (kind service, "<name> (API key)"), an agent or a job. Under sign-in a person is named as the sidebar names them (their name, or their email while they have none), or "A former member" once they have left the organization; their id stays the same */
         Actor: {
             /** @enum {string} */
             kind: "user" | "service" | "agent" | "system";
@@ -6736,7 +6736,31 @@ export interface components {
             definition_version_id: string | null;
             /** @description That version's number ("ran on v9"); null when the run has no version */
             definition_version: number | null;
+            /**
+             * Format: double
+             * @description The CPU time the run's box used, in seconds; null while the run is running, when the box could not read it or for a run from before it was recorded
+             */
+            cpu_seconds: number | null;
+            /**
+             * Format: int64
+             * @description The most memory the run's box used at once; null when cpu_seconds would be
+             */
+            peak_memory_bytes: number | null;
+            /** @description How peak_memory_bytes was measured; absent or null when peak_memory_bytes is null or for a run from before the source was recorded */
+            peak_memory_source?: components["schemas"]["MemorySource"] | null;
+            /** @description The box size the run ran in; null for a run from before box sizes were recorded */
+            box_size: components["schemas"]["SandboxSize"] | null;
         };
+        /**
+         * @description How a run's peak memory was measured: cgroup is the box's own cgroup, machine the whole machine's used memory, read when the box's cgroup has no memory figures
+         * @enum {string}
+         */
+        MemorySource: "cgroup" | "machine";
+        /**
+         * @description How much CPU and memory a run's box gets (a factory's runtime.size)
+         * @enum {string}
+         */
+        SandboxSize: "small" | "medium" | "large";
         OrgRunList: {
             runs: components["schemas"]["OrgRun"][];
             /** @description Pass as cursor for the next page; null on the last page */
@@ -6854,13 +6878,13 @@ export interface components {
             at: string;
         };
         OrgAttention: {
-            /** @description Every decision waiting on a person across the organization (the sum of factories[].waiting_on_you) */
+            /** @description What waits on the caller across the organization (the sum of factories[].waiting_on_you) */
             waiting_on_you: number;
             factories: components["schemas"]["FactoryAttention"][];
         };
         FactoryAttention: {
             factory_id: string;
-            /** @description Items waiting for a human decision (every decision; phase 2.2 has no identity) */
+            /** @description The factory's waiting decisions where the caller has item:decide (none elsewhere), plus one when the factory's weekly budget is used up */
             waiting_on_you: number;
             blocked_items: number;
             /** @description The open andon pull, or null while the line runs */
@@ -6979,6 +7003,7 @@ export interface components {
             rework_share: number | null;
             /** @description One per factory goald runs that the caller sees and that is not archived, by name */
             budgets: components["schemas"]["SpendBudget"][];
+            usage: components["schemas"]["SpendUsage"];
         };
         SpendDay: {
             /** Format: date */
@@ -6999,6 +7024,70 @@ export interface components {
             agent: string;
             /** Format: double */
             usd: number;
+        };
+        /** @description The CPU time and peak memory of the window's runs (a run counts by when it started), over the runs that reported either, for the factories the caller sees. Each row groups the runs of a factory's agent or station in boxes of one size; a group none of whose runs reported a value is left out. Rows are sorted by cpu_seconds_p90, largest first, those without one last. */
+        SpendUsage: {
+            by_agent: components["schemas"]["AgentUsage"][];
+            by_station: components["schemas"]["StationUsage"][];
+        };
+        AgentUsage: {
+            factory_id: string;
+            /** @description The agent's name in its factory */
+            agent: string;
+            /** @description The runs' box size; null for runs from before box sizes were recorded */
+            box_size: components["schemas"]["SandboxSize"] | null;
+            /** @description The runs that reported a CPU time or a peak memory */
+            runs: number;
+            /**
+             * Format: double
+             * @description The median CPU seconds of the runs that reported one, interpolated between the closest runs (percentile_cont); null when none did
+             */
+            cpu_seconds_p50: number | null;
+            /**
+             * Format: double
+             * @description The 90th percentile
+             */
+            cpu_seconds_p90: number | null;
+            /**
+             * Format: int64
+             * @description The median peak memory of the runs that reported one, rounded to a byte; null when none did
+             */
+            peak_memory_bytes_p50: number | null;
+            /**
+             * Format: int64
+             * @description The 90th percentile
+             */
+            peak_memory_bytes_p90: number | null;
+        };
+        /** @description AgentUsage by station */
+        StationUsage: {
+            factory_id: string;
+            /** @description The station's id in its factory */
+            station: string;
+            /** @description The runs' box size; null for runs from before box sizes were recorded */
+            box_size: components["schemas"]["SandboxSize"] | null;
+            /** @description The runs that reported a CPU time or a peak memory */
+            runs: number;
+            /**
+             * Format: double
+             * @description As AgentUsage's
+             */
+            cpu_seconds_p50: number | null;
+            /**
+             * Format: double
+             * @description As AgentUsage's
+             */
+            cpu_seconds_p90: number | null;
+            /**
+             * Format: int64
+             * @description As AgentUsage's
+             */
+            peak_memory_bytes_p50: number | null;
+            /**
+             * Format: int64
+             * @description As AgentUsage's
+             */
+            peak_memory_bytes_p90: number | null;
         };
         ModelSpend: {
             model: string;
@@ -7148,7 +7237,7 @@ export interface components {
             }[];
         };
         Inbox: {
-            /** @description Ordered by kind, then oldest first */
+            /** @description Ordered by since, newest first, then by id */
             entries: components["schemas"]["InboxEntry"][];
             /** @description More entries exist than limit; the most recent were kept */
             truncated: boolean;

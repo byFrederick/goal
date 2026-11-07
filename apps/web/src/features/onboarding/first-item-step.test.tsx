@@ -220,6 +220,18 @@ function renderStep(queryClient = new QueryClient({ defaultOptions: { queries: {
 }
 
 describe('step 8, watch your first item', () => {
+  it('keeps the code choice and repository on its Back link', async () => {
+    renderStep(
+      undefined,
+      '&access=write&url=https%3A%2F%2Fgithub.com%2Facme%2Fapp&secret=github-token&template=starter',
+    );
+    const back = await screen.findByRole('link', { name: 'Back' });
+    const href = back.getAttribute('href') ?? '';
+    expect(href).toContain('/get-started/people');
+    for (const part of ['access=write', 'url=https', 'secret=github-token', 'template=starter', 'factory='])
+      expect(href).toContain(part);
+  });
+
   it('submits the starter item once, then shows its card with the timeline and the cost', async () => {
     renderStep();
 
@@ -236,7 +248,9 @@ describe('step 8, watch your first item', () => {
     expect(screen.getByText('Cost so far')).toBeTruthy();
     expect(screen.getByText('$0.84')).toBeTruthy();
     expect(screen.queryByText(/Review merges it/)).toBeNull();
-    expect(screen.queryByText(/repository/)).toBeNull();
+    // The only repository text is the Code card's detail; the step itself says nothing of one.
+    expect(screen.getAllByText(/repository/)).toHaveLength(1);
+    expect(screen.getByText("Items don't touch a repository")).toBeTruthy();
   });
 
   it('says a missing model key in plain words with a link to Settings, and keeps Blocked words without a code', async () => {

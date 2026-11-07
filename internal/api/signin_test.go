@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/byFrederick/goal/internal/api"
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/core/domain"
 	"github.com/byFrederick/goal/internal/core/ports"
@@ -24,6 +25,7 @@ const (
 	viewerID   domain.UserID = "019a4000-0000-7000-8000-000000000002"
 	strangerID domain.UserID = "019a4000-0000-7000-8000-000000000003"
 	ownerName                = "F. Cruz"
+	viewerName               = "M. Okafor"
 
 	ownerToken    = "OwnerOwnerOwnerOwnerOwnerOwner01"
 	viewerToken   = "ViewerViewerViewerViewerViewer02"
@@ -49,15 +51,16 @@ func newSignedIn(t *testing.T) signedIn {
 	return newSignedInWith(t, nil)
 }
 
-// newSignedInWith is newSignedIn with goald's log written to logs when it is set.
-func newSignedInWith(t *testing.T, logs io.Writer) signedIn {
+// newSignedInWith is newSignedIn with goald's log written to logs when it is set, and the API's
+// collaborators changed by each of opts.
+func newSignedInWith(t *testing.T, logs io.Writer, opts ...func(*harness, *api.Deps)) signedIn {
 	t.Helper()
 
 	var h *harness
 
 	id := porttest.NewIdentity(func() time.Time { return h.clock.Now() })
 	in := &signIn{identity: id, access: porttest.NewAccessNotices(), google: true}
-	h = newHarnessLogged(t, in, logs) // adds acme and example-labs, with acme's factories, to id
+	h = newHarnessLogged(t, in, logs, opts...) // adds acme and example-labs, with acme's factories, to id
 
 	people := []struct {
 		user          domain.UserID
@@ -67,7 +70,7 @@ func newSignedInWith(t *testing.T, logs io.Writer) signedIn {
 		role          domain.OrgRole
 	}{
 		{ownerID, ownerName, ownerToken, true, testOrg, domain.OrgOwner},
-		{viewerID, "M. Okafor", viewerToken, false, testOrg, domain.OrgMember},
+		{viewerID, viewerName, viewerToken, false, testOrg, domain.OrgMember},
 		{strangerID, "J. Doe", strangerToken, false, otherOrg, domain.OrgOwner},
 	}
 
@@ -335,7 +338,7 @@ func TestAPI_SignIn_LocalUserBeforeSignIn(t *testing.T) {
 	}
 
 	created := page.Entries[len(page.Entries)-1]
-	if created.Action != domain.AuditOrgCreated || created.Actor.Id != domain.LocalUser.ID || created.Actor.Name != "Local user (before sign-in)" {
+	if created.Action != domain.AuditOrgCreated || created.Actor.Id != domain.LocalUser.ID || created.Actor.Name != localUserName {
 		t.Errorf("org.created by %+v, want the local user, named before sign-in", created.Actor)
 	}
 }

@@ -293,3 +293,132 @@ func (q *Queries) OrgSpendByModel(ctx context.Context, arg OrgSpendByModelParams
 	}
 	return items, nil
 }
+
+const orgUsageByAgent = `-- name: OrgUsageByAgent :many
+SELECT factory_id, agent AS name, box_size, count(*) AS runs, count(cpu_seconds) AS cpu_runs, count(peak_memory_bytes) AS memory_runs,
+  coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY cpu_seconds), 0)::float8 AS cpu_seconds_p50,
+  coalesce(percentile_cont(0.9) WITHIN GROUP (ORDER BY cpu_seconds), 0)::float8 AS cpu_seconds_p90,
+  coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY peak_memory_bytes), 0)::float8 AS peak_memory_bytes_p50,
+  coalesce(percentile_cont(0.9) WITHIN GROUP (ORDER BY peak_memory_bytes), 0)::float8 AS peak_memory_bytes_p90
+FROM agent_runs
+WHERE started_at >= $1::timestamptz AND started_at < $2::timestamptz
+  AND (cpu_seconds IS NOT NULL OR peak_memory_bytes IS NOT NULL)
+GROUP BY factory_id, agent, box_size
+ORDER BY cpu_seconds_p90 DESC
+`
+
+type OrgUsageByAgentParams struct {
+	Since time.Time
+	Until time.Time
+}
+
+type OrgUsageByAgentRow struct {
+	FactoryID          uuid.UUID
+	Name               string
+	BoxSize            *string
+	Runs               int64
+	CpuRuns            int64
+	MemoryRuns         int64
+	CpuSecondsP50      float64
+	CpuSecondsP90      float64
+	PeakMemoryBytesP50 float64
+	PeakMemoryBytesP90 float64
+}
+
+// The CPU seconds and peak memory of the runs started in [since, until) that reported either, by
+// factory, agent and box size (null before 00136): percentile_cont's medians and 90th
+// percentiles, each over the runs with that value (cpu_runs and memory_runs); 0 when none has it.
+// domain.NewOrgSpend puts the groups without a CPU time last.
+func (q *Queries) OrgUsageByAgent(ctx context.Context, arg OrgUsageByAgentParams) ([]OrgUsageByAgentRow, error) {
+	rows, err := q.db.Query(ctx, orgUsageByAgent, arg.Since, arg.Until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrgUsageByAgentRow
+	for rows.Next() {
+		var i OrgUsageByAgentRow
+		if err := rows.Scan(
+			&i.FactoryID,
+			&i.Name,
+			&i.BoxSize,
+			&i.Runs,
+			&i.CpuRuns,
+			&i.MemoryRuns,
+			&i.CpuSecondsP50,
+			&i.CpuSecondsP90,
+			&i.PeakMemoryBytesP50,
+			&i.PeakMemoryBytesP90,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const orgUsageByStation = `-- name: OrgUsageByStation :many
+SELECT factory_id, station AS name, box_size, count(*) AS runs, count(cpu_seconds) AS cpu_runs, count(peak_memory_bytes) AS memory_runs,
+  coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY cpu_seconds), 0)::float8 AS cpu_seconds_p50,
+  coalesce(percentile_cont(0.9) WITHIN GROUP (ORDER BY cpu_seconds), 0)::float8 AS cpu_seconds_p90,
+  coalesce(percentile_cont(0.5) WITHIN GROUP (ORDER BY peak_memory_bytes), 0)::float8 AS peak_memory_bytes_p50,
+  coalesce(percentile_cont(0.9) WITHIN GROUP (ORDER BY peak_memory_bytes), 0)::float8 AS peak_memory_bytes_p90
+FROM agent_runs
+WHERE started_at >= $1::timestamptz AND started_at < $2::timestamptz
+  AND (cpu_seconds IS NOT NULL OR peak_memory_bytes IS NOT NULL)
+GROUP BY factory_id, station, box_size
+ORDER BY cpu_seconds_p90 DESC
+`
+
+type OrgUsageByStationParams struct {
+	Since time.Time
+	Until time.Time
+}
+
+type OrgUsageByStationRow struct {
+	FactoryID          uuid.UUID
+	Name               string
+	BoxSize            *string
+	Runs               int64
+	CpuRuns            int64
+	MemoryRuns         int64
+	CpuSecondsP50      float64
+	CpuSecondsP90      float64
+	PeakMemoryBytesP50 float64
+	PeakMemoryBytesP90 float64
+}
+
+// OrgUsageByAgent by station.
+func (q *Queries) OrgUsageByStation(ctx context.Context, arg OrgUsageByStationParams) ([]OrgUsageByStationRow, error) {
+	rows, err := q.db.Query(ctx, orgUsageByStation, arg.Since, arg.Until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrgUsageByStationRow
+	for rows.Next() {
+		var i OrgUsageByStationRow
+		if err := rows.Scan(
+			&i.FactoryID,
+			&i.Name,
+			&i.BoxSize,
+			&i.Runs,
+			&i.CpuRuns,
+			&i.MemoryRuns,
+			&i.CpuSecondsP50,
+			&i.CpuSecondsP90,
+			&i.PeakMemoryBytesP50,
+			&i.PeakMemoryBytesP90,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

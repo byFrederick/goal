@@ -8,9 +8,11 @@ import type { ReactNode } from 'react';
 import { boardQuery, metricsQuery } from '../../api/queries';
 import type { FactoryOverview, OrgSummary } from '../../api/types';
 import { FactoryBadge } from '../../app/factory-badge';
+import { factoryTitle } from '../../shared/factory';
 import { formatPercent, formatUsd } from '../../shared/format';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
+import { LineStateChip } from '../floor/line-state-chip';
 import { MiniLine } from './mini-line';
 
 export function FactoryRow({
@@ -53,7 +55,7 @@ export function FactoryRow({
               {...(draft ? resume : { to: '/o/$org/f/$factory', params: { org: org.slug, factory: factory.name } })}
               className="no-underline hover:underline"
             >
-              {factory.name}
+              {factoryTitle(factory)}
             </Link>
           </h2>
           {draft ? (
@@ -64,9 +66,7 @@ export function FactoryRow({
               {andon ? <span className="sr-only">: {andon.reason}</span> : null}
             </Chip>
           ) : (
-            <Chip tone="ok" dot>
-              Running
-            </Chip>
+            <LineStateChip org={org.id} factory={factory.id} size="md" runningText="Running" />
           )}
         </div>
       </div>
@@ -80,7 +80,7 @@ export function FactoryRow({
           <MiniLine
             org={org.id}
             factory={factory.id}
-            name={factory.name}
+            name={factoryTitle(factory)}
             constraint={constraint?.station ?? null}
             stopped={stopped}
             className="w-full min-w-0 @[1100px]:w-auto @[1100px]:flex-1"

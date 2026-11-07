@@ -89,7 +89,7 @@ test('an owner sees everyone, why a role cannot change, and changes factory role
     await expect(page.getByRole('combobox', { name: 'Role of F. Cruz in Acme' })).toHaveCount(0);
     await expect(personOf(page, 'F. Cruz')).toContainText('Owner');
     await expect(page.getByRole('combobox', { name: 'Role of M. Okafor in Acme' })).toBeEnabled();
-    await expect(personOf(page, 'J. Lindqvist')).toContainText('goal approver, sre editor');
+    await expect(personOf(page, 'J. Lindqvist')).toContainText('Goal approver, SRE editor');
   }
   await expect(page.getByRole('region', { name: /Waiting to join/ })).toContainText('d.ross@example.com');
 
@@ -100,7 +100,7 @@ test('an owner sees everyone, why a role cannot change, and changes factory role
   await expect(goal.getByRole('radio', { name: 'Viewer' })).toBeChecked();
   await expectAccessible(page);
   await page.keyboard.press('Escape');
-  await expect(personOf(page, 'J. Lindqvist')).toContainText('goal viewer, sre editor');
+  await expect(personOf(page, 'J. Lindqvist')).toContainText('Goal viewer, SRE editor');
 
   // An owner's factory roles are the organization's: every factory, Editor, not changeable.
   const okafor = await openPerson(page, 'M. Okafor');
@@ -210,7 +210,7 @@ test('a change with an old sign-in asks to confirm it’s you, then goes through
   await reauth.getByLabel('Code').fill('000000');
   await expect(reauth).toBeHidden();
   await page.keyboard.press('Escape');
-  await expect(personOf(page, 'A. Ortiz')).toContainText('sre viewer, support viewer');
+  await expect(personOf(page, 'A. Ortiz')).toContainText('SRE viewer, Support viewer');
 });
 
 test('a member sees everyone read-only, and leaves', async ({ page }) => {
@@ -269,7 +269,7 @@ test('an invitee signs in from the link, sees the invitation and joins', async (
 
   // Joined as a member with the invitation's factory role.
   await page.goto('/o/acme/members');
-  await expect(personOf(page, 'd.ross')).toContainText('sre editor');
+  await expect(personOf(page, 'd.ross')).toContainText('SRE editor');
   await expect(personOf(page, 'd.ross')).toContainText('DR');
 });
 

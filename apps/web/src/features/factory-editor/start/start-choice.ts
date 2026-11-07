@@ -3,6 +3,7 @@
 // for Continue.
 import type { DefinitionProblem, FileMap, NewFactoryRequest, Validation, VersionSource } from '../../../api/types';
 import { humanize } from '../../../shared/format';
+import { slugFromName } from '../../../shared/org-rules';
 
 /** The four ways to start, as the Factories home's cards name them (`?from=`). */
 export type StartKind = 'blank' | 'template' | 'clone' | 'yaml';
@@ -34,6 +35,17 @@ export function freeName(base: string, taken: readonly string[]): string {
   }
 }
 
+/** The title onboarding's name field offers: the template's title, or "New factory" for a blank start. */
+export function suggestedTitle(kind: StartKind, templateTitle: string | undefined): string {
+  return kind === 'blank' ? 'New factory' : (templateTitle ?? '');
+}
+
+/** The factory name a title gives: lowercase words joined by hyphens, starting with a letter, free among `taken`. Empty when the title has no letters. */
+export function nameFromTitle(title: string, taken: readonly string[]): string {
+  const slug = slugFromName(title).replace(/^[\d-]+/, '');
+  return slug === '' ? '' : freeName(slug, taken);
+}
+
 /** What the name field offers before the person types one; an import uses factory.yaml's name. */
 export function suggestedName(
   kind: StartKind,
@@ -55,6 +67,8 @@ export function suggestedName(
 export interface StartChoice {
   kind: StartKind;
   name: string;
+  /** The display title sent with the name; onboarding sets it. */
+  title?: string | undefined;
   template?: string | undefined;
   /** The factory to copy: its id. */
   clone?: string | undefined;
@@ -64,11 +78,15 @@ export interface StartChoice {
 /** The POST /factories body for a choice; null while the choice is incomplete. */
 export function newFactoryRequest(choice: StartChoice): NewFactoryRequest | null {
   const name = choice.name.trim();
+  const title = choice.title?.trim();
+  const titled = title ? { title } : {};
   switch (choice.kind) {
     case 'blank':
-      return name ? { name, start: { kind: 'blank' } } : null;
+      return name ? { name, ...titled, start: { kind: 'blank' } } : null;
     case 'template':
-      return name && choice.template ? { name, start: { kind: 'template', template: choice.template } } : null;
+      return name && choice.template
+        ? { name, ...titled, start: { kind: 'template', template: choice.template } }
+        : null;
     case 'clone':
       return name && choice.clone ? { name, start: { kind: 'clone', factory: choice.clone } } : null;
     case 'yaml':

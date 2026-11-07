@@ -1,7 +1,7 @@
 /// <reference types="vitest/config" />
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
@@ -27,6 +27,14 @@ function serviceWorker(): Plugin {
         hash.update(file.type === 'chunk' ? file.code : file.source);
       }
       const buildId = hash.digest('hex').slice(0, 16);
+      // index.html is hashed as vite wrote it, then gets the id: the page reads it from this meta
+      // and compares it with the id the worker reports (src/pwa/register.ts). Every load fetches
+      // index.html from the network, so the meta always names the build the page runs.
+      if (!options.dir) throw new Error('the service worker needs an output directory');
+      const indexPath = join(options.dir, 'index.html');
+      const index = await readFile(indexPath, 'utf8');
+      if (!index.includes('</head>')) throw new Error('index.html has no head to carry the build id');
+      await writeFile(indexPath, index.replace('</head>', `<meta name="goal-build" content="${buildId}" /></head>`));
       const root = fileURLToPath(new URL('.', import.meta.url));
       const result = await build({
         root,
@@ -48,7 +56,6 @@ function serviceWorker(): Plugin {
       const outputs = (Array.isArray(result) ? result : [result]).flatMap((out) => ('output' in out ? out.output : []));
       const chunk = outputs.find((item) => item.type === 'chunk');
       if (!chunk) throw new Error('the service worker build emitted no chunk');
-      if (!options.dir) throw new Error('the service worker needs an output directory');
       await writeFile(join(options.dir, 'sw.js'), chunk.code);
     },
   };

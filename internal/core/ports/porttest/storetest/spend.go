@@ -3,8 +3,12 @@ package storetest
 import (
 	"cmp"
 	"errors"
+	"fmt"
+	"math"
 	"reflect"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -139,4 +143,153 @@ func (f *fixture) spendRun(t *testing.T, it domain.Item, agent, model string, at
 	if err := f.Store.FinishRun(f.ctx(t), id, domain.RunResult{Status: domain.RunSucceeded, CostUSD: usd}, at.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// The window's CPU time and peak memory, measured this week on a Wednesday: by factory, agent
+// (or station) and box size, with percentile_cont's median and 90th percentile, the highest CPU
+// P90 first and a group without one last. A run without a value is left out of that value's
+// percentiles, a group none of whose runs has a value is left out, and a run before the window
+// or of another organization counts for nothing.
+func testOrgSpendUsage(f *fixture) {
+	t := f.t
+	at := func(d, h int) time.Time { return time.Date(2026, 10, d, h, 0, 0, 0, time.UTC) }
+	now := at(28, 12)
+	w := domain.SpendWindow{Period: domain.SpendThisWeek, Now: now}
+
+	f1, f2 := f.factory, f.newFactory(t)
+	a := f.create(t, domain.NewItem{CreatedAt: at(20, 0)})
+	b := f.create(t, domain.NewItem{FactoryID: f2, CreatedAt: at(20, 0)})
+	num := func(v float64) *float64 { return &v }
+	mem := func(v int64) *int64 { return &v }
+
+	// f1's worker in large boxes at work and review: four runs with both values, one with neither.
+	f.usageRun(t, a, stWork, agWorker, domain.SandboxLarge, at(26, 1), num(10), mem(100))
+	f.usageRun(t, a, stWork, agWorker, domain.SandboxLarge, at(26, 2), num(20), mem(200))
+	f.usageRun(t, a, stReview, agWorker, domain.SandboxLarge, at(27, 1), num(30), mem(300))
+	f.usageRun(t, a, stReview, agWorker, domain.SandboxLarge, at(27, 2), num(40), mem(400))
+	f.usageRun(t, a, stReview, agWorker, domain.SandboxLarge, at(27, 3), nil, nil)
+	// f1's worker in a small box: a CPU time without a peak memory.
+	f.usageRun(t, a, stWork, agWorker, domain.SandboxSmall, at(27, 4), num(5), nil)
+	// f1's reviewer: a run from before box sizes with only a peak memory, and large runs with no values.
+	f.usageRun(t, a, stReview, agReviewer, "", at(27, 5), nil, mem(1000))
+	f.usageRun(t, a, stReview, agReviewer, domain.SandboxLarge, at(27, 6), nil, nil)
+	f.usageRun(t, a, stReview, agReviewer, domain.SandboxLarge, at(27, 7), nil, nil)
+	// f2's worker in a medium box, the most CPU.
+	f.usageRun(t, b, stWork, agWorker, domain.SandboxMedium, at(28, 1), num(50), mem(64))
+	// Before the window and at its end.
+	f.usageRun(t, a, stWork, agWorker, domain.SandboxLarge, at(25, 23), num(9000), mem(9000))
+	f.usageRun(t, a, stWork, agWorker, domain.SandboxLarge, now, num(9000), mem(9000))
+
+	other := &fixture{Harness: f.Harness, t: t, org: f.NewOrg(t)}
+	other.factory = other.NewFactory(t, other.org)
+	o := other.create(t, domain.NewItem{CreatedAt: at(20, 0)})
+	other.usageRun(t, o, stWork, agWorker, domain.SandboxLarge, at(27, 1), num(7777), mem(7777))
+
+	got, err := f.Spend.OrgSpend(f.ctx(t), w)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	byAgent := []domain.RunUsage{
+		{
+			FactoryID: f2, Name: agWorker, BoxSize: domain.SandboxMedium, Runs: 1,
+			CPUSecondsP50: num(50), CPUSecondsP90: num(50), PeakMemoryBytesP50: num(64), PeakMemoryBytesP90: num(64),
+		},
+		{
+			FactoryID: f1, Name: agWorker, BoxSize: domain.SandboxLarge, Runs: 4,
+			CPUSecondsP50: num(25), CPUSecondsP90: num(37), PeakMemoryBytesP50: num(250), PeakMemoryBytesP90: num(370),
+		},
+		{FactoryID: f1, Name: agWorker, BoxSize: domain.SandboxSmall, Runs: 1, CPUSecondsP50: num(5), CPUSecondsP90: num(5)},
+		{FactoryID: f1, Name: agReviewer, Runs: 1, PeakMemoryBytesP50: num(1000), PeakMemoryBytesP90: num(1000)},
+	}
+	byStation := []domain.RunUsage{
+		{
+			FactoryID: f2, Name: stWork, BoxSize: domain.SandboxMedium, Runs: 1,
+			CPUSecondsP50: num(50), CPUSecondsP90: num(50), PeakMemoryBytesP50: num(64), PeakMemoryBytesP90: num(64),
+		},
+		{
+			FactoryID: f1, Name: stReview, BoxSize: domain.SandboxLarge, Runs: 2,
+			CPUSecondsP50: num(35), CPUSecondsP90: num(39), PeakMemoryBytesP50: num(350), PeakMemoryBytesP90: num(390),
+		},
+		{
+			FactoryID: f1, Name: stWork, BoxSize: domain.SandboxLarge, Runs: 2,
+			CPUSecondsP50: num(15), CPUSecondsP90: num(19), PeakMemoryBytesP50: num(150), PeakMemoryBytesP90: num(190),
+		},
+		{FactoryID: f1, Name: stWork, BoxSize: domain.SandboxSmall, Runs: 1, CPUSecondsP50: num(5), CPUSecondsP90: num(5)},
+		{FactoryID: f1, Name: stReview, Runs: 1, PeakMemoryBytesP50: num(1000), PeakMemoryBytesP90: num(1000)},
+	}
+
+	checkUsage(t, "UsageByAgent", got.UsageByAgent, byAgent)
+	checkUsage(t, "UsageByStation", got.UsageByStation, byStation)
+
+	theirs, err := f.Spend.OrgSpend(other.ctx(t), w)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mine := domain.RunUsage{
+		FactoryID: other.factory, Name: agWorker, BoxSize: domain.SandboxLarge, Runs: 1,
+		CPUSecondsP50: num(7777), CPUSecondsP90: num(7777), PeakMemoryBytesP50: num(7777), PeakMemoryBytesP90: num(7777),
+	}
+	checkUsage(t, "the other organization's UsageByAgent", theirs.UsageByAgent, []domain.RunUsage{mine})
+	mine.Name = stWork
+	checkUsage(t, "the other organization's UsageByStation", theirs.UsageByStation, []domain.RunUsage{mine})
+}
+
+// usageRun records a succeeded run of agent at station in a box of size, started at `at`, with
+// the CPU seconds and peak memory given (nil for none).
+func (f *fixture) usageRun(t *testing.T, it domain.Item, station, agent string, size domain.SandboxSize, at time.Time,
+	cpu *float64, peak *int64,
+) {
+	t.Helper()
+
+	id, err := f.Store.StartRun(f.ctx(t), ports.NewRun{
+		FactoryID: it.FactoryID, ItemID: it.ID, Station: station, Agent: agent, Model: model, StartedAt: at, Size: size,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res := domain.RunResult{Status: domain.RunSucceeded, CPUSeconds: cpu, PeakMemoryBytes: peak}
+	if err := f.Store.FinishRun(f.ctx(t), id, res, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// checkUsage compares usage rows in order, their percentiles within a rounding error.
+func checkUsage(t *testing.T, what string, got, want []domain.RunUsage) {
+	t.Helper()
+
+	near := func(a, b *float64) bool { return (a == nil) == (b == nil) && (a == nil || math.Abs(*a-*b) < 1e-6) }
+	same := len(got) == len(want)
+
+	for i := 0; same && i < len(got); i++ {
+		g, w := got[i], want[i]
+		same = g.FactoryID == w.FactoryID && g.Name == w.Name && g.BoxSize == w.BoxSize && g.Runs == w.Runs &&
+			near(g.CPUSecondsP50, w.CPUSecondsP50) && near(g.CPUSecondsP90, w.CPUSecondsP90) &&
+			near(g.PeakMemoryBytesP50, w.PeakMemoryBytesP50) && near(g.PeakMemoryBytesP90, w.PeakMemoryBytesP90)
+	}
+
+	if !same {
+		t.Errorf("%s =\n  %s\nwant\n  %s", what, showUsage(got), showUsage(want))
+	}
+}
+
+func showUsage(rows []domain.RunUsage) string {
+	show := func(v *float64) string {
+		if v == nil {
+			return "none"
+		}
+
+		return strconv.FormatFloat(*v, 'g', -1, 64)
+	}
+
+	var b strings.Builder
+
+	for _, u := range rows {
+		fmt.Fprintf(&b, "{%s %s %q runs %d cpu %s/%s mem %s/%s} ", u.FactoryID, u.Name, u.BoxSize, u.Runs,
+			show(u.CPUSecondsP50), show(u.CPUSecondsP90), show(u.PeakMemoryBytesP50), show(u.PeakMemoryBytesP90))
+	}
+
+	return b.String()
 }

@@ -9,7 +9,9 @@ import {
   knowledgeSourcesQuery,
   membersQuery,
   orgNotificationsQuery,
+  versionFileQuery,
   versionModelQuery,
+  versionQuery,
 } from '../../api/queries';
 import type { Factory, Intake, IntakeTrigger, ItemCard, Member, OrgSummary, VersionModel } from '../../api/types';
 import { renderFactoryPage, type Seed } from '../../test/route';
@@ -76,6 +78,23 @@ const intake = {
 
 const doneItem = { id: 'item-1', ref: 'software#1', number: 1, state: 'done' } as ItemCard;
 
+const keyless = 'spec:\n  runtime:\n    image: x\n';
+const keyed = 'spec:\n  runtime:\n    modelKey: "{{secret.anthropic}}"\n';
+
+/** The published version's files and factory.yaml, the two reads the Model key row depends on. */
+function versionSeeds(files: string[], yaml: string): Seed[] {
+  return [
+    [
+      versionQuery(org.id, factory.id, 'current').queryKey,
+      { files: files.map((path) => ({ path, sha256: path === 'factory.yaml' ? 'sha-1' : `sha-${path}`, size: 1 })) },
+    ],
+    [
+      versionFileQuery(org.id, factory.id, 'current', 'factory.yaml', 'sha-1').queryKey,
+      { text: yaml, sha256: 'sha-1' },
+    ],
+  ];
+}
+
 /** The seeds every card reads, at a new factory's state: 5 of 9 done (no Slack, no knowledge, no invitations, no merged item). */
 function seeds({
   members = [member],
@@ -85,6 +104,8 @@ function seeds({
   model = published,
   triggers = intake,
   finished = [],
+  files = ['factory.yaml'],
+  yaml = keyless,
 }: {
   members?: Member[];
   invitations?: unknown[];
@@ -93,6 +114,8 @@ function seeds({
   model?: VersionModel;
   triggers?: Intake;
   finished?: ItemCard[];
+  files?: string[];
+  yaml?: string;
 } = {}): Seed[] {
   return [
     [membersQuery(org.id).queryKey, members],
@@ -102,6 +125,7 @@ function seeds({
     [versionModelQuery(org.id, factory.id, 'current').queryKey, model],
     [intakeQuery(org.id, factory.id).queryKey, triggers],
     [itemsQuery(org.id, factory.id, { state: 'done', limit: 1 }).queryKey, { items: finished, next_after: null }],
+    ...versionSeeds(files, yaml),
   ];
 }
 
@@ -142,6 +166,24 @@ describe('SetupCard', () => {
     expect(screen.getByText('The line, 4 stations')).toBeTruthy();
     expect(screen.getByText('3 triggers')).toBeTruthy();
     expect(screen.getByText('First item done')).toBeTruthy();
+  });
+
+  it('adds a Model key row with a Set up link to Settings when the line has environments and no key', async () => {
+    renderCard(seeds({ files: ['factory.yaml', 'environments/default.yaml'] }));
+
+    await screen.findByRole('heading', { name: 'Finish setting up' });
+    expect(screen.getByText('5 of 10 done')).toBeTruthy();
+    expect(screen.getByText('Agents run on it')).toBeTruthy();
+    const links = screen.getAllByRole('link', { name: 'Set up' });
+    expect(links.map((l) => l.getAttribute('href'))).toContain('/o/acme/f/software/settings#runtime');
+  });
+
+  it('counts the Model key row as done once the key is set', async () => {
+    renderCard(seeds({ files: ['factory.yaml', 'environments/default.yaml'], yaml: keyed }));
+
+    await screen.findByRole('heading', { name: 'Finish setting up' });
+    expect(screen.getByText('6 of 10 done')).toBeTruthy();
+    expect(screen.queryByText('Agents run on it')).toBeNull();
   });
 
   it('shows No code as a done row without an action', async () => {

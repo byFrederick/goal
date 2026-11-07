@@ -17,7 +17,7 @@ import { Field, Input, NativeSelect } from '../../ui/field';
 import { Avatar } from '../../ui/mark';
 import { inviteRequestsOf, maxInvites, parseEmails } from '../members/people';
 import { refusal, usePeopleChanges } from '../members/use-people';
-import type { OnboardingSearch } from './code-search';
+import { carriedSearch, type OnboardingSearch } from './code-search';
 import { OnboardingLayout } from './onboarding-layout';
 import { type InviteRole, inviteRoles, roleGrant } from './people-roles';
 import { stepPanel } from './step-panel';
@@ -46,15 +46,15 @@ function Back({ org, search, factory }: { org: OrgSummary; search: OnboardingSea
   return (
     <Button asChild size="lg" variant="secondary">
       {factory ? (
-        <Link to="/o/$org/get-started/$step" params={{ org: org.slug, step: 'intake' }} search={{ factory }}>
+        <Link
+          to="/o/$org/get-started/$step"
+          params={{ org: org.slug, step: 'intake' }}
+          search={carriedSearch(search, { factory })}
+        >
           Back
         </Link>
       ) : (
-        <Link
-          to="/o/$org/get-started/$step"
-          params={{ org: org.slug, step: 'factory' }}
-          search={{ url: search.url, secret: search.secret }}
-        >
+        <Link to="/o/$org/get-started/$step" params={{ org: org.slug, step: 'factory' }} search={carriedSearch(search)}>
           Back
         </Link>
       )}
@@ -165,7 +165,7 @@ function Ready({
     void navigate({
       to: '/o/$org/get-started/$step',
       params: { org: org.slug, step: 'first-item' },
-      search: { factory: factoryId },
+      search: carriedSearch(search, { factory: factoryId }),
     });
   };
 
@@ -236,7 +236,7 @@ function Ready({
             <Link
               to="/o/$org/get-started/$step"
               params={{ org: org.slug, step: 'first-item' }}
-              search={{ factory: factoryId }}
+              search={carriedSearch(search, { factory: factoryId })}
             >
               Skip for now
             </Link>

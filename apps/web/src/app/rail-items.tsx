@@ -3,6 +3,7 @@
 import { Link, useRouterState } from '@tanstack/react-router';
 import type { ReactNode } from 'react';
 import type { OrgSummary } from '../api/types';
+import { factoryTitle } from '../shared/factory';
 import { Mark } from '../ui/mark';
 import { Tooltip } from '../ui/tooltip';
 import { FactoryBadge } from './factory-badge';
@@ -53,7 +54,7 @@ export function FactorySquareLink({
     </Link>
   );
   return tip ? (
-    <Tooltip label={factory.name} detail={square.detail}>
+    <Tooltip label={factoryTitle(factory)} detail={square.detail}>
       {link}
     </Tooltip>
   ) : (
