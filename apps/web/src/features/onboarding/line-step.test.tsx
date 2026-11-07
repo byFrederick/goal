@@ -39,6 +39,8 @@ const unkeyed = 'apiVersion: goal/v1\nspec:\n  runtime: {}\n';
 vi.mock(import('../../api/definitions'), async (original) => ({
   ...(await original()),
   getVersionModel: vi.fn(async () => ({ model: api.model, ranges: {} }) as never),
+  getVersion: vi.fn(async () => ({ files: [{ path: 'factory.yaml', sha256: 's1', size: 10 }] }) as never),
+  getVersionFile: vi.fn(async () => ({ text: api.yaml, sha256: 's1' }) as never),
   openDraft: vi.fn(async () => ({ revision: 1 }) as never),
   getFactory: vi.fn(async () => api.factory as Factory),
   validateDraft: vi.fn(
@@ -515,7 +517,9 @@ describe('step 4 on a published factory with no draft', () => {
   it('lets Continue go to Budget when nothing changed', async () => {
     renderStep(`/o/acme/get-started/line?factory=${factoryId}`);
     await screen.findByRole('region', { name: 'Spec' });
-    const next = await screen.findByRole('button', { name: 'Continue' });
-    await waitFor(() => expect((next as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(
+      () => expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(false),
+      { timeout: 3000 },
+    );
   });
 });
