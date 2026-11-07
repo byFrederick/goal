@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
 )
@@ -20,6 +21,12 @@ type Spend interface {
 	// (or station) and box size, with percentile_cont's medians and 90th percentiles. It reads
 	// every factory of the organization; the caller hides those its user may not see.
 	OrgSpend(ctx context.Context, w domain.SpendWindow) (domain.OrgSpend, error)
+
+	// SpendByFactory is the cost of the runs of each factory of the organization in ctx started at
+	// or after since and before until, as OrgSpend's days count them: every run, with or without
+	// an item and of any kind (Jonah's too), a running one with its cost so far. One row per
+	// factory with a run in the window, ordered by factory id; none finds nothing.
+	SpendByFactory(ctx context.Context, since, until time.Time) ([]domain.FactorySpend, error)
 
 	// EachAgentModelSpend calls each with the cost of the runs of factories that started in w's
 	// bounds (w.Check must pass; domain.ErrInvalid otherwise), one row per factory, agent and
