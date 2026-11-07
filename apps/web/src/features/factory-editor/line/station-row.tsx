@@ -2,7 +2,7 @@
 // handle), name and id, kind, WIP limit, who works there, ↑ ↓ and More, then its rules behind a
 // disclosure and B's problems with their fixes. Wide enough, the cells are one row; narrower, kind, WIP, who and order take a second line. Alt+ArrowUp/Down anywhere in the row moves the station.
 import { ArrowDown, ArrowUp, GripVertical, MoreHorizontal, TriangleAlert } from 'lucide-react';
-import { type KeyboardEvent, useId, useState } from 'react';
+import { type KeyboardEvent, useId, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ApiError } from '../../../api/client';
 import type { ModelStation, StationKind } from '../../../shared/definition/model';
@@ -147,7 +147,9 @@ export function StationRow({
   const setWip = (wip: number | undefined) =>
     editor.edit(setStationField(line, station.id, 'wip', wip), { coalesce: `${editor.keyOf(station.id)}/wip` });
 
+  const inserted = useRef(false);
   const insert = (where: 'above' | 'below') => {
+    inserted.current = true;
     const { edit, station: added } = addStation(line, 'agent', {
       name: 'New station',
       ...(where === 'below' ? { after: station.id } : {}),
@@ -307,7 +309,17 @@ export function StationRow({
                       <MoreHorizontal size={16} strokeWidth={1.5} aria-hidden="true" />
                     </button>
                   </MenuTrigger>
-                  <MenuContent side="bottom" align="end" className="w-64">
+                  <MenuContent
+                    side="bottom"
+                    align="end"
+                    className="w-64"
+                    onCloseAutoFocus={(event) => {
+                      // An insert moves focus to the new station's name; the menu must not take it back to its trigger.
+                      if (!inserted.current) return;
+                      inserted.current = false;
+                      event.preventDefault();
+                    }}
+                  >
                     <MenuItem onSelect={() => insert('above')}>Insert above</MenuItem>
                     {station.kind === 'done' ? null : (
                       <MenuItem onSelect={() => insert('below')}>Insert below</MenuItem>
@@ -316,7 +328,10 @@ export function StationRow({
                       <MenuItem
                         onSelect={() => {
                           const copy = duplicateStation(line, station.id);
-                          if (copy) editor.insert(copy.edit, copy.station);
+                          if (copy) {
+                            inserted.current = true;
+                            editor.insert(copy.edit, copy.station);
+                          }
                         }}
                       >
                         Duplicate

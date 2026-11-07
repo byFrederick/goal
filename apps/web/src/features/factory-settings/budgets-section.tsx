@@ -28,16 +28,17 @@ export function BudgetsSection() {
     <SettingsGroup id="budgets" title="Budgets and targets">
       <div className="grid grid-cols-1 gap-x-5 gap-y-4 @[640px]:grid-cols-2">
         <h3 className="col-span-full m-0 text-sm font-medium">Budgets</h3>
-        <Field label="Each day" help="Spend cap for one day, in US dollars." className="min-w-0">
-          <AmountInput value={budget.daily_usd} onValue={(n) => setCap('daily_usd', n)} onDone={flush} />
-        </Field>
-        <Field label="Each week" help="Spend cap for seven days, in US dollars." className="min-w-0">
+        <Field
+          label="Each week"
+          help="Spend cap for the last 7 days, in US dollars. Goal starts no new work above it."
+          className="min-w-0"
+        >
           <AmountInput value={budget.weekly_usd} onValue={(n) => setCap('weekly_usd', n)} onDone={flush} />
         </Field>
-        <Field label="Each item" help="Spend cap for one run, in US dollars." className="min-w-0">
+        <Field label="Each run" help="Spend cap for one agent run, in US dollars." className="min-w-0">
           <AmountInput value={budget.per_item_usd} onValue={(n) => setCap('per_item_usd', n)} onDone={flush} />
         </Field>
-        <Field label="Turns per item" help="Most turns one run may take." className="min-w-0">
+        <Field label="Turns per run" help="Most turns one run may take." className="min-w-0">
           <Input
             type="number"
             inputMode="numeric"
