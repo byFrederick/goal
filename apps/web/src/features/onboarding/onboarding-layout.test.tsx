@@ -12,7 +12,7 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OrgSummary } from '../../api/types';
-import { OnboardingLayout } from './onboarding-layout';
+import { OnboardingLayout, PreviewCard } from './onboarding-layout';
 import { isOrgOnboardingStep, previousStep } from './steps';
 
 const goal: OrgSummary = { id: 'org-goal', slug: 'goal', name: 'Goal', mark: 'Go', factory_count: 1, role: 'owner' };
@@ -143,5 +143,14 @@ describe('the onboarding steps', () => {
     expect(previousStep('factory')).toBe('organization');
     expect(previousStep('code')).toBe('factory');
     expect(previousStep('line')).toBe('code');
+  });
+});
+
+describe('PreviewCard', () => {
+  it('wraps a sentence detail at spaces, never in the middle of a word', () => {
+    render(<PreviewCard label="Code" value="No code" detail="Items don't touch a repository." />);
+    const detail = screen.getByText("Items don't touch a repository.");
+    expect(detail.className).toContain('break-words');
+    expect(detail.className).not.toContain('break-all');
   });
 });

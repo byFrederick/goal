@@ -12,6 +12,8 @@ import {
   metricsQuery,
   orgQuery,
   overviewQuery,
+  versionFileQuery,
+  versionQuery,
 } from '../../api/queries';
 import type { Board, Factory, FactoryOverview, FactoryOverviewList, Inbox, Item, OrgSummary } from '../../api/types';
 import { renderOrgPage, type Seed } from '../../test/route';
@@ -247,6 +249,7 @@ function renderHome({
   seedOverview = true,
   archivedList = [] as Factory[] | null,
   inboxList = inboxEntries([decision, alert]),
+  extraSeed = [] as Seed[],
   boards = {
     [software.id]: softwareBoard,
     [sre.id]: board([station('review', 'agent', 0, 0, { send_back_ratio: 0.4 })]),
@@ -259,6 +262,8 @@ function renderHome({
   /** The archived factories; null leaves the query unseeded, so it stays pending. */
   archivedList?: Factory[] | null;
   inboxList?: Inbox;
+  /** More seeded queries, e.g. a published version. */
+  extraSeed?: Seed[];
   boards?: Record<string, Board>;
 } = {}) {
   vi.useFakeTimers({ toFake: ['Date'] });
@@ -275,6 +280,7 @@ function renderHome({
       },
     ],
     [attentionQuery(org.id).queryKey, attention],
+    ...extraSeed,
     [inboxQuery(org.id).queryKey, inboxList],
     ...(archivedList ? [[archivedFactoriesQuery(org.id).queryKey, archivedList] as Seed] : []),
     ...(seedOverview
@@ -367,6 +373,30 @@ describe('Home: the ready state', () => {
     expect(within(sreRow).getByText('Andon pulled')).toBeTruthy();
     expect(within(sreRow).getByText('Sent back')).toBeTruthy();
     expect(within(sreRow).queryByText('Throughput')).toBeNull();
+  });
+
+  it('says Needs a model key, not Running, for a published line on secrets without a model key', async () => {
+    await renderReady({
+      extraSeed: [
+        [
+          versionQuery(org.id, software.id, 'current').queryKey,
+          {
+            files: [
+              { path: 'factory.yaml', sha256: 'sha-f' },
+              { path: 'environments/default.yaml', sha256: 'sha-d' },
+            ],
+          },
+        ],
+        [
+          versionFileQuery(org.id, software.id, 'current', 'factory.yaml', 'sha-f').queryKey,
+          { text: 'spec:\n  runtime: {}\n' },
+        ],
+      ] as unknown as Seed[],
+    });
+
+    const row = screen.getByRole('article', { name: 'software' });
+    expect(await within(row).findByText('Needs a model key')).toBeTruthy();
+    expect(within(row).queryByText('Running')).toBeNull();
   });
 
   it('shows each station of the line as count over name, with Done today', async () => {
