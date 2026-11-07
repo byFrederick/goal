@@ -43,7 +43,6 @@ var (
 	errSourceNotFound = errors.New("knowledge source not found")
 	errSourceTaken    = errors.New("knowledge source name taken")
 	errSourceInUse    = errors.New("knowledge source in use")
-	errSourceLive     = errors.New("a live knowledge source never syncs")
 	errUploadTooLarge = errors.New("upload too large")
 	// errSourceInvalid is a source the rules refuse (400).
 	errSourceInvalid = errors.New("knowledge source invalid")
@@ -60,11 +59,9 @@ func knowledgeProblem(err error) (gen.Problem, bool) {
 		{errFileNotFound, http.StatusNotFound, "knowledge-file-not-found"},
 		{errSourceTaken, http.StatusConflict, "knowledge-source-name-taken"},
 		{errSourceInUse, http.StatusConflict, "knowledge-source-in-use"},
-		{errSourceLive, http.StatusConflict, "knowledge-source-live"},
 		{domain.ErrNotUploadSource, http.StatusConflict, "not-an-upload-source"},
 		{errUploadTooLarge, http.StatusRequestEntityTooLarge, "upload-too-large"},
 		{domain.ErrUnsupportedDocument, http.StatusUnsupportedMediaType, "unsupported-document-type"},
-		{domain.ErrConnectionCannotSync, http.StatusBadRequest, "connection-cannot-sync"},
 		{errSourceInvalid, http.StatusBadRequest, ""},
 	}
 
@@ -90,8 +87,6 @@ func sourceError(err error, name string) error {
 		return fmt.Errorf("%w: %q: %w", errSourceNotFound, name, err)
 	case errors.Is(err, ports.ErrNameTaken):
 		return fmt.Errorf("%w: %w", errSourceTaken, err)
-	case errors.Is(err, domain.ErrConnectionCannotSync):
-		return err
 	case errors.Is(err, domain.ErrInvalid):
 		return fmt.Errorf("%w: %w", errSourceInvalid, err)
 	default:
@@ -146,10 +141,8 @@ func (s *server) CreateKnowledgeSource(ctx context.Context, req gen.CreateKnowle
 
 	b := req.Body
 
-	// A new synced source reads with a secret (ADR 0037 decision 14); only a live one still names
-	// a connection, and the sources made before keep theirs until moving over.
-	if b.Kind == gen.KnowledgeSourceKindSynced && b.Connection != nil {
-		return nil, fmt.Errorf("%w: a synced source reads with a secret, not connection %q", errSourceInvalid, *b.Connection)
+	if !b.Kind.Valid() {
+		return nil, fmt.Errorf("%w: kind %q is not one of upload, repository, confluence and synced", errSourceInvalid, b.Kind)
 	}
 
 	if err := s.sourceSecret(ctx, b.Secret); err != nil {
@@ -157,16 +150,14 @@ func (s *server) CreateKnowledgeSource(ctx context.Context, req gen.CreateKnowle
 	}
 
 	src, err := s.knowledge.CreateSource(ctx, domain.NewKnowledgeSource{
-		Name: b.Name, Title: b.Title, Kind: domain.KnowledgeSourceKind(b.Kind), Connection: deref(b.Connection), Secret: deref(b.Secret),
+		Name: b.Name, Title: b.Title, Kind: domain.KnowledgeSourceKind(b.Kind), Secret: deref(b.Secret),
 		Config: deref(b.Config), ReadWhen: deref(b.ReadWhen), SyncEvery: seconds(b.SyncEverySeconds),
 	}, by)
 
 	switch {
-	case errors.Is(err, ports.ErrNotFound) && b.Connection == nil:
-		// A new source names a connection or a secret, which sourceSecret found a moment ago.
-		return nil, secretError(err)
 	case errors.Is(err, ports.ErrNotFound):
-		return nil, fmt.Errorf("%w: %q: %w", errConnectionNotFound, deref(b.Connection), err)
+		// A new source's secret, which sourceSecret found a moment ago.
+		return nil, secretError(err)
 	case err != nil:
 		return nil, sourceError(err, b.Name)
 	}
@@ -269,10 +260,7 @@ func (s *server) DeleteKnowledgeSource(ctx context.Context, req gen.DeleteKnowle
 }
 
 func (s *server) SyncKnowledgeSource(ctx context.Context, req gen.SyncKnowledgeSourceRequestObject) (gen.SyncKnowledgeSourceResponseObject, error) {
-	switch err := s.knowledge.SyncNow(ctx, req.Source); {
-	case errors.Is(err, domain.ErrInvalid):
-		return nil, fmt.Errorf("%w: %w", errSourceLive, err)
-	case err != nil:
+	if err := s.knowledge.SyncNow(ctx, req.Source); err != nil {
 		return nil, sourceError(err, req.Source)
 	}
 
@@ -350,7 +338,7 @@ func (s *server) sourceOut(ctx context.Context, src domain.KnowledgeSource, by [
 	}
 
 	out := gen.KnowledgeSource{
-		Id: string(src.ID), Name: src.Name, Title: src.Title, Kind: gen.KnowledgeSourceKind(src.Kind), Connection: optional(src.Connection),
+		Id: string(src.ID), Name: src.Name, Title: src.Title, Kind: gen.KnowledgeSourceKind(src.Kind),
 		Secret: optional(src.Secret), Config: map[string]string{}, ReadWhen: src.ReadWhen, SyncEverySeconds: int(src.SyncEvery / time.Second), Status: gen.KnowledgeSourceStatus(src.Status),
 		LastError: optional(src.LastError), LastSyncedAt: src.LastSyncedAt, NextSyncAt: src.NextSyncAt,
 		UsedBy:    gen.KnowledgeSourceUsers{Factories: []gen.ConnectionFactory{}, Readers: []gen.KnowledgeSourceReader{}},
