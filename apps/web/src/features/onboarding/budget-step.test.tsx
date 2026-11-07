@@ -11,7 +11,7 @@ import {
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../api/client';
-import { publishDraft } from '../../api/definitions';
+import { openDraft, publishDraft, saveDraftSection } from '../../api/definitions';
 import type { Factory, OrgSummary, SectionSave } from '../../api/types';
 import { factoryModelOf, type Model, type Section } from '../../shared/definition/model';
 import { OrgContext } from '../../shared/org';
@@ -31,6 +31,8 @@ const api = vi.hoisted(() => ({
 vi.mock(import('../../api/definitions'), async (original) => ({
   ...(await original()),
   getFactory: vi.fn(async () => api.factory as Factory),
+  getVersionModel: vi.fn(async () => ({ model: api.model, ranges: {} }) as never),
+  openDraft: vi.fn(async () => ({ revision: 1 }) as never),
   getDraft: vi.fn(async () => ({ base: null, revision: 1 }) as never),
   getDraftModel: vi.fn(
     async () =>
@@ -70,6 +72,16 @@ const factoryId = '6f1d2c3a-4b5e-4f70-8a9b-0c1d2e3f4a5b';
 
 function setFactory() {
   api.factory = { id: factoryId, name: 'software', draft: { revision: 1 }, current: null } as unknown as Factory;
+}
+
+/** A published factory with no draft: version 7 runs. */
+function setPublished() {
+  api.factory = {
+    id: factoryId,
+    name: 'software',
+    draft: null,
+    current: { id: 'version-7', number: 7 },
+  } as unknown as Factory;
 }
 
 /** A draft with two stations and no budget or targets: the picture's defaults show until they are set. */
@@ -348,5 +360,64 @@ describe('step 5, set budgets and targets', () => {
     expect(href).toContain('/o/acme/get-started/line');
     expect(href).toContain(`factory=${factoryId}`);
     expect(screen.queryByText(/spec|\/line\//)).toBeNull();
+  });
+});
+
+describe('step 5 on a published factory with no draft', () => {
+  beforeEach(() => {
+    setPublished();
+    setDraft({
+      review: { budget: { weekly_usd: 600, per_item_usd: 9, on_exhausted: 'stop' } },
+      line: {
+        stations: [
+          { id: 'build', name: 'Build', kind: 'agent', agent: 'backend-engineer', wip: 6 },
+          { id: 'done', name: 'Done', kind: 'done' },
+        ],
+        flow: { targets: { throughput_per_day: 10, lead_time_hours: 48 } },
+      },
+    });
+  });
+
+  it('shows the running version’s budget, and no message about choosing a template', async () => {
+    renderStep(`/o/acme/get-started/budget?factory=${factoryId}`);
+    const week = (await screen.findByRole('slider', { name: 'A week' })) as HTMLInputElement;
+    expect(week.value).toBe('600');
+    expect((screen.getByRole('slider', { name: 'Most per run' }) as HTMLInputElement).value).toBe('9');
+    expect(screen.queryByText(/Choose a template/)).toBeNull();
+    expect(openDraft).not.toHaveBeenCalled();
+  });
+
+  it('opens a draft from the version on the first change, then saves it', async () => {
+    renderStep(`/o/acme/get-started/budget?factory=${factoryId}`);
+    const week = (await screen.findByRole('slider', { name: 'A week' })) as HTMLInputElement;
+    fireEvent.change(week, { target: { value: '700' } });
+    await waitFor(() =>
+      expect(lastSaved<{ budget?: { weekly_usd?: number } }>('review')?.budget?.weekly_usd).toBe(700),
+    );
+    expect(openDraft).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(openDraft).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(saveDraftSection).mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it('continues to intake without publishing when nothing changed', async () => {
+    const router = renderStep(`/o/acme/get-started/budget?factory=${factoryId}`);
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/get-started/intake'));
+    expect(publishDraft).not.toHaveBeenCalled();
+    expect(openDraft).not.toHaveBeenCalled();
+  });
+
+  it('publishes the changed draft against the running version, then goes to intake', async () => {
+    const router = renderStep(`/o/acme/get-started/budget?factory=${factoryId}`);
+    const week = (await screen.findByRole('slider', { name: 'A week' })) as HTMLInputElement;
+    fireEvent.change(week, { target: { value: '700' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    await waitFor(() => expect(publishDraft).toHaveBeenCalledTimes(1));
+    expect(publishDraft).toHaveBeenCalledWith('org-1', factoryId, {
+      revision: expect.any(Number),
+      expected_current_version_id: 'version-7',
+    });
+    await waitFor(() => expect(router.state.location.pathname).toBe('/o/acme/get-started/intake'));
   });
 });

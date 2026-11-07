@@ -85,16 +85,10 @@ function Loading({ org }: { org: OrgSummary }) {
   );
 }
 
-/** The draft is read once it is open: until then the step shows its loading state. */
+/** The session is read once it is up: until then the step shows its loading state. Without a draft it shows the running version. */
 function Line({ org, search, factory }: { org: OrgSummary; search: OnboardingSearch; factory: string }) {
   const ready = useDraft((s) => s.ready);
-  const hasDraft = useDraft((s) => s.hasDraft);
   if (!ready) return <Loading org={org} />;
-  if (!hasDraft) {
-    return (
-      <NoFactory org={org} search={search} message="This factory has no draft to shape. Choose a template again." />
-    );
-  }
   return (
     <LineEditorProvider place="wizard">
       <LineBody org={org} search={search} factory={factory} />

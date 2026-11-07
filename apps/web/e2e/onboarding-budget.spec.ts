@@ -46,3 +46,45 @@ for (const width of widths) {
     await expectNoHorizontalScroll(page);
   });
 }
+
+for (const width of widths) {
+  test(`Back from Intake to Budget and Line works on the published factory at ${width} px`, async ({
+    page,
+    request,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-1440', 'one project runs both widths');
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/o/goal/get-started/factory');
+    await page.getByRole('button', { name: /^Use / }).click();
+    await expect(page).toHaveURL(/\/o\/goal\/get-started\/code\?.*factory=/);
+    const factory = new URL(page.url()).searchParams.get('factory');
+    await page.goto(`/o/goal/get-started/budget?factory=${factory}`);
+    await expect(page.getByRole('slider', { name: 'A week' })).toHaveValue('800');
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page).toHaveURL(/\/get-started\/intake/);
+
+    // Back to Budget shows the running version; the first change opens a draft, Continue publishes it.
+    await page.getByRole('link', { name: 'Back' }).click();
+    await expect(page).toHaveURL(/\/get-started\/budget/);
+    const week = page.getByRole('slider', { name: 'A week' });
+    await expect(week).toHaveValue('800');
+    await expect(page.getByText(/Choose a template again/)).toHaveCount(0);
+    await week.fill('1400');
+    await expect(page.getByText('about $200 a day', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page).toHaveURL(/\/get-started\/intake/);
+
+    const model = await (await request.get(`/v1/orgs/goal/factories/${factory}/versions/current/model`)).json();
+    expect(model.model.review.budget.weekly_usd).toBe(1400);
+
+    // Back twice reaches Line; no message appears.
+    await page.getByRole('link', { name: 'Back' }).click();
+    await expect(page).toHaveURL(/\/get-started\/budget/);
+    await expect(week).toHaveValue('1400');
+    await page.getByRole('link', { name: 'Back' }).click();
+    await expect(page).toHaveURL(/\/get-started\/line/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Shape the line' })).toBeVisible();
+    await expect(page.getByText(/Choose a template again|has no draft/)).toHaveCount(0);
+    await expectNoHorizontalScroll(page);
+  });
+}
