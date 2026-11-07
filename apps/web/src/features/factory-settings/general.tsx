@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { factoriesQuery } from '../../api/queries';
 import type { Factory } from '../../api/types';
 import { FactoryBadge } from '../../app/factory-badge';
+import { factoryTitle } from '../../shared/factory';
 import { factoryMark } from '../../shared/marks';
 import { useOrg } from '../../shared/org';
 import { SectionCard } from '../../ui/card';
@@ -16,7 +17,10 @@ export function GeneralCard({ factory }: { factory: Factory }) {
   const { data: factories = [] } = useQuery(factoriesQuery(org.id));
   return (
     <SectionCard id="general" title="General">
-      <Field label="Name" className={rowClass}>
+      <Field label="Title" className={rowClass}>
+        <Input readOnly value={factoryTitle(factory)} />
+      </Field>
+      <Field label="Name (in URLs and the CLI)" className={rowClass}>
         <Input readOnly value={factory.name} />
       </Field>
       <Field label="Purpose" className={rowClass} help="Agents read this as their first line of context.">

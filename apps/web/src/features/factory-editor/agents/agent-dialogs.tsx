@@ -13,6 +13,7 @@ import type { FileMap } from '../../../api/types';
 import { type ModelAgent, modelOf } from '../../../shared/definition/model';
 import { cleanPath, promptFile } from '../../../shared/definition/place';
 import { stationsUsing } from '../../../shared/definition/where';
+import { factoryTitle } from '../../../shared/factory';
 import { Button } from '../../../ui/button';
 import { ConfirmDialog } from '../../../ui/confirm-dialog';
 import { Dialog, DialogClose, DialogContent } from '../../../ui/dialog';
@@ -412,7 +413,7 @@ export function CopyAgentButton() {
                 <option value="">Choose a factory…</option>
                 {others.map((f) => (
                   <option key={f.id} value={f.id}>
-                    {f.name}
+                    {factoryTitle(f)}
                   </option>
                 ))}
               </NativeSelect>
