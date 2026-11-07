@@ -31,7 +31,10 @@ export function FlowStats({ metrics }: { metrics: Metrics }) {
       unit: 'a day',
       target: throughputTarget ? `Target ${throughputTarget}` : undefined,
       progress: throughputTarget ? throughput / throughputTarget : undefined,
-      delta: throughputDelta !== null ? { text: signed(throughputDelta), good: goodWhen(throughputDelta > 0, throughputDelta) } : undefined,
+      delta:
+        throughputDelta !== null
+          ? { text: signed(throughputDelta), good: goodWhen(throughputDelta > 0, throughputDelta) }
+          : undefined,
       note: throughputTarget ? undefined : 'No target set',
     },
     {
@@ -48,7 +51,10 @@ export function FlowStats({ metrics }: { metrics: Metrics }) {
       value: noItems ? null : sentBack,
       unit: noItems ? undefined : '%',
       note: 'No target set',
-      delta: sentBackDelta !== null ? { text: `${signed(sentBackDelta)} pts`, good: goodWhen(sentBackDelta < 0, sentBackDelta) } : undefined,
+      delta:
+        sentBackDelta !== null
+          ? { text: `${signed(sentBackDelta)} pts`, good: goodWhen(sentBackDelta < 0, sentBackDelta) }
+          : undefined,
     },
     {
       label: 'Cost per item',

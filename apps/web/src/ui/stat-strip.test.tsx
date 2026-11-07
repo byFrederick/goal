@@ -89,7 +89,12 @@ describe('StatStrip narrow', () => {
 
 describe('StatStrip neutral delta', () => {
   it('draws a delta with no good flag in muted, and keeps the note beside it', () => {
-    render(<StatStrip label="Flow" stats={[{ label: 'Sent back', value: 5, note: 'No target set', delta: { text: '0' } }]} />);
+    render(
+      <StatStrip
+        label="Flow"
+        stats={[{ label: 'Sent back', value: 5, note: 'No target set', delta: { text: '0' } }]}
+      />,
+    );
 
     const delta = screen.getByText('0', { selector: 'span.text-muted' });
     expect(delta.className).not.toContain('text-ok-ink');

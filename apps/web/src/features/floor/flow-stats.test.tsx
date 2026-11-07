@@ -49,7 +49,12 @@ describe('FlowStats', () => {
   });
 
   it('draws a zero delta neutral and keeps No target set beside it', () => {
-    const metrics = { ...base, items_done: 4, throughput_per_day: 2, previous: { ...before, items_done: 4, throughput_per_day: 2 } };
+    const metrics = {
+      ...base,
+      items_done: 4,
+      throughput_per_day: 2,
+      previous: { ...before, items_done: 4, throughput_per_day: 2 },
+    };
     render(<FlowStats metrics={metrics} />);
 
     const meta = throughputMeta();
@@ -61,7 +66,12 @@ describe('FlowStats', () => {
   });
 
   it('still draws a drop in rework-ink', () => {
-    const metrics = { ...base, items_done: 4, throughput_per_day: 1, previous: { ...before, items_done: 4, throughput_per_day: 2 } };
+    const metrics = {
+      ...base,
+      items_done: 4,
+      throughput_per_day: 1,
+      previous: { ...before, items_done: 4, throughput_per_day: 2 },
+    };
     render(<FlowStats metrics={metrics} />);
 
     expect(within(throughputMeta()).getByText('−1').className).toContain('text-rework-ink');

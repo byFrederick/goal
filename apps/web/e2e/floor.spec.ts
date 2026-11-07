@@ -120,12 +120,19 @@ test('a factory with no finished item shows no red 0 under Throughput and keeps 
   await page.route(/\/metrics\?/, async (route) => {
     const res = await route.fetch();
     const body = await res.json();
-    if (!body || typeof body !== 'object' || !('items_done' in body)) return route.fulfill({ response: res, json: body });
+    if (!body || typeof body !== 'object' || !('items_done' in body))
+      return route.fulfill({ response: res, json: body });
     const empty = { items_done: 0, throughput_per_day: 0, lead_time_hours: null, rework_rate: 0 };
     const targets = { ...body.targets, throughput_per_day: null };
     return route.fulfill({
       response: res,
-      json: { ...body, ...empty, spend_usd: 0, targets, previous: body.previous ? { ...body.previous, ...empty } : body.previous },
+      json: {
+        ...body,
+        ...empty,
+        spend_usd: 0,
+        targets,
+        previous: body.previous ? { ...body.previous, ...empty } : body.previous,
+      },
     });
   });
   await page.goto('/o/acme/f/software');
