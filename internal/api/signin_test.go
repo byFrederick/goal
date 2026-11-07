@@ -338,7 +338,7 @@ func TestAPI_SignIn_LocalUserBeforeSignIn(t *testing.T) {
 	}
 
 	created := page.Entries[len(page.Entries)-1]
-	if created.Action != domain.AuditOrgCreated || created.Actor.Id != domain.LocalUser.ID || created.Actor.Name != "Local user (before sign-in)" {
+	if created.Action != domain.AuditOrgCreated || created.Actor.Id != domain.LocalUser.ID || created.Actor.Name != localUserName {
 		t.Errorf("org.created by %+v, want the local user, named before sign-in", created.Actor)
 	}
 }

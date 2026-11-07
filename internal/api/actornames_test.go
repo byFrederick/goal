@@ -21,6 +21,9 @@ import (
 // formerID was never a member of acme: it stands for someone who has left.
 const formerID domain.UserID = "019a4000-0000-7000-8000-000000000009"
 
+// localUserName is how the API names the local user from before sign-in.
+const localUserName = "Local user (before sign-in)"
+
 // formerName is how the API names a person who is no longer a member.
 const formerName = "A former member"
 
@@ -157,7 +160,7 @@ func (h signedIn) filedByEveryone(t *testing.T, start time.Time) map[string]stri
 	h.filedStartingBy(t, "engine", domain.Actor{Kind: domain.ActorSystem, ID: "engine", Name: "engine"}, start)
 
 	return map[string]string{
-		"owner": ownerName, "viewer": viewerName, "former": formerName, "local user": "Local user (before sign-in)",
+		"owner": ownerName, "viewer": viewerName, "former": formerName, "local user": localUserName,
 		"key": "key-1", "agent": "investigator", "engine": "-",
 	}
 }
@@ -444,7 +447,7 @@ func TestDraftRequests_RequesterOneLookup(t *testing.T) {
 
 	want := map[string]string{
 		"by the owner": ownerName, "by the viewer": viewerName, "by someone who left": formerName,
-		"by the local user": "Local user (before sign-in)",
+		"by the local user": localUserName,
 	}
 	if !maps.Equal(got, want) {
 		t.Errorf("requesters = %v; want %v", got, want)
@@ -471,6 +474,210 @@ func TestVersions_NoLookupWithoutSignIn(t *testing.T) {
 		if res := h.request(t, http.MethodGet, path, "", nil); res.status != http.StatusOK {
 			t.Errorf("GET %s = %d %s", path, res.status, res.body)
 		}
+	}
+
+	if n := counted.calls.Load(); n != 0 {
+		t.Errorf("MemberNames called %d times under GOAL_AUTH=none; want 0", n)
+	}
+}
+
+// keyBy stores a key of acme made by a straight in the fake, as if through the API.
+func (h signedIn) keyBy(t *testing.T, name string, by domain.Actor) domain.APIKey {
+	t.Helper()
+
+	k, err := h.identity.CreateAPIKey(inOrg(t), by, domain.NewAPIKey{
+		Name: name, Hint: "goal_sk_" + name, Hash: "hash-" + name, Scopes: []domain.Permission{scopeOrgRead}, Ceiling: domain.FactoryViewer, ExpiresInDays: 30,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return k
+}
+
+// API keys name who made and revoked them: the list with one MemberNames call for every key, the
+// new key's answer with one more.
+func TestAPIKeys_NamesPeopleInOneLookup(t *testing.T) {
+	t.Parallel()
+
+	counted := &countedAccess{}
+	h := newSignedInWith(t, nil, countingNames(counted))
+	h.identity.AddSession(freshToken, ownerID, domain.Session{ID: "fresh-owner", CreatedAt: t0, ExpiresAt: t0.Add(7 * 24 * time.Hour), Browser: true})
+
+	made, _ := h.create(t, ciDeploy)
+	if got := made.Key.CreatedBy; got != (gen.Actor{Kind: gen.ActorKindUser, Id: string(ownerID), Name: ownerName}) {
+		t.Errorf("new key's created_by = %+v; want %s named %q", got, ownerID, ownerName)
+	}
+
+	if n := counted.calls.Swap(0); n != 1 {
+		t.Errorf("create called MemberNames %d times; want 1", n)
+	}
+
+	h.keyBy(t, "by-former", user(formerID))
+
+	revoked := h.keyBy(t, "revoked-by-viewer", user(ownerID))
+	must(t, h.identity.RevokeAPIKey(inOrg(t), user(viewerID), revoked.ID))
+	must(t, h.identity.SetOrgRole(testOrg, viewerID, ""))
+
+	list := decode[gen.ApiKeyList](t, h.as(t, freshToken, http.MethodGet, keysPath, ""), http.StatusOK)
+
+	got := map[string]string{}
+	for _, k := range list.Keys {
+		got[k.Name] = k.CreatedBy.Name
+		if k.RevokedBy != nil {
+			got[k.Name+" revoked"] = k.RevokedBy.Name
+		}
+	}
+
+	want := map[string]string{
+		"ci-deploy": ownerName, "by-former": formerName, "revoked-by-viewer": ownerName, "revoked-by-viewer revoked": formerName,
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("key names = %v; want %v", got, want)
+	}
+
+	if n := counted.calls.Load(); n != 1 {
+		t.Errorf("list called MemberNames %d times; want 1", n)
+	}
+}
+
+// The sign-up domain names the owner who set it, in the answer to setting it and in the settings,
+// one MemberNames call each.
+func TestSignupDomain_SetByNamesTheMember(t *testing.T) {
+	t.Parallel()
+
+	counted := &countedAccess{}
+	h := newSignedInWith(t, nil, countingNames(counted))
+	withPeople(t, h)
+	h.tenancy.WithSignIn(h.identity.Email, "gmail.com")
+
+	want := gen.Actor{Kind: gen.ActorKindUser, Id: string(ownerID), Name: ownerName}
+
+	set := decode[gen.SignupDomain](t, h.as(t, freshOwnerToken, http.MethodPut, signupPath, ownDomain), http.StatusOK)
+	if set.SetBy != want {
+		t.Errorf("set's set_by = %+v; want %+v", set.SetBy, want)
+	}
+
+	if n := counted.calls.Swap(0); n != 1 {
+		t.Errorf("set called MemberNames %d times; want 1", n)
+	}
+
+	if s := ownerSettings(t, h); s.SignupDomain == nil || s.SignupDomain.SetBy != want {
+		t.Errorf("settings' signup_domain = %+v; want set by %+v", s.SignupDomain, want)
+	}
+
+	if n := counted.calls.Load(); n != 1 {
+		t.Errorf("settings called MemberNames %d times; want 1", n)
+	}
+}
+
+// An owner who set the sign-up domain and has since left is "A former member".
+func TestSignupDomain_SetByFormerMember(t *testing.T) {
+	t.Parallel()
+
+	h := withSignupDomains(t)
+	decode[gen.SignupDomain](t, h.as(t, freshOwnerToken, http.MethodPut, signupPath, ownDomain), http.StatusOK)
+	must(t, h.identity.SetOrgRole(testOrg, viewerID, domain.OrgOwner))
+	must(t, h.identity.SetOrgRole(testOrg, ownerID, ""))
+
+	s := decode[gen.OrgSettings](t, h.as(t, viewerToken, http.MethodGet, acmeSettings, ""), http.StatusOK)
+	if s.SignupDomain == nil || s.SignupDomain.SetBy.Id != string(ownerID) || s.SignupDomain.SetBy.Name != formerName {
+		t.Errorf("signup_domain = %+v; want set by %s named %s", s.SignupDomain, ownerID, formerName)
+	}
+}
+
+// noteBy appends a's note on it straight to the store, with a name its event kept that a touch no
+// longer shows.
+func (h *harness) noteBy(t *testing.T, it domain.Item, a domain.Actor) {
+	t.Helper()
+
+	h.noteAt(t, it, a.Ref(), "Name at the time", t0.Add(time.Minute))
+}
+
+// touchedByEveryone files acme#1 and touches it by two members, someone who left and the local
+// user, the viewer then removed. It returns the names each touch should show by actor id.
+func (h signedIn) touchedByEveryone(t *testing.T) map[string]string {
+	t.Helper()
+
+	it := h.filedBy(t, "touched", user(ownerID))
+	for _, a := range []domain.Actor{user(ownerID), user(viewerID), user(formerID), domain.LocalUser} {
+		h.noteBy(t, it, a)
+	}
+
+	must(t, h.identity.SetOrgRole(testOrg, viewerID, ""))
+
+	return map[string]string{
+		string(ownerID): ownerName, string(viewerID): formerName, string(formerID): formerName,
+		domain.LocalUser.ID: localUserName,
+	}
+}
+
+func touchNames(touches []gen.Touch) map[string]string {
+	out := map[string]string{}
+	for _, tc := range touches {
+		out[tc.Actor.Id] = tc.Actor.Name
+	}
+
+	return out
+}
+
+// An item names the people of its touches, and who filed it, with one MemberNames call.
+func TestItem_TouchesNameMembersInOneLookup(t *testing.T) {
+	t.Parallel()
+
+	counted := &countedAccess{}
+	h := newSignedInWith(t, nil, countingNames(counted))
+	want := h.touchedByEveryone(t)
+
+	it := h.item(t, "acme#1")
+	if it.Touches == nil || !maps.Equal(touchNames(it.Touches.List), want) {
+		t.Errorf("touches = %+v; want names %v", it.Touches, want)
+	}
+
+	if it.CreatedBy == nil || it.CreatedBy.Name != ownerName {
+		t.Errorf("created_by = %+v; want %s", it.CreatedBy, ownerName)
+	}
+
+	if n := counted.calls.Load(); n != 1 {
+		t.Errorf("item called MemberNames %d times; want 1", n)
+	}
+}
+
+// An item's teardown names the people of its touches with one MemberNames call.
+func TestTeardown_TouchesNameMembersInOneLookup(t *testing.T) {
+	t.Parallel()
+
+	counted := &countedAccess{}
+	h := newSignedInWith(t, nil, countingNames(counted))
+	want := h.touchedByEveryone(t)
+
+	td := decode[gen.Teardown](t, h.as(t, ownerToken, http.MethodGet, acme1+"/teardown", ""), http.StatusOK)
+
+	touches := make([]gen.Touch, 0, len(td.Touches))
+	for _, tc := range td.Touches {
+		touches = append(touches, tc.Touch)
+	}
+
+	if got := touchNames(touches); !maps.Equal(got, want) {
+		t.Errorf("teardown touch names = %v; want %v", got, want)
+	}
+
+	if n := counted.calls.Load(); n != 1 {
+		t.Errorf("teardown called MemberNames %d times; want 1", n)
+	}
+}
+
+// Under GOAL_AUTH=none a touch is not looked up either: a person's is named by its ref.
+func TestItem_TouchesNoLookupWithoutSignIn(t *testing.T) {
+	t.Parallel()
+
+	counted := &countedAccess{}
+	h := newHarnessLogged(t, nil, nil, countingNames(counted))
+	it := h.filedAt(t, domain.NewItem{Title: "touched", Origin: domain.OriginPerson, Via: domain.ViaCLI, CreatedBy: user(ownerID)})
+	h.noteBy(t, it, user(ownerID))
+
+	if got := touchNames(h.itemTouches(t).List); got[string(ownerID)] != string(ownerID) {
+		t.Errorf("touch names = %v; want the ref's id as its name", got)
 	}
 
 	if n := counted.calls.Load(); n != 0 {
