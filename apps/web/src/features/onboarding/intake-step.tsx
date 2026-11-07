@@ -5,6 +5,7 @@
 // (setTriggersEnabled), then goes to step 7. A trigger whose source needs an endpoint the factory lacks
 // (problem.kind missing_connection) shows Connect and its switch stays off. Its four states: loading, error
 // (with Retry), empty (no starter triggers) and ready.
+
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -12,6 +13,7 @@ import { ApiError } from '../../api/client';
 import { defKeys, factoryQuery, intakeKeys, intakeQuery, versionModelQuery } from '../../api/queries';
 import type { Factory, Intake, IntakeTrigger, OrgSummary, VersionModel } from '../../api/types';
 import { modelOf } from '../../shared/definition/model';
+import { factoryTitle } from '../../shared/factory';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
@@ -266,7 +268,7 @@ function Ready({
         ...previewSlots({
           organization: organizationCard(org, window.location.host),
           code: codeCard(repoOf(search.url), search.secret),
-          factory: <FactoryCard name={factory.name} purpose={basics.purpose ?? ''} stations={panelStations} />,
+          factory: <FactoryCard name={factoryTitle(factory)} purpose={basics.purpose ?? ''} stations={panelStations} />,
         }),
         cards: (
           <>
