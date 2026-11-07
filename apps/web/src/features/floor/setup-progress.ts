@@ -53,6 +53,11 @@ export function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
+/** Whether the published model names a repository (basics.repositories, or the legacy basics.repository). */
+export function hasCode(model: Model): boolean {
+  return (model.basics?.repositories ?? []).length > 0 || Boolean(model.basics?.repository);
+}
+
 /**
  * The factory's code choice from the published model (ADR 0041): "No code", or the count with the access
  * the entries give. Any write entry makes it read and write; the legacy `repository` counts as one with write.
@@ -61,7 +66,7 @@ export function codeChoice(model: Model): string {
   const entries = model.basics?.repositories ?? [];
   const legacy = entries.length === 0 && model.basics?.repository ? 1 : 0;
   const count = entries.length + legacy;
-  if (count === 0) return 'No code';
+  if (!hasCode(model)) return 'No code';
   const write = legacy === 1 || entries.some((entry) => entry.access === 'write');
   return `Code, ${write ? 'read and write' : 'read only'}, ${plural(count, 'repository', 'repositories')}`;
 }

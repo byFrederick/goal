@@ -13,6 +13,7 @@ import {
   overviewQuery,
   touchesQuery,
   versionFileQuery,
+  versionModelQuery,
   versionQuery,
   weeklyQuery,
 } from '../../api/queries';
@@ -30,6 +31,7 @@ import type {
   MetricsSummary,
   OrgSummary,
   TouchMetrics,
+  VersionModel,
   WeeklyThroughput,
 } from '../../api/types';
 import { renderFactoryPage } from '../../test/route';
@@ -372,6 +374,7 @@ function renderFloor({
   touches = touchesNow,
   subject = factory,
   merged = true,
+  model = null,
   keyless = false,
 }: {
   entries?: InboxEntry[];
@@ -388,6 +391,8 @@ function renderFloor({
   subject?: Factory;
   /** An item has merged: a mature factory. False seeds a new one, which shows the setup checklist. */
   merged?: boolean;
+  /** The published model, seeded when the test needs the line's code. */
+  model?: VersionModel | null;
   /** The published line has an environment file and no model key. */
   keyless?: boolean;
 } = {}) {
@@ -420,6 +425,7 @@ function renderFloor({
       [inboxQuery(org.id, factory.id).queryKey, { entries, truncated: false }],
       [overviewQuery(org.id, '1d').queryKey, today],
       [overviewQuery(org.id, '7d').queryKey, week],
+      ...(model ? [[versionModelQuery(org.id, factory.id, 'current').queryKey, model] as const] : []),
       ...(keyless
         ? [
             [
@@ -771,11 +777,66 @@ describe('the cards below the figures', () => {
     });
   });
 
+  it('Throughput by week starts at the factory first week', async () => {
+    renderFloor({
+      weeks: {
+        ...twoWeeks,
+        to: '2026-11-08',
+        weeks: [
+          { from: '2026-10-19', to: '2026-10-25', done: 0, per_day: 0 },
+          { from: '2026-10-26', to: '2026-11-01', done: 0, per_day: 0 },
+          { from: '2026-11-02', to: '2026-11-08', done: 4, per_day: 0.6 },
+        ],
+      },
+      subject: { ...factory, created_at: '2026-11-07T09:00:00Z' },
+    });
+
+    const card = await screen.findByRole('region', { name: 'Throughput by week' });
+    expect(card.querySelectorAll('.bg-ink, .bg-rule')).toHaveLength(1);
+    expect(card.textContent).not.toMatch(/Oct/);
+  });
+
+  it('Throughput by week shows its empty state when every week ends before the factory', async () => {
+    renderFloor({ weeks: twoWeeks, subject: { ...factory, created_at: '2026-11-07T09:00:00Z' } });
+
+    const card = await screen.findByRole('region', { name: 'Throughput by week' });
+    expect(within(card).getByText('No finished items in these weeks yet.')).toBeTruthy();
+  });
+
+  it('says merged at the Done station and in Throughput by week on a line with code', async () => {
+    const withCode = {
+      model: { basics: { repositories: [{ url: 'https://github.com/acme/app', connection: 'github' }] } },
+      ranges: {},
+    } as unknown as VersionModel;
+    const doneStation = {
+      id: 'done',
+      kind: 'done',
+      title: 'Done',
+      agents: [],
+      wip_limit: null,
+      waiting: 0,
+      in_progress: 0,
+      items: [],
+      busy_ratio: null,
+      send_back_ratio: null,
+      queue_trend: null,
+      oldest_waiting_seconds: null,
+      done_today: 7,
+      lanes: [],
+    } as unknown as Board['stations'][number];
+    renderFloor({ model: withCode, weeks: twoWeeks, line: { ...board, stations: [doneStation] } });
+
+    const card = await screen.findByRole('region', { name: 'Throughput by week' });
+    await waitFor(() => expect(within(card).getByText('Items merged a day')).toBeTruthy());
+    expect(await screen.findByText('7 merged today')).toBeTruthy();
+    expect(screen.queryByText('7 done today')).toBeNull();
+  });
+
   it('Throughput by week draws each week with the target', async () => {
     renderFloor({ weeks: twoWeeks });
 
     const card = await screen.findByRole('region', { name: 'Throughput by week' });
-    expect(within(card).getByRole('img', { name: /Items merged a day by week/ })).toBeTruthy();
+    expect(within(card).getByRole('img', { name: /Items done a day by week/ })).toBeTruthy();
     expect(within(card).getByText('Target 10')).toBeTruthy();
     // Every week is a solid bar: the past one in the rule colour, this week in ink; no hatch, no run blue.
     expect(card.querySelectorAll('.bg-rule')).toHaveLength(1);
