@@ -22,7 +22,7 @@ export function WaitLine({
 }) {
   if (waiting.kind === 'ci') {
     return (
-      <span className={cn('flex min-w-0 items-center gap-1.5 text-muted', className)}>
+      <span className={cn('flex min-w-0 items-center gap-2 text-muted', className)}>
         {status ? <StatusIcon status={status} className="text-muted" /> : null}
         <CIWait waiting={waiting} />
       </span>
