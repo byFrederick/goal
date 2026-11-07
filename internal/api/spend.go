@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"time"
@@ -131,6 +132,8 @@ func (s *server) spendOut(ctx context.Context, sp domain.OrgSpend) gen.OrgSpend 
 			out.ByAgent = append(out.ByAgent, gen.AgentSpend{FactoryId: string(a.FactoryID), Agent: a.Agent, Usd: a.USD})
 		}
 	}
+
+	out.Usage = usageOut(sp, sees)
 
 	if !complete {
 		return out
@@ -270,3 +273,41 @@ func (s *server) modelConnections(ctx context.Context) (map[domain.FactoryID][]g
 
 // modelKeyKind is the kind of a model_connections entry that is the model key's secret.
 const modelKeyKind = "secret"
+
+// usageOut is sp's usage rows of the factories the caller sees, in their order.
+func usageOut(sp domain.OrgSpend, sees func(domain.FactoryID) bool) gen.SpendUsage {
+	out := gen.SpendUsage{ByAgent: []gen.AgentUsage{}, ByStation: []gen.StationUsage{}}
+
+	for _, u := range sp.UsageByAgent {
+		if sees(u.FactoryID) {
+			out.ByAgent = append(out.ByAgent, gen.AgentUsage{
+				FactoryId: string(u.FactoryID), Agent: u.Name, BoxSize: boxSizeOf(u.BoxSize), Runs: u.Runs,
+				CpuSecondsP50: u.CPUSecondsP50, CpuSecondsP90: u.CPUSecondsP90,
+				PeakMemoryBytesP50: bytesOf(u.PeakMemoryBytesP50), PeakMemoryBytesP90: bytesOf(u.PeakMemoryBytesP90),
+			})
+		}
+	}
+
+	for _, u := range sp.UsageByStation {
+		if sees(u.FactoryID) {
+			out.ByStation = append(out.ByStation, gen.StationUsage{
+				FactoryId: string(u.FactoryID), Station: u.Name, BoxSize: boxSizeOf(u.BoxSize), Runs: u.Runs,
+				CpuSecondsP50: u.CPUSecondsP50, CpuSecondsP90: u.CPUSecondsP90,
+				PeakMemoryBytesP50: bytesOf(u.PeakMemoryBytesP50), PeakMemoryBytesP90: bytesOf(u.PeakMemoryBytesP90),
+			})
+		}
+	}
+
+	return out
+}
+
+// bytesOf is an interpolated byte count rounded to a byte, nil for none.
+func bytesOf(v *float64) *int64 {
+	if v == nil {
+		return nil
+	}
+
+	n := int64(math.Round(*v))
+
+	return &n
+}

@@ -755,7 +755,7 @@ func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, err
 
 	run := &domain.Run{
 		ID: domain.RunID(s.newID()), FactoryID: r.FactoryID, DefinitionVersionID: r.DefinitionVersionID, ItemID: r.ItemID, Station: r.Station,
-		Agent: r.Agent, Model: r.Model, Result: domain.RunResult{Status: domain.RunRunning}, StartedAt: r.StartedAt,
+		Agent: r.Agent, Model: r.Model, Result: domain.RunResult{Status: domain.RunRunning}, BoxSize: r.Size, StartedAt: r.StartedAt,
 	}
 	s.runs[run.ID] = run
 	s.jonah.runKinds[run.ID] = kind

@@ -18,14 +18,14 @@ import { isOrgOnboardingStep, previousStep } from './steps';
 const goal: OrgSummary = { id: 'org-goal', slug: 'goal', name: 'Goal', mark: 'Go', factory_count: 1, role: 'owner' };
 
 /** The layout inside a router: its links need one. */
-async function renderLayout(element: ReactNode) {
+async function renderLayout(element: ReactNode, url = '/') {
   const queryClient = new QueryClient();
   const root = createRootRoute({ component: Outlet });
   const page = createRoute({ getParentRoute: () => root, path: '/', component: () => element });
   const org = createRoute({ getParentRoute: () => root, path: '/o/$org', component: () => <p>Home</p> });
   const router = createRouter({
     routeTree: root.addChildren([page, org]),
-    history: createMemoryHistory({ initialEntries: ['/'] }),
+    history: createMemoryHistory({ initialEntries: [url] }),
   });
   render(
     <QueryClientProvider client={queryClient}>
@@ -41,6 +41,18 @@ afterEach(() => {
 });
 
 describe('the onboarding layout', () => {
+  const pick = 'The line appears when you pick a template';
+
+  it('asks for a template while no factory is chosen', async () => {
+    await renderLayout(<OnboardingLayout step="factory" org={goal} />);
+    expect(screen.getByText(pick)).toBeTruthy();
+  });
+
+  it('does not ask for a template while the chosen factory loads', async () => {
+    await renderLayout(<OnboardingLayout step="line" org={goal} />, '/?factory=6f1f3b1e-6a43-4d52-9a39-2f1c3f7c9a10');
+    expect(screen.queryByText(pick)).toBeNull();
+  });
+
   it('shows the eight steps and marks the current one', async () => {
     await renderLayout(<OnboardingLayout step="factory" org={goal} />);
 

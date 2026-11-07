@@ -567,6 +567,10 @@ func TestRunTask_EnvironmentSizeAndImage(t *testing.T) {
 			if e := h.eventsOf(it.ID, domain.EventSandboxStarted); len(e) != 1 || e[0].Data["size"] != string(tt.wantSize) {
 				t.Errorf("sandbox_started %v; want one of size %s", e, tt.wantSize)
 			}
+
+			if runs := h.runs(t, testOrg, it.ID); len(runs) != 1 || runs[0].BoxSize != tt.wantSize {
+				t.Errorf("%d runs, the first of box size %q; want one of %s", len(runs), runs[0].BoxSize, tt.wantSize)
+			}
 		})
 	}
 }

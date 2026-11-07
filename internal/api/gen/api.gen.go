@@ -1541,19 +1541,19 @@ func (e PatchOpOp) Valid() bool {
 
 // Defines values for PolicyBoxSizeSize.
 const (
-	Large  PolicyBoxSizeSize = "large"
-	Medium PolicyBoxSizeSize = "medium"
-	Small  PolicyBoxSizeSize = "small"
+	PolicyBoxSizeSizeLarge  PolicyBoxSizeSize = "large"
+	PolicyBoxSizeSizeMedium PolicyBoxSizeSize = "medium"
+	PolicyBoxSizeSizeSmall  PolicyBoxSizeSize = "small"
 )
 
 // Valid indicates whether the value is a known member of the PolicyBoxSizeSize enum.
 func (e PolicyBoxSizeSize) Valid() bool {
 	switch e {
-	case Large:
+	case PolicyBoxSizeSizeLarge:
 		return true
-	case Medium:
+	case PolicyBoxSizeSizeMedium:
 		return true
-	case Small:
+	case PolicyBoxSizeSizeSmall:
 		return true
 	default:
 		return false
@@ -1692,6 +1692,27 @@ func (e RunStatus) Valid() bool {
 	case RunStatusRunning:
 		return true
 	case RunStatusSucceeded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SandboxSize.
+const (
+	SandboxSizeLarge  SandboxSize = "large"
+	SandboxSizeMedium SandboxSize = "medium"
+	SandboxSizeSmall  SandboxSize = "small"
+)
+
+// Valid indicates whether the value is a known member of the SandboxSize enum.
+func (e SandboxSize) Valid() bool {
+	switch e {
+	case SandboxSizeLarge:
+		return true
+	case SandboxSizeMedium:
+		return true
+	case SandboxSizeSmall:
 		return true
 	default:
 		return false
@@ -2816,6 +2837,31 @@ type AgentStats struct {
 	TaskTimeP85Minutes *float64           `json:"task_time_p85_minutes"`
 	TasksFinished      int                `json:"tasks_finished"`
 	To                 openapi_types.Date `json:"to"`
+}
+
+// AgentUsage defines model for AgentUsage.
+type AgentUsage struct {
+	// Agent The agent's name in its factory
+	Agent string `json:"agent"`
+
+	// BoxSize The runs' box size; null for runs from before box sizes were recorded
+	BoxSize *SandboxSize `json:"box_size"`
+
+	// CpuSecondsP50 The median CPU seconds of the runs that reported one, interpolated between the closest runs (percentile_cont); null when none did
+	CpuSecondsP50 *float64 `json:"cpu_seconds_p50"`
+
+	// CpuSecondsP90 The 90th percentile
+	CpuSecondsP90 *float64 `json:"cpu_seconds_p90"`
+	FactoryId     string   `json:"factory_id"`
+
+	// PeakMemoryBytesP50 The median peak memory of the runs that reported one, rounded to a byte; null when none did
+	PeakMemoryBytesP50 *int64 `json:"peak_memory_bytes_p50"`
+
+	// PeakMemoryBytesP90 The 90th percentile
+	PeakMemoryBytesP90 *int64 `json:"peak_memory_bytes_p90"`
+
+	// Runs The runs that reported a CPU time or a peak memory
+	Runs int `json:"runs"`
 }
 
 // AndonClear defines model for AndonClear.
@@ -6363,8 +6409,14 @@ type OrgRole string
 
 // OrgRun A run with the factory and the item it worked
 type OrgRun struct {
-	Agent   string  `json:"agent"`
-	CostUsd float64 `json:"cost_usd"`
+	Agent string `json:"agent"`
+
+	// BoxSize The box size the run ran in; null for a run from before box sizes were recorded
+	BoxSize *SandboxSize `json:"box_size"`
+	CostUsd float64      `json:"cost_usd"`
+
+	// CpuSeconds The CPU time the run's box used, in seconds; null while the run is running, when the box could not read it or for a run from before it was recorded
+	CpuSeconds *float64 `json:"cpu_seconds"`
 
 	// DefinitionVersion That version's number ("ran on v9"); null when the run has no version
 	DefinitionVersion *int `json:"definition_version"`
@@ -6384,10 +6436,13 @@ type OrgRun struct {
 	ItemId       string     `json:"item_id"`
 	Model        string     `json:"model"`
 	OutputTokens int64      `json:"output_tokens"`
-	StartedAt    time.Time  `json:"started_at"`
-	Station      string     `json:"station"`
-	Status       RunStatus  `json:"status"`
-	Turns        int        `json:"turns"`
+
+	// PeakMemoryBytes The most memory the run's box used at once; null when cpu_seconds would be
+	PeakMemoryBytes *int64    `json:"peak_memory_bytes"`
+	StartedAt       time.Time `json:"started_at"`
+	Station         string    `json:"station"`
+	Status          RunStatus `json:"status"`
+	Turns           int       `json:"turns"`
 }
 
 // OrgRunList defines model for OrgRunList.
@@ -6489,6 +6544,9 @@ type OrgSpend struct {
 
 	// Until The window's end, the time measured (now)
 	Until time.Time `json:"until"`
+
+	// Usage The CPU time and peak memory of the window's runs (a run counts by when it started), over the runs that reported either, for the factories the caller sees. Each row groups the runs of a factory's agent or station in boxes of one size; a group none of whose runs reported a value is left out. Rows are sorted by cpu_seconds_p90, largest first, those without one last.
+	Usage SpendUsage `json:"usage"`
 
 	// Weekly The cost per merged item of the last 8 UTC weeks (from Monday), this week last; empty when not complete
 	Weekly []WeekCost  `json:"weekly"`
@@ -6971,8 +7029,14 @@ type ReworkWarning struct {
 
 // Run One agent run: one container working one item at one station. Its full transcript is not kept (phase 2.2); the item's events carry the trace.
 type Run struct {
-	Agent   string  `json:"agent"`
-	CostUsd float64 `json:"cost_usd"`
+	Agent string `json:"agent"`
+
+	// BoxSize The box size the run ran in; null for a run from before box sizes were recorded
+	BoxSize *SandboxSize `json:"box_size"`
+	CostUsd float64      `json:"cost_usd"`
+
+	// CpuSeconds The CPU time the run's box used, in seconds; null while the run is running, when the box could not read it or for a run from before it was recorded
+	CpuSeconds *float64 `json:"cpu_seconds"`
 
 	// DefinitionVersion That version's number ("ran on v9"); null when the run has no version
 	DefinitionVersion *int `json:"definition_version"`
@@ -6984,16 +7048,19 @@ type Run struct {
 	EndedAt *time.Time `json:"ended_at"`
 
 	// Error Why a failed or cancelled run ended, else null
-	Error        *string   `json:"error"`
-	Id           string    `json:"id"`
-	InputTokens  int64     `json:"input_tokens"`
-	ItemId       string    `json:"item_id"`
-	Model        string    `json:"model"`
-	OutputTokens int64     `json:"output_tokens"`
-	StartedAt    time.Time `json:"started_at"`
-	Station      string    `json:"station"`
-	Status       RunStatus `json:"status"`
-	Turns        int       `json:"turns"`
+	Error        *string `json:"error"`
+	Id           string  `json:"id"`
+	InputTokens  int64   `json:"input_tokens"`
+	ItemId       string  `json:"item_id"`
+	Model        string  `json:"model"`
+	OutputTokens int64   `json:"output_tokens"`
+
+	// PeakMemoryBytes The most memory the run's box used at once; null when cpu_seconds would be
+	PeakMemoryBytes *int64    `json:"peak_memory_bytes"`
+	StartedAt       time.Time `json:"started_at"`
+	Station         string    `json:"station"`
+	Status          RunStatus `json:"status"`
+	Turns           int       `json:"turns"`
 }
 
 // RunItem defines model for RunItem.
@@ -7029,6 +7096,9 @@ type RunSummary struct {
 	SpendUsd       float64        `json:"spend_usd"`
 	Total          int            `json:"total"`
 }
+
+// SandboxSize How much CPU and memory a run's box gets (a factory's runtime.size)
+type SandboxSize string
 
 // SaveResult The draft after a save
 type SaveResult struct {
@@ -7415,6 +7485,12 @@ type SpendDay struct {
 	Usd       float64            `json:"usd"`
 }
 
+// SpendUsage The CPU time and peak memory of the window's runs (a run counts by when it started), over the runs that reported either, for the factories the caller sees. Each row groups the runs of a factory's agent or station in boxes of one size; a group none of whose runs reported a value is left out. Rows are sorted by cpu_seconds_p90, largest first, those without one last.
+type SpendUsage struct {
+	ByAgent   []AgentUsage   `json:"by_agent"`
+	ByStation []StationUsage `json:"by_station"`
+}
+
 // SpendWindow defines model for SpendWindow.
 type SpendWindow string
 
@@ -7486,6 +7562,31 @@ type StationKind string
 
 // StationMoves Where the open items of each station the new version removes go, by station id
 type StationMoves map[string]string
+
+// StationUsage AgentUsage by station
+type StationUsage struct {
+	// BoxSize The runs' box size; null for runs from before box sizes were recorded
+	BoxSize *SandboxSize `json:"box_size"`
+
+	// CpuSecondsP50 As AgentUsage's
+	CpuSecondsP50 *float64 `json:"cpu_seconds_p50"`
+
+	// CpuSecondsP90 As AgentUsage's
+	CpuSecondsP90 *float64 `json:"cpu_seconds_p90"`
+	FactoryId     string   `json:"factory_id"`
+
+	// PeakMemoryBytesP50 As AgentUsage's
+	PeakMemoryBytesP50 *int64 `json:"peak_memory_bytes_p50"`
+
+	// PeakMemoryBytesP90 As AgentUsage's
+	PeakMemoryBytesP90 *int64 `json:"peak_memory_bytes_p90"`
+
+	// Runs The runs that reported a CPU time or a peak memory
+	Runs int `json:"runs"`
+
+	// Station The station's id in its factory
+	Station string `json:"station"`
+}
 
 // StreamEvent The data of one `event: item` on /v1/orgs/{org}/stream
 type StreamEvent struct {

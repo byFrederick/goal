@@ -122,6 +122,7 @@ spec:
   runtime:
     model: claude-opus-5-5
     modelConnection: claude
+    modelKey: "{{secret.anthropic}}"
     size: large
     tools: [golangci-lint@2.1, sqlc@1.27]
     repositories:
@@ -489,7 +490,7 @@ kind: Factory
 metadata:
   id: 0c3e8f42-7a19-4d6b-9e25-5b1f0a7c3d88
   name: software
-  title: Software
+  title: Goal
 spec:
   runtime: { modelConnection: claude }
   agents:

@@ -30,7 +30,7 @@ async function openBasics(page: Page) {
 
 test('the definition frame is accessible and fits the screen', async ({ page }) => {
   await openBasics(page);
-  await expect(page).toHaveTitle('Basics · Definition · goal · Acme · Goal');
+  await expect(page).toHaveTitle('Basics · Definition · Goal · Acme · Goal');
   await expect(page.getByRole('region', { name: 'Draft' })).toContainText('Draft of v9, 3 changes');
   await expect(status(page)).toContainText('Based on v8, the version running now.');
   await expect(page.getByRole('link', { name: '3 changes in 2 sections' })).toBeVisible();

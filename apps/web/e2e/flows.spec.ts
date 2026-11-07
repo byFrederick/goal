@@ -95,9 +95,9 @@ test('the factories home shows each factory’s line, what needs you and the wee
   await page.goto('/o/acme');
   const row = (name: string) =>
     page.getByRole('article').filter({ has: page.getByRole('heading', { name, exact: true }) });
-  await expect(row('software').getByText('Running')).toBeVisible();
-  await expect(row('sre').getByText('Andon pulled')).toBeVisible();
-  await expect(page.getByRole('region', { name: 'sre line' })).toBeVisible();
+  await expect(row('Software').getByText('Running')).toBeVisible();
+  await expect(row('SRE').getByText('Andon pulled')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'SRE line' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Needs you first' })).toBeVisible();
   await expect(
     page.getByRole('region', { name: 'Needs you first' }).getByRole('link', { name: 'Open all' }),
@@ -111,8 +111,8 @@ test('the factories home shows each factory’s line, what needs you and the wee
 test('on a phone: a factory’s name opens its floor, and its line scrolls in its own box', async ({ page }) => {
   test.skip(!isPhone(page), 'the phone layout of the factories home');
   await page.goto('/o/acme');
-  await expect(page.getByRole('region', { name: 'sre line' })).toBeVisible();
-  await page.getByRole('link', { name: 'sre', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'SRE line' })).toBeVisible();
+  await page.getByRole('link', { name: 'SRE', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
 });
 
@@ -154,9 +154,9 @@ test('an unknown organization or factory says so', async ({ page }) => {
 
 test('pages are titled most specific first', async ({ page }) => {
   await page.goto('/o/acme/f/sre/board');
-  await expect(page).toHaveTitle('Board · sre · Acme · Goal');
+  await expect(page).toHaveTitle('Board · SRE · Acme · Goal');
   await page.goto('/o/acme/f/goal/items/12');
-  await expect(page).toHaveTitle('goal#12 · goal · Acme · Goal');
+  await expect(page).toHaveTitle('goal#12 · Goal · Acme · Goal');
 });
 
 test('the sidebar opens a factory and marks its pages', async ({ page }) => {
@@ -232,7 +232,7 @@ test('the sidebar marks Home on the organization pages', async ({ page }) => {
   await expect(sidebar.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeFocused();
 
-  await page.getByRole('link', { name: 'sre', exact: true }).click();
+  await page.getByRole('link', { name: 'SRE', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
 });
 

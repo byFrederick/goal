@@ -90,7 +90,13 @@ An item that does not exist, or that you cannot see, exits with an error and pri
 
 ## Runs
 
-`/o/<org>/runs` lists the organization's agent runs, newest first, across every factory. Each row shows the factory, the item, the station, the agent, the model, when the run started, how long it took, its turns, its cost and its status.
+`/o/<org>/runs` lists the organization's agent runs, newest first, across every factory. Each row shows the factory, the item, the station, the agent, the model, when the run started, how long it took, its turns, its cost, its CPU, its peak memory, the size of its box and its status.
+
+- **CPU** is the box's CPU time from prepare to the end of the run, shown as seconds (`42 s`) or minutes (`3.1 min`).
+- **Peak memory** is the most memory the box used at once, for example `1.2 GB`.
+- **Box** is the box's size: Small, Medium or Large.
+
+A column shows — when the run is still going, or when the box couldn't measure the value. CPU, Peak memory and Box show from 1440 px wide; the ⓘ beside CPU repeats these meanings.
 
 Narrow the list with the search box and the filters. The CLI does the same:
 
@@ -102,6 +108,10 @@ goal runs --since 2026-10-26T00:00:00Z --limit 20
 Runs no longer has a Send to Jonah button: Jonah reads the line's evidence on its own. To keep an item as a test, use the Teardown tab of the item ([Act on an item](../act-on-an-item/#keep-an-item-as-a-test)).
 
 `--status` takes `running`, `succeeded`, `failed` or `cancelled`. A long list prints a `--cursor` for the next page.
+
+## The Floor's Done station and weekly throughput
+
+On the Floor, the line's Done station shows today's and this week's finished items. It says "merged today" on a line with repositories and "done today" on one without. Throughput by week uses the same words ("Items merged a day" or "Items done a day"), and its first bar is the factory's first week: weeks that ended before the factory was made are left out.
 
 ## Line health
 

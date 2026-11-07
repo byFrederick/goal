@@ -6884,7 +6884,24 @@ export interface components {
             definition_version_id: string | null;
             /** @description That version's number ("ran on v9"); null when the run has no version */
             definition_version: number | null;
+            /**
+             * Format: double
+             * @description The CPU time the run's box used, in seconds; null while the run is running, when the box could not read it or for a run from before it was recorded
+             */
+            cpu_seconds: number | null;
+            /**
+             * Format: int64
+             * @description The most memory the run's box used at once; null when cpu_seconds would be
+             */
+            peak_memory_bytes: number | null;
+            /** @description The box size the run ran in; null for a run from before box sizes were recorded */
+            box_size: components["schemas"]["SandboxSize"] | null;
         };
+        /**
+         * @description How much CPU and memory a run's box gets (a factory's runtime.size)
+         * @enum {string}
+         */
+        SandboxSize: "small" | "medium" | "large";
         OrgRunList: {
             runs: components["schemas"]["OrgRun"][];
             /** @description Pass as cursor for the next page; null on the last page */
@@ -7127,6 +7144,7 @@ export interface components {
             rework_share: number | null;
             /** @description One per factory goald runs that the caller sees and that is not archived, by name */
             budgets: components["schemas"]["SpendBudget"][];
+            usage: components["schemas"]["SpendUsage"];
         };
         SpendDay: {
             /** Format: date */
@@ -7147,6 +7165,70 @@ export interface components {
             agent: string;
             /** Format: double */
             usd: number;
+        };
+        /** @description The CPU time and peak memory of the window's runs (a run counts by when it started), over the runs that reported either, for the factories the caller sees. Each row groups the runs of a factory's agent or station in boxes of one size; a group none of whose runs reported a value is left out. Rows are sorted by cpu_seconds_p90, largest first, those without one last. */
+        SpendUsage: {
+            by_agent: components["schemas"]["AgentUsage"][];
+            by_station: components["schemas"]["StationUsage"][];
+        };
+        AgentUsage: {
+            factory_id: string;
+            /** @description The agent's name in its factory */
+            agent: string;
+            /** @description The runs' box size; null for runs from before box sizes were recorded */
+            box_size: components["schemas"]["SandboxSize"] | null;
+            /** @description The runs that reported a CPU time or a peak memory */
+            runs: number;
+            /**
+             * Format: double
+             * @description The median CPU seconds of the runs that reported one, interpolated between the closest runs (percentile_cont); null when none did
+             */
+            cpu_seconds_p50: number | null;
+            /**
+             * Format: double
+             * @description The 90th percentile
+             */
+            cpu_seconds_p90: number | null;
+            /**
+             * Format: int64
+             * @description The median peak memory of the runs that reported one, rounded to a byte; null when none did
+             */
+            peak_memory_bytes_p50: number | null;
+            /**
+             * Format: int64
+             * @description The 90th percentile
+             */
+            peak_memory_bytes_p90: number | null;
+        };
+        /** @description AgentUsage by station */
+        StationUsage: {
+            factory_id: string;
+            /** @description The station's id in its factory */
+            station: string;
+            /** @description The runs' box size; null for runs from before box sizes were recorded */
+            box_size: components["schemas"]["SandboxSize"] | null;
+            /** @description The runs that reported a CPU time or a peak memory */
+            runs: number;
+            /**
+             * Format: double
+             * @description As AgentUsage's
+             */
+            cpu_seconds_p50: number | null;
+            /**
+             * Format: double
+             * @description As AgentUsage's
+             */
+            cpu_seconds_p90: number | null;
+            /**
+             * Format: int64
+             * @description As AgentUsage's
+             */
+            peak_memory_bytes_p50: number | null;
+            /**
+             * Format: int64
+             * @description As AgentUsage's
+             */
+            peak_memory_bytes_p90: number | null;
         };
         ModelSpend: {
             model: string;

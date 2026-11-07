@@ -3,6 +3,7 @@
 // which creates the factory from the template with POST /factories. The purpose then goes into the new draft;
 // only then does Continue reach step 3 (Code, ADR 0041 decision 9) with ?factory=<id>&template=<name>. The template list, the create call and the draft are the wizard's
 // (factory-editor/start and draft): nothing here is a second copy of them.
+
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
@@ -11,6 +12,7 @@ import { createFactory } from '../../api/definitions';
 import { factoriesQuery, keys, templateQuery } from '../../api/queries';
 import type { Factory, OrgSummary, TemplateSummary } from '../../api/types';
 import { modelOf } from '../../shared/definition/model';
+import { factoryTitle } from '../../shared/factory';
 import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
@@ -20,9 +22,9 @@ import { RadioCards } from '../../ui/radio-cards';
 import { setBasics } from '../factory-editor/draft/ops';
 import { DraftSessionProvider, useDraft, useDraftSession } from '../factory-editor/draft/use-draft';
 import { stationLabel } from '../factory-editor/line/labels';
-import { nameProblem, newFactoryRequest, suggestedName } from '../factory-editor/start/start-choice';
+import { nameFromTitle, nameProblem, newFactoryRequest, suggestedTitle } from '../factory-editor/start/start-choice';
 import { useTemplates } from '../factory-editor/start/template-picker';
-import { type OnboardingSearch, repoOf } from './code-search';
+import type { OnboardingSearch } from './code-search';
 import {
   codeCard,
   FactoryCard,
@@ -67,7 +69,7 @@ export function FactoryStep({ org, search }: { org: OrgSummary; search: Onboardi
   const picked = choice ?? templates[0]?.name ?? blank;
   const pickedTitle = picked === blank ? 'Start empty' : (templates.find((t) => t.name === picked)?.title ?? picked);
   const organization = organizationCard(org, window.location.host);
-  const code = codeCard(repoOf(search.url), search.secret);
+  const code = codeCard({ url: search.url, secret: search.secret });
 
   if (search.factory) return <ContinueFactory org={org} search={search} />;
   if (created) {
@@ -79,7 +81,9 @@ export function FactoryStep({ org, search }: { org: OrgSummary; search: Onboardi
         preview={previewSlots({
           organization,
           code,
-          factory: <FactoryCard name={created.factory.name} purpose={created.purpose} stations={stationsOf(picked)} />,
+          factory: (
+            <FactoryCard name={factoryTitle(created.factory)} purpose={created.purpose} stations={stationsOf(picked)} />
+          ),
         })}
       />
     );
@@ -134,7 +138,7 @@ function ContinueFactory({ org, search }: { org: OrgSummary; search: OnboardingS
       }
       preview={{
         organization: organizationCard(org, window.location.host),
-        second: codeCard(repoOf(search.url), search.secret),
+        second: codeCard({ url: search.url, secret: search.secret }),
       }}
     >
       <div className="flex flex-col gap-2">
@@ -183,23 +187,26 @@ function CreateFactory({
   const nameRef = useRef<HTMLInputElement>(null);
   const taken = (useQuery(factoriesQuery(org.id)).data ?? []).map((f) => f.name);
 
-  const [typedName, setTypedName] = useState<string>();
+  const [typedTitle, setTypedTitle] = useState<string>();
   const [purpose, setPurpose] = useState('');
   // The name goald refused as taken: the name field says so and takes focus.
   const [takenName, setTakenName] = useState<string | null>(null);
   const [error, setError] = useState<string>();
 
   const kind = picked === blank ? 'blank' : 'template';
-  const name = typedName ?? suggestedName(kind, { template: kind === 'template' ? picked : undefined }, taken);
-  const trimmed = name.trim();
+  const title = typedTitle ?? suggestedTitle(kind, pickedTitle);
+  const trimmed = title.trim();
+  const name = nameFromTitle(trimmed, taken);
   const nameError =
     takenName !== null && takenName === trimmed
       ? `${org.name} already has a factory named ${trimmed}. Choose another name.`
-      : trimmed !== '' && typedName !== undefined
-        ? (nameProblem(trimmed) ?? undefined)
+      : trimmed !== '' && typedTitle !== undefined
+        ? nameProblem(name)
+          ? 'Use a title with at least 3 letters or digits.'
+          : undefined
         : undefined;
 
-  const request = newFactoryRequest({ kind, name, template: kind === 'template' ? picked : undefined });
+  const request = newFactoryRequest({ kind, name, title: trimmed, template: kind === 'template' ? picked : undefined });
   const ready = request !== null && !nameError && !templatesLoading && !templatesError;
 
   const create = useMutation({
@@ -313,16 +320,13 @@ function CreateFactory({
           <div className="flex items-center gap-3">
             <Input
               ref={nameRef}
-              value={name}
+              value={title}
               onChange={(e) => {
                 setTakenName(null);
-                setTypedName(e.target.value);
+                setTypedTitle(e.target.value);
               }}
               autoComplete="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              translate="no"
-              className="min-w-0 flex-1 font-mono md:text-sm"
+              className="min-w-0 flex-1"
             />
             <FactoryInitial name={trimmed} className="size-11 text-heading" />
           </div>
