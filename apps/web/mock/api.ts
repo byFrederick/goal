@@ -1408,10 +1408,7 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       stats: state.stationStats[f.name] ?? {},
       agents: Object.fromEntries(Object.entries(state.stations[f.name] ?? {}).map(([id, c]) => [id, c.agents])),
       slots: Object.fromEntries(
-        Object.entries(state.stations[f.name] ?? {}).map(([id, c]) => [
-          id,
-          c.wip_limit ?? Math.max(c.agents.length, 1),
-        ]),
+        Object.entries(state.stations[f.name] ?? {}).map(([id, c]) => [id, c.copies ?? Math.max(c.agents.length, 1)]),
       ),
       waiting: Object.fromEntries(
         f.stations.map((s) => [
