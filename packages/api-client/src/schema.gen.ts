@@ -1901,7 +1901,7 @@ export interface paths {
         };
         /**
          * Why the p85 lead time is over its target, over a range of UTC days
-         * @description The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
+         * @description The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, ci: held at a station waiting for CI on the item's commits, which waiting does not count, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
          */
         get: operations["getLeadTimeBridge"];
         put?: never;
@@ -6908,8 +6908,11 @@ export interface components {
             } | null;
         };
         BridgeStep: {
-            /** @enum {string} */
-            component: "waiting" | "rework" | "waiting_on_you" | "blocked" | "working" | "other";
+            /**
+             * @description The kind of time. waiting is time queued or ready at the station; ci is time held at the station waiting for CI on the item's commits, and is not counted in waiting.
+             * @enum {string}
+             */
+            component: "waiting" | "ci" | "rework" | "waiting_on_you" | "blocked" | "working" | "other";
             /** @description Where the time went; for rework, the station that sent items back; null for waiting_on_you and other */
             station: string | null;
             /** Format: double */

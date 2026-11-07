@@ -413,7 +413,7 @@ export function constraintOf(i: ConstraintInput): ConstraintReport {
   };
 }
 
-const kinds = ['waiting', 'rework', 'waiting_on_you', 'blocked', 'working', 'other'] as const;
+const kinds = ['waiting', 'ci', 'rework', 'waiting_on_you', 'blocked', 'working', 'other'] as const;
 
 /** Splits a component key into the bridge step's component and station. */
 function stepOf(key: string): Pick<BridgeStep, 'component' | 'station'> {

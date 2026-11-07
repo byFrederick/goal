@@ -216,6 +216,7 @@ func (e BoardLineStatus) Valid() bool {
 // Defines values for BridgeStepComponent.
 const (
 	BridgeStepComponentBlocked      BridgeStepComponent = "blocked"
+	BridgeStepComponentCi           BridgeStepComponent = "ci"
 	BridgeStepComponentOther        BridgeStepComponent = "other"
 	BridgeStepComponentRework       BridgeStepComponent = "rework"
 	BridgeStepComponentWaiting      BridgeStepComponent = "waiting"
@@ -227,6 +228,8 @@ const (
 func (e BridgeStepComponent) Valid() bool {
 	switch e {
 	case BridgeStepComponentBlocked:
+		return true
+	case BridgeStepComponentCi:
 		return true
 	case BridgeStepComponentOther:
 		return true
@@ -3286,6 +3289,7 @@ type BoardStation struct {
 
 // BridgeStep defines model for BridgeStep.
 type BridgeStep struct {
+	// Component The kind of time. waiting is time queued or ready at the station; ci is time held at the station waiting for CI on the item's commits, and is not counted in waiting.
 	Component BridgeStepComponent `json:"component"`
 	Hours     float64             `json:"hours"`
 
@@ -3299,7 +3303,7 @@ type BridgeStep struct {
 	Station *string `json:"station"`
 }
 
-// BridgeStepComponent defines model for BridgeStep.Component.
+// BridgeStepComponent The kind of time. waiting is time queued or ready at the station; ci is time held at the station waiting for CI on the item's commits, and is not counted in waiting.
 type BridgeStepComponent string
 
 // BuilderCapabilities What this install enforces; the editor shows the controls for what it does not read-only
@@ -11236,7 +11240,7 @@ type ClientInterface interface {
 
 	// GetLeadTimeBridge Why the p85 lead time is over its target, over a range of UTC days
 	//
-	// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
+	// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, ci: held at a station waiting for CI on the item's commits, which waiting does not count, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
 	//
 	// Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/lead-time (the `GetLeadTimeBridge` operationId).
 	GetLeadTimeBridge(ctx context.Context, org OrgRef, factory FactoryRef, params *GetLeadTimeBridgeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -14627,7 +14631,7 @@ func (c *Client) GetMetrics(ctx context.Context, org OrgRef, factory FactoryRef,
 
 // GetLeadTimeBridge Why the p85 lead time is over its target, over a range of UTC days
 //
-// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
+// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, ci: held at a station waiting for CI on the item's commits, which waiting does not count, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
 //
 // Corresponds with GET /v1/orgs/{org}/factories/{factory}/metrics/lead-time (the `GetLeadTimeBridge` operationId).
 func (c *Client) GetLeadTimeBridge(ctx context.Context, org OrgRef, factory FactoryRef, params *GetLeadTimeBridgeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -29451,7 +29455,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetLeadTimeBridgeWithResponse Why the p85 lead time is over its target, over a range of UTC days
 	//
-	// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
+	// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, ci: held at a station waiting for CI on the item's commits, which waiting does not count, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -42607,7 +42611,7 @@ func (c *ClientWithResponses) GetMetricsWithResponse(ctx context.Context, org Or
 
 // GetLeadTimeBridgeWithResponse Why the p85 lead time is over its target, over a range of UTC days
 //
-// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
+// The items done in the range (as for getMetrics) split into slow (over the definition's lead-time target) and fast; each kind of time an item spends (waiting at a station, ci: held at a station waiting for CI on the item's commits, which waiting does not count, rework sent back by a station, waiting on a person, blocked, working) gets the share of the gap between the actual p85 and the target that its excess over the fast items explains. Steps under 3% of the gap are merged into other; the steps sum to the gap. 400 for a bad range or a type the factory does not declare.
 //
 // Returns a wrapper object for the known response body format(s).
 //

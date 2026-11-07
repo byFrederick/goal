@@ -145,6 +145,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Transition_TakeLeaseRemovesAnyLease", testTakeLease},
 		{"Transition_TakeLeaseRecordsTheAskedOutcomes", testTakeLeaseAsked},
 		{"ItemTimes_LeadTimeAndComponentsOfItemsDone", testItemTimes},
+		{"ItemTimes_CIWaitsAsTheirOwnComponent", testItemTimesCIWaits},
 		{"Andon_OneOpenPullPerFactoryClearedWithANote", testAndonPullAndClear},
 		{"Andon_PullsAreHistoryNewestFirst", testAndonHistory},
 		{"Andon_OnlyTheOrgs", testAndonOnlyTheOrgs},
