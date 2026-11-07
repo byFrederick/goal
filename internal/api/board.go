@@ -3,6 +3,7 @@ package api
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -419,7 +420,7 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 
 	ref := func(n int64) string { return domain.ItemRef{Factory: f.Metadata.Name, Number: n}.String() }
 
-	waiting, err := s.waiting(ctx, l.FactoryID, items, ref)
+	waiting, err := s.waiting(ctx, l.FactoryID, l, items, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -566,8 +567,9 @@ func ageSeconds(it domain.Item, now time.Time) int64 {
 // waiting reads, in one call, the open needs of the waiting ones of items of factory f and
 // derives what holds each of them, by item, with their needs written by ref; no entry for an
 // item that waits on nothing. A part held by a turn edge waits on its root's integration branch,
-// read once per root; every other item waits on the default branch.
-func (s *server) waiting(ctx context.Context, f domain.FactoryID, items []domain.Item, ref func(number int64) string) (map[domain.ItemID]*gen.ItemWaiting, error) {
+// read once per root; every other item waits on the default branch. A waiting item with no open
+// need at a station of l that waits for CI has its CI waits there read, one call per item.
+func (s *server) waiting(ctx context.Context, f domain.FactoryID, l domain.Line, items []domain.Item, ref func(number int64) string) (map[domain.ItemID]*gen.ItemWaiting, error) {
 	ids := make([]domain.ItemID, 0, len(items))
 	for _, it := range items {
 		if it.State.Waiting() {
@@ -589,12 +591,36 @@ func (s *server) waiting(ctx context.Context, f domain.FactoryID, items []domain
 			return nil, err
 		}
 
-		if w, ok := domain.WaitingFor(it, needs[it.ID], target); ok {
+		ci, err := s.ciWaits(ctx, l, it, needs[it.ID])
+		if err != nil {
+			return nil, err
+		}
+
+		if w, ok := domain.WaitingFor(it, needs[it.ID], target, ci); ok {
 			out[it.ID] = waitingOf(w, ref)
 		}
 	}
 
 	return out, nil
+}
+
+// ciWaits are its CI waits at its station, open and ended, when it waits with no open need at a
+// station of l that waits for CI; none otherwise, since a need wins over a CI wait.
+func (s *server) ciWaits(ctx context.Context, l domain.Line, it domain.Item, needs []domain.OpenNeed) ([]domain.CIWaitRecord, error) {
+	if !it.State.Waiting() || len(needs) > 0 {
+		return nil, nil
+	}
+
+	if st, ok := l.Station(it.Station); !ok || !st.WaitsForCI() {
+		return nil, nil
+	}
+
+	waits, err := s.items.CIWaits(ctx, it.ID, it.Station)
+	if err != nil {
+		return nil, fmt.Errorf("item %s: ci waits at %s: %w", it.ID, it.Station, err)
+	}
+
+	return waits, nil
 }
 
 // turnTarget is the branch whose turn it waits for: for a part with a turn need, its root's
@@ -629,9 +655,70 @@ func waitingOf(w domain.Waiting, ref func(number int64) string) *gen.ItemWaiting
 		out.Target = &w.Target
 	}
 
+	out.Ci = ciOf(w)
+
 	for _, n := range w.Items {
 		out.Items = append(out.Items, ref(n.Number))
 		out.Needs = append(out.Needs, gen.ItemWaitingNeed{Ref: ref(n.Number), Title: n.Title, Paths: append([]string{}, n.Paths...)})
+	}
+
+	return out
+}
+
+// ciOf is the ci field of a waiting of kind ci: each open wait's commit and the checks its poll
+// last read, counted together, and the failure that sent the item back; nil for other kinds.
+func ciOf(w domain.Waiting) *gen.ItemWaitingCI {
+	if w.Kind != domain.WaitingCI {
+		return nil
+	}
+
+	out := &gen.ItemWaitingCI{Commits: make([]gen.CICommit, 0, len(w.CI)), Checks: []gen.CICheck{}}
+
+	for _, cw := range w.CI {
+		out.Commits = append(out.Commits, gen.CICommit{Repo: cw.Repo, Sha: cw.SHA, Url: optional(cw.PRURL)})
+
+		checks := pollChecks(cw)
+		finished, total := checks.Counts()
+		out.Finished += finished
+		out.Total += total
+
+		for _, ch := range checks.Checks {
+			out.Checks = append(out.Checks, ciCheckOf(cw.Repo, ch))
+		}
+	}
+
+	if f := w.CIFailure; f != nil {
+		failure := &gen.CIFailure{Repo: f.Repo, Sha: f.SHA, Url: optional(f.PRURL), Checks: []gen.CICheck{}}
+		for _, ch := range pollChecks(*f).Failed() {
+			failure.Checks = append(failure.Checks, ciCheckOf(f.Repo, ch))
+		}
+
+		out.Failure = failure
+	}
+
+	return out
+}
+
+// pollChecks are the checks w's poll last read; none before its first read, or when they do not
+// decode, as the run brief's CI section reads them.
+func pollChecks(w domain.CIWaitRecord) ports.CommitChecks {
+	var checks ports.CommitChecks
+	if len(w.Poll.Checks) == 0 || json.Unmarshal(w.Poll.Checks, &checks) != nil {
+		return ports.CommitChecks{}
+	}
+
+	return checks
+}
+
+// ciCheckOf is ch, a check on a commit of repo, as the API shows it.
+func ciCheckOf(repo string, ch ports.Check) gen.CICheck {
+	out := gen.CICheck{
+		Repo: repo, Name: ch.Name, State: gen.CICheckState(ch.State), Url: optional(ch.URL),
+		FailedJobs: append([]string{}, ch.FailedJobs...),
+	}
+	if ch.Result != "" {
+		r := gen.CICheckResult(ch.Result)
+		out.Result = &r
 	}
 
 	return out
