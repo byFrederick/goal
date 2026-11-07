@@ -197,7 +197,9 @@ function CreateFactory({
     takenName !== null && takenName === trimmed
       ? `${org.name} already has a factory named ${trimmed}. Choose another name.`
       : trimmed !== '' && typedTitle !== undefined
-        ? (nameProblem(name) ? 'Use a title with at least 3 letters or digits.' : undefined)
+        ? nameProblem(name)
+          ? 'Use a title with at least 3 letters or digits.'
+          : undefined
         : undefined;
 
   const request = newFactoryRequest({ kind, name, title: trimmed, template: kind === 'template' ? picked : undefined });
