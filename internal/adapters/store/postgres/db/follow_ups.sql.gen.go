@@ -109,7 +109,7 @@ func (q *Queries) ClaimNote(ctx context.Context) (ClaimNoteRow, error) {
 }
 
 const collectingTriageItem = `-- name: CollectingTriageItem :one
-SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage, w.branch FROM work_items w
+SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage, w.branch FROM work_items w
 WHERE w.factory_id = $1 AND w.triage AND NOT w.untrusted AND w.state NOT IN ('done', 'cancelled')
   AND NOT EXISTS (SELECT 1 FROM agent_runs r WHERE r.item_id = w.id)
 ORDER BY w.created_at
@@ -148,7 +148,6 @@ func (q *Queries) CollectingTriageItem(ctx context.Context, factoryID uuid.UUID)
 		&i.Paths,
 		&i.BaseCommit,
 		&i.Trigger,
-		&i.Source,
 		&i.IntegrationBranch,
 		&i.IntegrationLandAt,
 		&i.Origin,
@@ -584,7 +583,7 @@ func (q *Queries) LockItemFollowUp(ctx context.Context, arg LockItemFollowUpPara
 }
 
 const lockNoteTarget = `-- name: LockNoteTarget :one
-SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items WHERE factory_id = $1 AND number = $2 FOR NO KEY UPDATE
+SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items WHERE factory_id = $1 AND number = $2 FOR NO KEY UPDATE
 `
 
 type LockNoteTargetParams struct {
@@ -622,7 +621,6 @@ func (q *Queries) LockNoteTarget(ctx context.Context, arg LockNoteTargetParams) 
 		&i.Paths,
 		&i.BaseCommit,
 		&i.Trigger,
-		&i.Source,
 		&i.IntegrationBranch,
 		&i.IntegrationLandAt,
 		&i.Origin,
@@ -648,7 +646,7 @@ func (q *Queries) MarkTriageItem(ctx context.Context, id uuid.UUID) error {
 }
 
 const openItemFiledFrom = `-- name: OpenItemFiledFrom :one
-SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage, w.branch FROM follow_ups f
+SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage, w.branch FROM follow_ups f
 JOIN work_items w ON w.id = f.filed_item_id
 WHERE f.item_id = $1 AND f.state = 'filed' AND NOT w.triage
   AND w.state NOT IN ('done', 'cancelled')
@@ -693,7 +691,6 @@ func (q *Queries) OpenItemFiledFrom(ctx context.Context, arg OpenItemFiledFromPa
 		&i.Paths,
 		&i.BaseCommit,
 		&i.Trigger,
-		&i.Source,
 		&i.IntegrationBranch,
 		&i.IntegrationLandAt,
 		&i.Origin,
@@ -712,7 +709,7 @@ func (q *Queries) OpenItemFiledFrom(ctx context.Context, arg OpenItemFiledFromPa
 const pauseUntrustedTriageItem = `-- name: PauseUntrustedTriageItem :one
 UPDATE work_items SET state = 'blocked', updated_at = $1
 WHERE id = $2
-RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch
+RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch
 `
 
 type PauseUntrustedTriageItemParams struct {
@@ -751,7 +748,6 @@ func (q *Queries) PauseUntrustedTriageItem(ctx context.Context, arg PauseUntrust
 		&i.Paths,
 		&i.BaseCommit,
 		&i.Trigger,
-		&i.Source,
 		&i.IntegrationBranch,
 		&i.IntegrationLandAt,
 		&i.Origin,
@@ -771,7 +767,7 @@ const rewriteTriageItem = `-- name: RewriteTriageItem :one
 UPDATE work_items SET title = $1, body = $2, priority = $3::bigint,
   generation = $4::int, updated_at = $5
 WHERE id = $6
-RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, source, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch
+RETURNING id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch
 `
 
 type RewriteTriageItemParams struct {
@@ -819,7 +815,6 @@ func (q *Queries) RewriteTriageItem(ctx context.Context, arg RewriteTriageItemPa
 		&i.Paths,
 		&i.BaseCommit,
 		&i.Trigger,
-		&i.Source,
 		&i.IntegrationBranch,
 		&i.IntegrationLandAt,
 		&i.Origin,
@@ -941,7 +936,7 @@ func (q *Queries) TriageFollowUps(ctx context.Context, itemID *uuid.UUID) ([]Tri
 }
 
 const triageQueueItem = `-- name: TriageQueueItem :one
-SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.source, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage, w.branch,
+SELECT w.id, w.factory_id, w.number, w.parent_id, w.type, w.lane, w.title, w.body, w.station, w.state, w.class_of_service, w.priority, w.size, w.rework_count, w.cost_usd, w.outputs, w.created_at, w.updated_at, w.done_at, w.org_id, w.part_key, w.part_paths, w.paths, w.base_commit, w.trigger, w.integration_branch, w.integration_land_at, w.origin, w.via, w.created_by, w.generation, w.untrusted, w.start_at, w.started_at, w.triage, w.branch,
   (SELECT count(*) FROM follow_ups f WHERE f.filed_item_id = w.id AND f.state = 'filed' AND f.target = 'triage')::bigint AS follow_ups
 FROM work_items w
 WHERE w.factory_id = $1 AND w.triage AND NOT w.untrusted AND w.state NOT IN ('done', 'cancelled')
@@ -986,7 +981,6 @@ func (q *Queries) TriageQueueItem(ctx context.Context, factoryID uuid.UUID) (Tri
 		&i.WorkItem.Paths,
 		&i.WorkItem.BaseCommit,
 		&i.WorkItem.Trigger,
-		&i.WorkItem.Source,
 		&i.WorkItem.IntegrationBranch,
 		&i.WorkItem.IntegrationLandAt,
 		&i.WorkItem.Origin,

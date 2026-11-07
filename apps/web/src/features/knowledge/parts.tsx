@@ -9,6 +9,7 @@ import { factoriesQuery, keys } from '../../api/queries';
 import type { KnowledgeSource, KnowledgeSourceKind } from '../../api/types';
 import { FactoryBadge } from '../../app/factory-badge';
 import type { Tone } from '../../shared/connections';
+import { factoryTitle } from '../../shared/factory';
 import { sourceKinds } from '../../shared/knowledge';
 import { factoryMark } from '../../shared/marks';
 import { useOrg } from '../../shared/org';
@@ -76,7 +77,7 @@ export function UsedBy({ source }: { source: KnowledgeSource }) {
       {named.map((f) => (
         <span key={f.id} className="inline-flex items-center gap-2">
           <FactoryBadge mark={factoryMark(f, siblings)} />
-          <span translate="no">{f.name}</span>
+          <span translate="no">{factoryTitle(f)}</span>
         </span>
       ))}
     </span>

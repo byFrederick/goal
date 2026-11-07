@@ -149,7 +149,7 @@ func newDefGoald(t *testing.T) *defGoald {
 		Access: keys, OrgRetention: time.Hour, Authorizer: api.AllowAll{}, Auth: api.AuthConfig{Mode: api.AuthNone},
 		Platform: porttest.NewPlatform(porttest.NewIdentity(clock.Now)), Feed: api.NewFeed(porttest.NewItemNotices(), defNotices, nil),
 		Builder: builder.New(objects, clock, builder.Config{}), StandingRules: porttest.NewStandingRules(tenancy),
-		Credentials: creds, OrgSecrets: secrets, EnvironmentTests: envTests, ToolLister: tools, RepositoryTests: repoTests, Intake: porttest.NewIntake(porttest.NewMasterKeys().Key("k1"), store), DraftRequests: porttest.NewDraftRequests(tenancy, clock.Now),
+		Credentials: creds, OrgSecrets: secrets, EnvironmentTests: envTests, ToolLister: tools, RepositoryTests: repoTests, Intake: porttest.NewIntake(store), DraftRequests: porttest.NewDraftRequests(tenancy, clock.Now),
 		ConnectionTransport: transport, CodeHosts: map[string]ports.CodeHost{"github": codehost}, Knowledge: kb, KnowledgeUploads: uploads,
 		KnowledgeObjects: kbObjects, KnowledgeCheck: knowledge.NewIngestor(knowledge.IngestorConfig{Knowledge: kb, Secrets: secrets, Uploads: uploads, Objects: kbObjects, Clock: clock}),
 		UploadMaxBytes: domain.DefaultMaxUpload, Clock: clock, NotificationPreferences: porttest.NewNotificationPreferences(),

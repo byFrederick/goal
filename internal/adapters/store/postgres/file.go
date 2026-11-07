@@ -68,9 +68,8 @@ func fileItem(ctx context.Context, q *db.Queries, f filing) (db.WorkItem, error)
 		ID: id, FactoryID: f.factory, Number: number, ParentID: f.parent, PartKey: f.partKey, PartPaths: paths,
 		Type: n.Type, Lane: optional(n.Lane), Title: n.Title, Body: n.Body, Station: n.Station, State: string(n.State),
 		ClassOfService: string(n.Class), Priority: int64(n.Priority), BaseCommit: f.baseCommit, CreatedAt: n.CreatedAt,
-		Source: optional(string(n.Source)), Trigger: optional(n.Trigger),
-		Origin: string(cmp.Or(n.Origin, domain.OriginPerson)), Via: optional(string(n.Via)), CreatedBy: createdBy,
-		Generation: int32(min(max(n.Generation, 0), maxInt32)), Untrusted: n.Untrusted,
+		Trigger: optional(n.Trigger), Origin: string(cmp.Or(n.Origin, domain.OriginPerson)), Via: optional(string(n.Via)),
+		CreatedBy: createdBy, Generation: int32(min(max(n.Generation, 0), maxInt32)), Untrusted: n.Untrusted,
 		StartAt: optionalTime(n.StartAt), StartedAt: optionalTime(n.StartedAt),
 		Branch: domain.ItemBranch(n.FactoryName, number, n.Title),
 	})

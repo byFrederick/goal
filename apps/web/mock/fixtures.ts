@@ -155,6 +155,14 @@ export interface MockSlots {
   factories: Record<string, number | null>;
 }
 
+/** A run no item owns, by factory name; it counts in the spend figures only. */
+export interface MockLooseRun {
+  factory: string;
+  agent: string;
+  started_at: string;
+  cost_usd: number;
+}
+
 export interface MockState {
   /** Organizations by name; factory_count is computed from factories. */
   orgs: Org[];
@@ -194,6 +202,8 @@ export interface MockState {
   touchReasons: Record<number, MockReason>;
   /** Every agent run, in start order; goald's agent_runs. */
   runs: Run[];
+  /** Runs without an item (Jonah's, for one): they cost, but are no Run of the contract, whose item_id is required. */
+  looseRuns: MockLooseRun[];
   /** Each factory's versions and draft, by factory id. */
   definitions: Record<string, MockDefinition>;
   /** The template catalog (catalog/templates/). */
@@ -477,7 +487,7 @@ const goalFactory: Factory = {
   org_id: acmeOrg,
   can: factoryCan,
   name: 'goal',
-  title: 'Software',
+  title: 'Goal',
   description: 'Builds the Goal platform from this repository: engine, UI, infrastructure and its own factories.',
   work_types: ['feature', 'fix', 'refactor', 'infra', 'design'],
   stations: [
@@ -2015,6 +2025,10 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
           ended_at: status === 'running' ? null : new Date(Math.round(at)).toISOString(),
           definition_version_id: version?.id ?? null,
           definition_version: version?.number ?? null,
+          // A finished run has the box's figures; a run still going or one that failed keeps nulls.
+          cpu_seconds: status === 'succeeded' ? step.turns * 6.5 : null,
+          peak_memory_bytes: status === 'succeeded' ? (256 + step.turns * 24) * 1024 ** 2 : null,
+          box_size: status === 'succeeded' ? (step.turns > 15 ? 'medium' : 'small') : null,
         });
         if (status !== 'running') {
           push('run_finished', agent, { status, error: step.error ?? '', cost_usd: step.cost, turns: step.turns }, run);
@@ -2139,7 +2153,7 @@ export function seed(now = Date.now()): MockState {
         'approve-spec': { agents: [], wip_limit: null },
         build: {
           agents: ['builder-1', 'builder-2'],
-          wip_limit: 2,
+          wip_limit: 3,
           copies: 2,
           buffer: 2,
           output: 'change',
@@ -2177,7 +2191,7 @@ export function seed(now = Date.now()): MockState {
       software: {
         intake: { agents: [], wip_limit: null },
         spec: { agents: ['architect'], wip_limit: 3 },
-        build: { agents: ['engineer'], wip_limit: 6, copies: 6 },
+        build: { agents: ['engineer'], wip_limit: 8, copies: 6 },
         review: { agents: ['reviewer'], wip_limit: 3 },
         done: { agents: [], wip_limit: null },
       },
@@ -2356,6 +2370,17 @@ export function seed(now = Date.now()): MockState {
     nextEventId: 1,
     touchReasons: {},
     runs: [],
+    // A Jonah run for Software that started today: Spend and Home count it though no item owns it.
+    looseRuns: [
+      {
+        factory: 'software',
+        agent: 'jonah',
+        started_at: new Date(
+          Math.max(now - 60_000, Date.parse(`${new Date(now).toISOString().slice(0, 10)}T00:00:00Z`)),
+        ).toISOString(),
+        cost_usd: 4.25,
+      },
+    ],
     definitions: seedDefinitions(),
     templates: seedTemplates(),
     skills: seedSkills(),

@@ -48,7 +48,8 @@ describe('the spend screen, ready', () => {
     expect(screen.getAllByRole('radio', { name: 'This month' })).toHaveLength(1);
     expect(screen.getAllByRole('button', { name: 'Export CSV' })).toHaveLength(1);
     const strip = await screen.findByRole('region', { name: 'Spend this week' });
-    expect(within(strip).getByText('Spend this week')).toBeTruthy();
+    expect(within(strip).getByText('Since Monday')).toBeTruthy();
+    expect(within(strip).queryByText(/All factory budgets|^of \$/)).toBeNull();
     expect(within(strip).getByText('$1,940')).toBeTruthy();
     expect(within(strip).getByText(/September \$2,310/)).toBeTruthy();
     expect(within(strip).getByText('$3.40')).toBeTruthy();
@@ -98,7 +99,7 @@ describe('the spend screen, ready', () => {
     expect(todayLabel.className).not.toContain('inset-x-0');
     expect(slots[0]?.querySelector('.max-w-12.opacity-45')).not.toBeNull();
     expect(container.querySelectorAll('.max-w-12')).toHaveLength(1);
-    expect(screen.getAllByRole('row')).toHaveLength(2);
+    expect(within(screen.getByRole('table', { name: /Spend by day/ })).getAllByRole('row')).toHaveLength(2);
   });
 
   it('draws the days of the month and 90 days', async () => {
@@ -115,7 +116,7 @@ describe('the spend screen, ready', () => {
   it('draws the charts in ink on a hover track and the days in factory colours, with no pattern', async () => {
     const { container } = renderSpend();
 
-    await screen.findByText('Spend this week');
+    await screen.findByText('Since Monday');
     const rows = screen.getAllByRole('meter').filter((m) => /: \$/.test(m.getAttribute('aria-label') ?? ''));
     expect(rows.length).toBeGreaterThan(0);
     for (const m of rows) {
@@ -137,7 +138,7 @@ describe('the spend screen, ready', () => {
     expect(within(section).getByText('Software')).toBeTruthy();
     expect(within(section).getByText('Stopped')).toBeTruthy();
     expect(within(section).getByText('Andon pulled, no runs today')).toBeTruthy();
-    expect(within(section).getByText('64% today')).toBeTruthy();
+    expect(within(section).getByText('84% today')).toBeTruthy();
     expect(within(section).getByText('At 80%')).toBeTruthy();
     expect(within(section).getByText('At 100%')).toBeTruthy();
     expect(within(section).getByText('Per item')).toBeTruthy();
@@ -182,7 +183,7 @@ describe('the spend screen, ready', () => {
       new ApiError({ title: 'Export too large', status: 413, detail: 'More than 100000 rows; pick a shorter window.' }),
     );
     renderSpend();
-    await screen.findByText('Spend this week');
+    await screen.findByText('Since Monday');
 
     fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
 
@@ -285,5 +286,79 @@ describe('the other states', () => {
     const figures = screen.getByRole('region', { name: 'Spend this week' });
     expect(within(figures).queryByText('$0')).toBeNull();
     expect(within(figures).getAllByText('—').length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('Factory titles', () => {
+  it('names factories by their title in the by-day legend and table, and By agent', async () => {
+    renderSpend();
+    await screen.findByRole('heading', { name: 'Spend by day' });
+    const days = (screen.getByRole('heading', { name: 'Spend by day' }).closest('section') as HTMLElement).textContent;
+    expect(days).toMatch(/SRE \$/);
+    expect(days).toMatch(/Software \$/);
+    expect(days).not.toMatch(/\b(sre|software) \$/);
+    const agents = (screen.getByRole('heading', { name: 'By agent' }).closest('section') as HTMLElement).textContent;
+    expect(agents).toMatch(/Software/);
+    expect(agents).not.toMatch(/\bsoftware\b/);
+  });
+});
+
+describe('Box usage', () => {
+  const section = async () => within(await screen.findByRole('region', { name: 'Box usage' }));
+
+  it('shows the agents with their box, runs, CPU and memory, and the factory when there are several', async () => {
+    renderSpend();
+    const box = await section();
+    const row = box.getByText('backend-engineer').closest('tr') as HTMLElement;
+    expect(within(row).getByText('Software')).toBeTruthy();
+    expect(within(row).queryByText('software')).toBeNull();
+    for (const text of ['Large', '42', '3.1 min', '6.9 min', '1.2 GB', '2.4 GB']) {
+      expect(within(row).getByText(text)).toBeTruthy();
+    }
+    expect(box.getByRole('columnheader', { name: 'CPU median' })).toBeTruthy();
+    expect(box.getByRole('columnheader', { name: 'Memory P90' })).toBeTruthy();
+    expect(within(box.getByText('reviewer').closest('tr') as HTMLElement).getByText('42 s')).toBeTruthy();
+    const unknown = box.getByText('infra-engineer').closest('tr') as HTMLElement;
+    expect(within(unknown).getByText('Unknown')).toBeTruthy();
+    expect(within(unknown).getAllByText('—').length).toBeGreaterThan(0);
+  });
+
+  it('switches to the stations', async () => {
+    renderSpend();
+    const box = await section();
+    fireEvent.click(box.getByRole('radio', { name: 'Stations' }));
+    expect(box.getByText('build')).toBeTruthy();
+    expect(box.getByText('triage')).toBeTruthy();
+    expect(box.queryByText('backend-engineer')).toBeNull();
+    expect(box.getByRole('columnheader', { name: 'Station' })).toBeTruthy();
+  });
+
+  it('explains median, P90, the CPU span, memory and the left-out runs in the ⓘ, with no paragraph', async () => {
+    renderSpend();
+    const box = await section();
+    const tip = box.getByRole('button', { name: 'About Box usage' });
+    expect(tip.getAttribute('aria-describedby')).toBeTruthy();
+    const text = document.getElementById(tip.getAttribute('aria-describedby') as string)?.textContent ?? '';
+    expect(text).toMatch(/Median/);
+    expect(text).toMatch(/P90/);
+    expect(text).toMatch(/prepare to the run’s end/);
+    expect(text).toMatch(/peak of the box’s own cgroup/);
+    expect(text).toMatch(/machine’s memory in use during the run/);
+    expect(text).toMatch(/couldn’t measure are left out/);
+  });
+
+  it('shows the empty state, no table, when the window has no usage', async () => {
+    answerWith((w) => spendFixture({ window: w, usage: { by_agent: [], by_station: [] } }));
+    renderSpend();
+    const box = await section();
+    expect(box.getByText('No box usage in this window')).toBeTruthy();
+    expect(box.queryByRole('table')).toBeNull();
+  });
+
+  it('shows a placeholder in its slot while the answer waits', async () => {
+    getOrgSpend.mockImplementation(() => new Promise(() => {}));
+    renderSpend();
+    expect(await screen.findByRole('status')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Box usage' })).toBeNull();
   });
 });

@@ -33,7 +33,7 @@ func (s *Store) file(org domain.OrgID, n domain.NewItem, p filedPart) (*domain.I
 		Type: n.Type, Lane: n.Lane, Title: n.Title, Body: n.Body,
 		Station: n.Station, State: n.State, Class: n.Class, Priority: n.Priority,
 		Outputs: map[string]json.RawMessage{}, CreatedAt: n.CreatedAt, UpdatedAt: n.CreatedAt,
-		Source: n.Source, Trigger: n.Trigger, Origin: cmp.Or(n.Origin, domain.OriginPerson), Via: n.Via,
+		Trigger: n.Trigger, Origin: cmp.Or(n.Origin, domain.OriginPerson), Via: n.Via,
 		Generation: n.Generation, Untrusted: n.Untrusted, StartAt: utc(n.StartAt), StartedAt: utc(n.StartedAt),
 	}
 	it.StoredBranch = domain.ItemBranch(n.FactoryName, it.Number, it.Title)

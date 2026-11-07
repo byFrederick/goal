@@ -339,7 +339,7 @@ func withUsedPayload(t domain.Trigger, ev domain.IntakeEvent) domain.IntakeEvent
 func fileFromTrigger(l domain.Line, t domain.Trigger, ev domain.IntakeEvent, it domain.TriggerItem, now time.Time) (domain.NewItem, error) {
 	n, err := domain.File(l, domain.FileRequest{
 		Origin: domain.OriginTrigger, By: domain.EngineActor, Type: it.Type, Lane: it.Lane, Title: it.Title, Body: it.Body,
-		Station: it.Station, State: it.State, Class: it.Class, At: now, Source: itemSource(ev.Source), Trigger: t.Name,
+		Station: it.Station, State: it.State, Class: it.Class, At: now, Trigger: t.Name,
 		Untrusted: ev.Webhook != "" && !t.Create.Trusted, Repositories: it.Repositories,
 	})
 	if err != nil {
@@ -347,18 +347,4 @@ func fileFromTrigger(l domain.Line, t domain.Trigger, ev domain.IntakeEvent, it 
 	}
 
 	return n, nil
-}
-
-// itemSource is where an item a trigger created from an event of source s came from.
-func itemSource(s domain.TriggerSource) domain.ItemSource {
-	switch s {
-	case domain.TriggerSchedule:
-		return domain.ItemFromSchedule
-	case domain.TriggerGitHub:
-		return domain.ItemFromGitHub
-	case domain.TriggerWebhook:
-		return domain.ItemFromWebhook
-	}
-
-	return ""
 }

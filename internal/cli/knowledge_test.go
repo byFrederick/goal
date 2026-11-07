@@ -207,7 +207,7 @@ func TestKnowledge_AddWithASecret(t *testing.T) {
 		"--config", "reader=gitdocs", "--config", "repository=https://github.com/acme/docs"), []string{"added knowledge source runbooks (synced)"})
 
 	src, err := g.kb.Source(g.ctx(t), "runbooks")
-	if err != nil || src.Secret != "docs-token" || src.Connection != "" || src.Config["reader"] != "gitdocs" {
+	if err != nil || src.Secret != "docs-token" || src.Config["reader"] != "gitdocs" {
 		t.Errorf("runbooks = %+v, %v; want it on secret docs-token", src, err)
 	}
 

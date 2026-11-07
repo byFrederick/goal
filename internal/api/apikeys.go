@@ -80,6 +80,11 @@ func (s *server) ListAPIKeys(ctx context.Context, _ gen.ListAPIKeysRequestObject
 		out.Keys = append(out.Keys, s.apiKeyOut(k))
 	}
 
+	s.nameActors(ctx, slices.Concat(
+		filers(out.Keys, func(k *gen.ApiKey) *gen.Actor { return &k.CreatedBy }),
+		filers(out.Keys, func(k *gen.ApiKey) *gen.Actor { return k.RevokedBy }),
+	)...)
+
 	return out, nil
 }
 
@@ -109,8 +114,11 @@ func (s *server) CreateAPIKey(ctx context.Context, req gen.CreateAPIKeyRequestOb
 		return nil, err
 	}
 
+	key := s.apiKeyOut(k)
+	s.nameActors(ctx, &key.CreatedBy, key.RevokedBy)
+
 	return gen.CreateAPIKey201JSONResponse{
-		Body:    gen.CreatedApiKey{Key: s.apiKeyOut(k), Secret: secret},
+		Body:    gen.CreatedApiKey{Key: key, Secret: secret},
 		Headers: gen.CreateAPIKey201ResponseHeaders{CacheControl: "no-store"},
 	}, nil
 }
@@ -264,7 +272,8 @@ func (s *server) RevokeAPIKey(ctx context.Context, req gen.RevokeAPIKeyRequestOb
 	return gen.RevokeAPIKey204Response{}, nil
 }
 
-// apiKeyOut is a key as the contract has it.
+// apiKeyOut is a key as the contract has it, its people not yet named: the response names them
+// with one nameActors call.
 func (s *server) apiKeyOut(k domain.APIKey) gen.ApiKey {
 	out := gen.ApiKey{
 		Id: string(k.ID), Name: k.Name, Hint: k.Hint, Scopes: permissionsOut(k.Scopes), RoleCeiling: gen.FactoryRole(k.Ceiling),

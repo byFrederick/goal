@@ -5,7 +5,12 @@ import { formatAge, formatPercent, humanize } from '../../shared/format';
 import type { LineStation } from '../../ui/line';
 
 /** The stations of a board, from intake to done, with the constraint and the Done count filled in. */
-export function lineStations(board: Board, constraint: string | null, doneThisWeek: number | null): LineStation[] {
+export function lineStations(
+  board: Board,
+  constraint: string | null,
+  doneThisWeek: number | null,
+  merges = false,
+): LineStation[] {
   // The drum is the station the buffer feeds; it only means something under drum-buffer-rope.
   const drum = board.line.release.policy === 'drum-buffer-rope' ? board.line.release.drum : null;
   return board.stations.map((s) => {
@@ -18,7 +23,7 @@ export function lineStations(board: Board, constraint: string | null, doneThisWe
       load: done ? null : loadOf(s),
       constraint: !done && s.id === constraint,
       done,
-      waits: waitsOf(s, drum, doneThisWeek),
+      waits: waitsOf(s, drum, doneThisWeek, merges),
       slots: slots?.slots ?? null,
       slotsLabel: slots?.label,
       share: busyOf(s),
@@ -31,11 +36,11 @@ function loadOf(s: BoardStation): number | null {
   return s.busy_ratio;
 }
 
-/** What waits at the station, in the words the line uses; one line each. */
-export function waitsOf(s: BoardStation, drum: string | null, doneThisWeek: number | null): string[] {
+/** What waits at the station, in the words the line uses; one line each. Done says "merged" only on a line with code. */
+export function waitsOf(s: BoardStation, drum: string | null, doneThisWeek: number | null, merges = false): string[] {
   if (s.kind === 'done') {
     return [
-      s.done_today !== null ? `${s.done_today} merged today` : null,
+      s.done_today !== null ? `${s.done_today} ${merges ? 'merged' : 'done'} today` : null,
       doneThisWeek !== null ? `${doneThisWeek} this week` : null,
     ].filter((line): line is string => line !== null);
   }

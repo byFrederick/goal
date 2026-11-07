@@ -1,12 +1,10 @@
 // Package intaketest is the conformance suite for ports.Intake (ADR 0026). The in-memory fake in
 // porttest and the PostgreSQL adapter both run it, so tests on the fake hold for the database's
-// rules: endpoint names unique per factory, signing secrets sealed under the master key and shown
-// once, signature headers never kept, the 30-day prune, idempotent firings, the counts limits and
+// rules: signature headers never kept, the 30-day prune, idempotent firings, the counts limits and
 // checks read, Intake's tallies, and organizations kept apart.
 package intaketest
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"maps"
@@ -20,9 +18,9 @@ import (
 
 // Harness is one Intake under test.
 type Harness struct {
-	// Intake returns the intake under test, sealing with key; every call shares one store, as
-	// goalds with different keys share one database.
-	Intake func(key ports.MasterKey) ports.Intake
+	// Intake returns the intake under test; every call shares one store, as goalds share one
+	// database.
+	Intake func() ports.Intake
 	// Key returns master keys with ids, the first active; the same id is the same key in every
 	// call. With no ids it has none (ports.ErrNoMasterKey).
 	Key func(ids ...string) ports.MasterKey
@@ -46,13 +44,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		name string
 		test func(f *fixture)
 	}{
-		{"Endpoint_SecretReturnedOnceAndOpened", testSecretOnce},
 		{"Endpoint_ReadWithoutItsSecret", testEndpointReads},
-		{"Endpoint_RotateChangesTheSecret", testRotate},
-		{"Endpoint_DuplicateNameRefused", testDuplicateName},
-		{"Endpoint_RulesRefused", testEndpointRules},
 		{"Endpoint_DeleteRemovesItAndItsDeliveries", testDeleteEndpoint},
-		{"Endpoint_AnotherKeyDoesNotOpen", testOtherKey},
 		{"Delivery_SignatureHeadersNeverKept", testSignatureHeaders},
 		{"Delivery_NewestFirstInPages", testDeliveryPages},
 		{"Delivery_RulesRefused", testDeliveryRules},
@@ -66,8 +59,8 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 		{"Firing_ReadByItsKey", testFiringByKey},
 		{"Firing_FailureStreakCountsSinceTheLastCreated", testFailureStreak},
 		{"ScheduleLock_OneHolderAtATime", testScheduleLock},
-		{"Tally_SourcesAndTriggerStatsOverAWindow", testTallies},
-		{"Tally_LastItemsSources", testItemSources},
+		{"Tally_TriggerStatsOverAWindow", testTallies},
+		{"Tally_NewestItems", testNewestItems},
 		{"Tally_TriggerDaysByUTCDay", testTriggerDays},
 		{"Firing_ListNewestFirstWithItems", testFirings},
 		{"OtherOrg_ReachesNoEndpoint", testIsolation},
@@ -78,7 +71,6 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 
 	tests = append(tests, webhookTests...)
 	tests = append(tests, receiptTests...)
-	tests = append(tests, convertTests...)
 	tests = append(tests, evaluationTests...)
 	tests = append(tests, trimTests...)
 	tests = append(tests, checkTests...)
@@ -89,7 +81,7 @@ func Run(t *testing.T, newHarness func(t *testing.T) Harness) {
 			t.Parallel()
 
 			h := newHarness(t)
-			f := &fixture{Harness: h, t: t, in: h.Intake(h.Key("k1")), secrets: h.Secrets(h.Key("k1")), org: h.NewOrg(t)}
+			f := &fixture{Harness: h, t: t, in: h.Intake(), secrets: h.Secrets(h.Key("k1")), org: h.NewOrg(t)}
 			f.factory = h.NewFactory(t, f.org)
 			tc.test(f)
 		})
@@ -121,15 +113,14 @@ type fixture struct {
 
 func (f *fixture) ctx() context.Context { return domain.WithOrg(f.t.Context(), f.org) }
 
-func (f *fixture) endpoint(name string, kind domain.WebhookKind) domain.WebhookSecret {
+// endpoint creates the organization's webhook name, signed by a new secret of its own and open to
+// the fixture's factory.
+func (f *fixture) endpoint(name string) domain.WebhookEndpoint {
 	f.t.Helper()
 
-	s, err := f.in.CreateEndpoint(f.ctx(), domain.NewWebhookEndpoint{FactoryID: f.factory, Name: name, Kind: kind})
-	if err != nil {
-		f.t.Fatalf("CreateEndpoint %s: %v", name, err)
-	}
+	w := f.webhook(name)
 
-	return s
+	return f.patch(w.ID, domain.WebhookPatch{Open: []domain.WebhookOpening{{FactoryID: f.factory}}})
 }
 
 func (f *fixture) deliver(id domain.WebhookEndpointID, at time.Time) domain.WebhookDelivery {
@@ -157,20 +148,20 @@ func (f *fixture) deliveries(id domain.WebhookEndpointID) []domain.WebhookDelive
 	return got
 }
 
-// item creates an item of the fixture's factory with source and trigger, at at.
-func (f *fixture) item(source domain.ItemSource, trigger string, at time.Time) domain.Item {
+// item creates an item of the fixture's factory with trigger, at at.
+func (f *fixture) item(trigger string, at time.Time) domain.Item {
 	f.t.Helper()
 
 	it, err := f.Store.CreateItem(f.ctx(), domain.NewItem{
 		FactoryID: f.factory, Type: typeFix, Title: "a flaky test", Station: station, State: domain.StateQueued,
-		Class: domain.ClassStandard, CreatedAt: at, Source: source, Trigger: trigger,
+		Class: domain.ClassStandard, CreatedAt: at, Trigger: trigger,
 	})
 	if err != nil {
 		f.t.Fatalf("CreateItem: %v", err)
 	}
 
-	if it.Source != source || it.Trigger != trigger {
-		f.t.Errorf("CreateItem's item has source %q, trigger %q; want %q, %q", it.Source, it.Trigger, source, trigger)
+	if it.Trigger != trigger {
+		f.t.Errorf("CreateItem's item has trigger %q; want %q", it.Trigger, trigger)
 	}
 
 	return it
@@ -208,34 +199,12 @@ func (f *fixture) close(it domain.Item, state domain.ItemState) {
 	}
 }
 
-// A new endpoint's secret is 32 random bytes, returned by CreateEndpoint and opened again by
-// OpenSecret.
-func testSecretOnce(f *fixture) {
-	t := f.t
-	s := f.endpoint(hooks, domain.WebhookGitHub)
-	other := f.endpoint("deploys", domain.WebhookGeneric)
-
-	if len(s.Secret) != domain.WebhookSecretSize || bytes.Equal(s.Secret, other.Secret) {
-		t.Errorf("secrets %x and %x; want two different ones of %d bytes", s.Secret, other.Secret, domain.WebhookSecretSize)
-	}
-
-	e := s.Endpoint
-	if e.ID == "" || e.FactoryID != f.factory || e.Name != hooks || e.Kind != domain.WebhookGitHub || e.CreatedAt.IsZero() || e.RotatedAt != nil {
-		t.Errorf("CreateEndpoint = %+v", e)
-	}
-
-	secret, err := f.in.OpenSecret(f.ctx(), e.ID)
-	if err != nil || !bytes.Equal(secret, s.Secret) {
-		t.Errorf("OpenSecret = %x, %v; want %x", secret, err, s.Secret)
-	}
-}
-
 // An endpoint is read and listed, by name, without its secret, and EndpointOrg finds its
 // organization without one in ctx.
 func testEndpointReads(f *fixture) {
 	t := f.t
-	e := f.endpoint(hooks, domain.WebhookGitHub).Endpoint
-	f.endpoint("deploys", domain.WebhookGeneric)
+	e := f.endpoint(hooks)
+	f.endpoint("deploys")
 
 	got, err := f.in.Endpoint(f.ctx(), e.ID)
 	if err != nil || got.ID != e.ID || got.Name != hooks || !got.CreatedAt.Equal(e.CreatedAt) {
@@ -257,125 +226,30 @@ func testEndpointReads(f *fixture) {
 	}
 }
 
-// Rotating replaces the secret, which OpenSecret then returns, and sets RotatedAt.
-func testRotate(f *fixture) {
-	t := f.t
-	s := f.endpoint(hooks, domain.WebhookGeneric)
-
-	r, err := f.in.RotateSecret(f.ctx(), s.Endpoint.ID)
-	if err != nil {
-		t.Fatalf("RotateSecret: %v", err)
-	}
-
-	if len(r.Secret) != domain.WebhookSecretSize || bytes.Equal(r.Secret, s.Secret) || r.Endpoint.RotatedAt == nil || r.Endpoint.ID != s.Endpoint.ID {
-		t.Errorf("RotateSecret = %+v; want a new secret and RotatedAt", r.Endpoint)
-	}
-
-	if got, err := f.in.OpenSecret(f.ctx(), s.Endpoint.ID); err != nil || !bytes.Equal(got, r.Secret) {
-		t.Errorf("OpenSecret after rotation = %x, %v; want the new %x", got, err, r.Secret)
-	}
-
-	if got, err := f.in.Endpoint(f.ctx(), s.Endpoint.ID); err != nil || got.RotatedAt == nil {
-		t.Errorf("Endpoint after rotation = %+v, %v; want RotatedAt", got, err)
-	}
-
-	if _, err := f.in.RotateSecret(f.ctx(), "00000000-0000-7000-8000-00000000dead"); !errors.Is(err, ports.ErrNotFound) {
-		t.Errorf("RotateSecret of an unknown endpoint = %v; want ErrNotFound", err)
-	}
-}
-
-// A name is unique within its factory, and another factory may use it.
-func testDuplicateName(f *fixture) {
-	t := f.t
-	f.endpoint(hooks, domain.WebhookGeneric)
-
-	_, err := f.in.CreateEndpoint(f.ctx(), domain.NewWebhookEndpoint{FactoryID: f.factory, Name: hooks, Kind: domain.WebhookGitHub})
-	if !errors.Is(err, ports.ErrNameTaken) {
-		t.Errorf("a second %s = %v; want ErrNameTaken", hooks, err)
-	}
-
-	other := f.NewFactory(t, f.org)
-	if _, err := f.in.CreateEndpoint(f.ctx(), domain.NewWebhookEndpoint{FactoryID: other, Name: hooks, Kind: domain.WebhookGitHub}); err != nil {
-		t.Errorf("%s in another factory: %v", hooks, err)
-	}
-}
-
-// An endpoint that is not valid, or of a factory the organization lacks, is refused, and so is
-// any endpoint without a master key.
-func testEndpointRules(f *fixture) {
-	t := f.t
-
-	for _, n := range []domain.NewWebhookEndpoint{
-		{FactoryID: f.factory, Name: "Not A Slug", Kind: domain.WebhookGeneric},
-		{FactoryID: f.factory, Name: hooks, Kind: "slack"},
-	} {
-		if _, err := f.in.CreateEndpoint(f.ctx(), n); !errors.Is(err, domain.ErrInvalid) {
-			t.Errorf("CreateEndpoint %+v = %v; want ErrInvalid", n, err)
-		}
-	}
-
-	otherOrg := f.NewOrg(t)
-	theirs := f.NewFactory(t, otherOrg)
-
-	_, err := f.in.CreateEndpoint(f.ctx(), domain.NewWebhookEndpoint{FactoryID: theirs, Name: hooks, Kind: domain.WebhookGeneric})
-	if !errors.Is(err, ports.ErrNotFound) {
-		t.Errorf("an endpoint on another organization's factory = %v; want ErrNotFound", err)
-	}
-
-	_, err = f.Intake(f.Key()).CreateEndpoint(f.ctx(), domain.NewWebhookEndpoint{FactoryID: f.factory, Name: hooks, Kind: domain.WebhookGeneric})
-	if !errors.Is(err, ports.ErrNoMasterKey) {
-		t.Errorf("CreateEndpoint without a master key = %v; want ErrNoMasterKey", err)
-	}
-}
-
 // Deleting an endpoint removes it and its deliveries; a second delete finds nothing.
 func testDeleteEndpoint(f *fixture) {
 	t := f.t
-	s := f.endpoint(hooks, domain.WebhookGeneric)
-	f.deliver(s.Endpoint.ID, t0)
+	s := f.endpoint(hooks)
+	f.deliver(s.ID, t0)
 
-	if err := f.in.DeleteEndpoint(f.ctx(), s.Endpoint.ID); err != nil {
+	if err := f.in.DeleteEndpoint(f.ctx(), s.ID); err != nil {
 		t.Fatalf("DeleteEndpoint: %v", err)
 	}
 
-	if _, err := f.in.Endpoint(f.ctx(), s.Endpoint.ID); !errors.Is(err, ports.ErrNotFound) {
+	if _, err := f.in.Endpoint(f.ctx(), s.ID); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("Endpoint after delete = %v; want ErrNotFound", err)
 	}
 
-	if _, err := f.in.EndpointOrg(context.Background(), s.Endpoint.ID); !errors.Is(err, ports.ErrNotFound) {
+	if _, err := f.in.EndpointOrg(context.Background(), s.ID); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("EndpointOrg after delete = %v; want ErrNotFound", err)
 	}
 
-	if got := f.deliveries(s.Endpoint.ID); len(got) != 0 {
+	if got := f.deliveries(s.ID); len(got) != 0 {
 		t.Errorf("deliveries after delete = %d; want none", len(got))
 	}
 
-	if err := f.in.DeleteEndpoint(f.ctx(), s.Endpoint.ID); !errors.Is(err, ports.ErrNotFound) {
+	if err := f.in.DeleteEndpoint(f.ctx(), s.ID); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("a second DeleteEndpoint = %v; want ErrNotFound", err)
-	}
-}
-
-// A secret sealed under k1 opens under keys that hold k1, and under no other; without a key it is
-// ErrNoMasterKey. No refusal holds the secret.
-func testOtherKey(f *fixture) {
-	t := f.t
-	s := f.endpoint(hooks, domain.WebhookGeneric)
-
-	if got, err := f.Intake(f.Key("k2", "k1")).OpenSecret(f.ctx(), s.Endpoint.ID); err != nil || !bytes.Equal(got, s.Secret) {
-		t.Errorf("OpenSecret under k2 with k1 = %x, %v; want the secret", got, err)
-	}
-
-	_, err := f.Intake(f.Key("k2")).OpenSecret(f.ctx(), s.Endpoint.ID)
-	if err == nil || bytes.Contains([]byte(err.Error()), s.Secret) {
-		t.Errorf("OpenSecret under k2 alone = %v; want a refusal without the secret", err)
-	}
-
-	if _, err := f.Intake(f.Key()).OpenSecret(f.ctx(), s.Endpoint.ID); !errors.Is(err, ports.ErrNoMasterKey) {
-		t.Errorf("OpenSecret without a key = %v; want ErrNoMasterKey", err)
-	}
-
-	if _, err := f.Intake(f.Key()).RotateSecret(f.ctx(), s.Endpoint.ID); !errors.Is(err, ports.ErrNoMasterKey) {
-		t.Errorf("RotateSecret without a key = %v; want ErrNoMasterKey", err)
 	}
 }
 
@@ -383,11 +257,11 @@ func testOtherKey(f *fixture) {
 // outcome, reason and item.
 func testSignatureHeaders(f *fixture) {
 	t := f.t
-	s := f.endpoint(hooks, domain.WebhookGitHub)
-	it := f.item(domain.ItemFromGitHub, flaky, t0)
+	s := f.endpoint(hooks)
+	it := f.item(flaky, t0)
 
 	d, err := f.in.RecordDelivery(f.ctx(), domain.NewWebhookDelivery{
-		EndpointID: s.Endpoint.ID, ReceivedAt: t0,
+		EndpointID: s.ID, ReceivedAt: t0,
 		Headers: map[string]string{
 			"X-Hub-Signature-256": "sha256=deadbeef", "X-Hub-Signature": "sha1=beef", "x-goal-signature": "sha256=cafe",
 			"X-GitHub-Event": "check_run", "Content-Type": jsonCT,
@@ -400,7 +274,7 @@ func testSignatureHeaders(f *fixture) {
 
 	want := map[string]string{"x-github-event": "check_run", "content-type": jsonCT}
 
-	got := f.deliveries(s.Endpoint.ID)
+	got := f.deliveries(s.ID)
 	if len(got) != 1 {
 		t.Fatalf("deliveries = %d; want 1", len(got))
 	}
@@ -410,7 +284,7 @@ func testSignatureHeaders(f *fixture) {
 			t.Errorf("headers = %v; want %v", g.Headers, want)
 		}
 
-		if g.ID == "" || g.EndpointID != s.Endpoint.ID || !g.ReceivedAt.Equal(t0) || string(g.Body) != `{"action":"completed"}` ||
+		if g.ID == "" || g.EndpointID != s.ID || !g.ReceivedAt.Equal(t0) || string(g.Body) != `{"action":"completed"}` ||
 			g.Outcome != domain.DeliveryCreated || g.Reason != "created item" || g.ItemID != it.ID {
 			t.Errorf("delivery = %+v", g)
 		}
@@ -420,24 +294,24 @@ func testSignatureHeaders(f *fixture) {
 // Deliveries list newest first, a page at a time, each page after the last one's cursor.
 func testDeliveryPages(f *fixture) {
 	t := f.t
-	s := f.endpoint(hooks, domain.WebhookGeneric)
-	other := f.endpoint("deploys", domain.WebhookGeneric)
+	s := f.endpoint(hooks)
+	other := f.endpoint("deploys")
 
 	var made []domain.WebhookDeliveryID
 	for i := range 3 {
-		made = append(made, f.deliver(s.Endpoint.ID, t0.Add(time.Duration(i)*time.Minute)).ID)
+		made = append(made, f.deliver(s.ID, t0.Add(time.Duration(i)*time.Minute)).ID)
 	}
 
-	f.deliver(other.Endpoint.ID, t0)
+	f.deliver(other.ID, t0)
 
-	first, err := f.in.ListDeliveries(f.ctx(), s.Endpoint.ID, domain.DeliveryCursor{}, 2)
+	first, err := f.in.ListDeliveries(f.ctx(), s.ID, domain.DeliveryCursor{}, 2)
 	if err != nil || len(first) != 2 || first[0].ID != made[2] || first[1].ID != made[1] {
 		t.Fatalf("first page = %v, %v; want the two newest", ids(first), err)
 	}
 
 	last := first[1]
 
-	rest, err := f.in.ListDeliveries(f.ctx(), s.Endpoint.ID, domain.DeliveryCursor{ReceivedAt: last.ReceivedAt, ID: last.ID}, 2)
+	rest, err := f.in.ListDeliveries(f.ctx(), s.ID, domain.DeliveryCursor{ReceivedAt: last.ReceivedAt, ID: last.ID}, 2)
 	if err != nil || len(rest) != 1 || rest[0].ID != made[0] {
 		t.Errorf("second page = %v, %v; want the oldest", ids(rest), err)
 	}
@@ -456,12 +330,12 @@ func ids(ds []domain.WebhookDelivery) []domain.WebhookDeliveryID {
 // unknown id and another organization read none.
 func testDeliveryRead(f *fixture) {
 	t := f.t
-	s := f.endpoint(hooks, domain.WebhookGeneric)
-	other := f.endpoint("deploys", domain.WebhookGeneric)
-	made := f.deliver(s.Endpoint.ID, t0)
+	s := f.endpoint(hooks)
+	other := f.endpoint("deploys")
+	made := f.deliver(s.ID, t0)
 
-	got, err := f.in.Delivery(f.ctx(), s.Endpoint.ID, made.ID)
-	if err != nil || got.ID != made.ID || got.EndpointID != s.Endpoint.ID || !got.ReceivedAt.Equal(t0) ||
+	got, err := f.in.Delivery(f.ctx(), s.ID, made.ID)
+	if err != nil || got.ID != made.ID || got.EndpointID != s.ID || !got.ReceivedAt.Equal(t0) ||
 		!maps.Equal(got.Headers, map[string]string{"content-type": jsonCT}) || string(got.Body) != `{"event":"deploy"}` ||
 		got.Outcome != domain.DeliveryAccepted {
 		t.Errorf("Delivery = %+v, %v; want the delivery made", got, err)
@@ -470,12 +344,12 @@ func testDeliveryRead(f *fixture) {
 	labs := domain.WithOrg(t.Context(), f.NewOrg(t))
 
 	for name, read := range map[string]func() error{
-		"another endpoint's": func() error { _, err := f.in.Delivery(f.ctx(), other.Endpoint.ID, made.ID); return err },
+		"another endpoint's": func() error { _, err := f.in.Delivery(f.ctx(), other.ID, made.ID); return err },
 		"an unknown": func() error {
-			_, err := f.in.Delivery(f.ctx(), s.Endpoint.ID, "019a0000-0000-7000-8000-000000000000")
+			_, err := f.in.Delivery(f.ctx(), s.ID, "019a0000-0000-7000-8000-000000000000")
 			return err
 		},
-		"another organization's": func() error { _, err := f.in.Delivery(labs, s.Endpoint.ID, made.ID); return err },
+		"another organization's": func() error { _, err := f.in.Delivery(labs, s.ID, made.ID); return err },
 	} {
 		if err := read(); !errors.Is(err, ports.ErrNotFound) {
 			t.Errorf("Delivery of %s delivery = %v; want ErrNotFound", name, err)
@@ -488,8 +362,8 @@ func testDeliveryRead(f *fixture) {
 // organization's count nothing.
 func testDeliveryDays(f *fixture) {
 	t := f.t
-	a := f.endpoint(hooks, domain.WebhookGeneric).Endpoint.ID
-	b := f.endpoint("deploys", domain.WebhookGitHub).Endpoint.ID
+	a := f.endpoint(hooks).ID
+	b := f.endpoint("deploys").ID
 	day := time.Date(t0.Year(), t0.Month(), t0.Day(), 0, 0, 0, 0, time.UTC)
 	since := day.Add(-24 * time.Hour)
 
@@ -500,14 +374,14 @@ func testDeliveryDays(f *fixture) {
 	f.refuse(a, day.Add(24*time.Hour-time.Microsecond))
 	f.refuse(b, t0)
 
-	it := f.item(domain.ItemFromWebhook, "", t0)
+	it := f.item("", t0)
 	if _, err := f.in.RecordDelivery(f.ctx(), domain.NewWebhookDelivery{EndpointID: b, ReceivedAt: t0, Outcome: domain.DeliveryCreated, ItemID: it.ID}); err != nil {
 		t.Fatal(err)
 	}
 
 	elsewhere := f.factory
 	f.factory = f.NewFactory(t, f.org)
-	f.deliver(f.endpoint(hooks, domain.WebhookGeneric).Endpoint.ID, t0)
+	f.deliver(f.endpoint("elsewhere").ID, t0)
 	f.factory = elsewhere
 
 	want := []domain.DeliveryDay{
@@ -546,7 +420,7 @@ func (f *fixture) refuse(id domain.WebhookEndpointID, at time.Time) {
 // or a body over the cap is ErrInvalid.
 func testDeliveryRules(f *fixture) {
 	t := f.t
-	s := f.endpoint(hooks, domain.WebhookGeneric)
+	s := f.endpoint(hooks)
 
 	_, err := f.in.RecordDelivery(f.ctx(), domain.NewWebhookDelivery{
 		EndpointID: "00000000-0000-7000-8000-00000000dead", ReceivedAt: t0, Outcome: domain.DeliveryRefused, Reason: "unknown endpoint",
@@ -555,12 +429,12 @@ func testDeliveryRules(f *fixture) {
 		t.Errorf("a delivery to an unknown endpoint = %v; want ErrNotFound", err)
 	}
 
-	it := f.item(domain.ItemFromWebhook, "", t0)
+	it := f.item("", t0)
 
 	for _, n := range []domain.NewWebhookDelivery{
-		{EndpointID: s.Endpoint.ID, ReceivedAt: t0, Outcome: "lost"},
-		{EndpointID: s.Endpoint.ID, ReceivedAt: t0, Outcome: domain.DeliveryRefused, ItemID: it.ID},
-		{EndpointID: s.Endpoint.ID, ReceivedAt: t0, Outcome: domain.DeliveryAccepted, Body: make([]byte, domain.MaxDeliveryBody+1)},
+		{EndpointID: s.ID, ReceivedAt: t0, Outcome: "lost"},
+		{EndpointID: s.ID, ReceivedAt: t0, Outcome: domain.DeliveryRefused, ItemID: it.ID},
+		{EndpointID: s.ID, ReceivedAt: t0, Outcome: domain.DeliveryAccepted, Body: make([]byte, domain.MaxDeliveryBody+1)},
 	} {
 		if _, err := f.in.RecordDelivery(f.ctx(), n); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("RecordDelivery outcome %q item %q body %d = %v; want ErrInvalid", n.Outcome, n.ItemID, len(n.Body), err)
@@ -572,27 +446,27 @@ func testDeliveryRules(f *fixture) {
 // in every organization, and keeps the rest, the cut itself included.
 func testPrune(f *fixture) {
 	t := f.t
-	s := f.endpoint(hooks, domain.WebhookGeneric)
+	s := f.endpoint(hooks)
 	cut := t0.Add(-domain.DeliveryRetention)
 
-	f.deliver(s.Endpoint.ID, cut.Add(-time.Hour))
-	kept := f.deliver(s.Endpoint.ID, cut)
+	f.deliver(s.ID, cut.Add(-time.Hour))
+	kept := f.deliver(s.ID, cut)
 
-	labs := &fixture{Harness: f.Harness, t: t, in: f.in, org: f.NewOrg(t)}
+	labs := &fixture{Harness: f.Harness, t: t, in: f.in, secrets: f.secrets, org: f.NewOrg(t)}
 	labs.factory = f.NewFactory(t, labs.org)
-	theirs := labs.endpoint(hooks, domain.WebhookGeneric)
-	labs.deliver(theirs.Endpoint.ID, cut.Add(-time.Minute))
+	theirs := labs.endpoint(hooks)
+	labs.deliver(theirs.ID, cut.Add(-time.Minute))
 
 	n, err := f.in.PruneDeliveries(context.Background(), t0)
 	if err != nil || n != 2 {
 		t.Errorf("PruneDeliveries = %d, %v; want the 2 older rows", n, err)
 	}
 
-	if got := f.deliveries(s.Endpoint.ID); len(got) != 1 || got[0].ID != kept.ID {
+	if got := f.deliveries(s.ID); len(got) != 1 || got[0].ID != kept.ID {
 		t.Errorf("acme keeps %v; want only %s", ids(got), kept.ID)
 	}
 
-	if got := labs.deliveries(theirs.Endpoint.ID); len(got) != 0 {
+	if got := labs.deliveries(theirs.ID); len(got) != 0 {
 		t.Errorf("labs keeps %v; want none", ids(got))
 	}
 }
@@ -601,7 +475,7 @@ func testPrune(f *fixture) {
 // first; another trigger, or another key, records its own.
 func testFiringIdempotent(f *fixture) {
 	t := f.t
-	it := f.item(domain.ItemFromGitHub, flaky, t0)
+	it := f.item(flaky, t0)
 
 	first, fresh := f.fire(flaky, "check-run-1", "unit", it.ID, t0)
 	if !fresh || first.ID == "" || first.ItemID != it.ID || first.Outcome != domain.FiringCreated || !first.At.Equal(t0) {
@@ -633,7 +507,7 @@ func testFiringRules(f *fixture) {
 		t.Errorf("a firing from slack = %v; want ErrInvalid", err)
 	}
 
-	it := f.item(domain.ItemFromGitHub, flaky, t0)
+	it := f.item(flaky, t0)
 
 	_, _, err = f.in.RecordFiring(f.ctx(), domain.TriggerFiring{
 		FactoryID: f.factory, Trigger: flaky, Source: domain.TriggerGitHub, EventKey: "github.check_run.failed", IdempotencyKey: "e1",
@@ -649,11 +523,11 @@ func testCreatedSince(f *fixture) {
 	t := f.t
 	day := t0.Truncate(24 * time.Hour)
 
-	f.fire(flaky, "yesterday", "", f.item(domain.ItemFromGitHub, flaky, day.Add(-time.Hour)).ID, day.Add(-time.Hour))
-	f.fire(flaky, "midnight", "", f.item(domain.ItemFromGitHub, flaky, day).ID, day)
-	f.fire(flaky, "noon", "", f.item(domain.ItemFromGitHub, flaky, t0).ID, t0)
+	f.fire(flaky, "yesterday", "", f.item(flaky, day.Add(-time.Hour)).ID, day.Add(-time.Hour))
+	f.fire(flaky, "midnight", "", f.item(flaky, day).ID, day)
+	f.fire(flaky, "noon", "", f.item(flaky, t0).ID, t0)
 	f.fire(flaky, "skipped", "", "", t0)
-	f.fire(nightly, "other", "", f.item(domain.ItemFromSchedule, nightly, t0).ID, t0)
+	f.fire(nightly, "other", "", f.item(nightly, t0).ID, t0)
 
 	if n, err := f.in.CreatedSince(f.ctx(), f.factory, flaky, day); err != nil || n != 2 {
 		t.Errorf("CreatedSince = %d, %v; want 2", n, err)
@@ -664,7 +538,7 @@ func testCreatedSince(f *fixture) {
 // once it is done or cancelled, for another trigger or value, or for an empty value.
 func testDedupe(f *fixture) {
 	t := f.t
-	a := f.item(domain.ItemFromGitHub, flaky, t0)
+	a := f.item(flaky, t0)
 	f.fire(flaky, "e1", "unit", a.ID, t0)
 	f.fire(flaky, "e2", "", "", t0)
 
@@ -685,7 +559,7 @@ func testDedupe(f *fixture) {
 	f.close(a, domain.StateDone)
 	check(flaky, "unit", "")
 
-	b := f.item(domain.ItemFromGitHub, flaky, t0.Add(time.Minute))
+	b := f.item(flaky, t0.Add(time.Minute))
 	f.fire(flaky, "e3", "unit", b.ID, t0.Add(time.Minute))
 	check(flaky, "unit", b.ID)
 
@@ -696,7 +570,7 @@ func testDedupe(f *fixture) {
 // Firing reads the trigger's firing by its idempotency key, and none for another trigger or key.
 func testFiringByKey(f *fixture) {
 	t := f.t
-	it := f.item(domain.ItemFromGitHub, flaky, t0)
+	it := f.item(flaky, t0)
 	want, _ := f.fire(flaky, "check-run-1", "unit", it.ID, t0)
 
 	got, ok, err := f.in.Firing(f.ctx(), f.factory, flaky, "check-run-1")
@@ -735,7 +609,7 @@ func testFailureStreak(f *fixture) {
 	streak(flaky, "", 1)
 	streak(nightly, "unit", 0)
 
-	it := f.item(domain.ItemFromGitHub, flaky, t0.Add(4*time.Minute))
+	it := f.item(flaky, t0.Add(4*time.Minute))
 	f.fire(flaky, "e5", "unit", it.ID, t0.Add(4*time.Minute))
 	streak(flaky, "unit", 0)
 
@@ -748,7 +622,7 @@ func testFailureStreak(f *fixture) {
 // lock is held, by this caller or another view of the same state; once freed it is taken again.
 func testScheduleLock(f *fixture) {
 	t := f.t
-	other := f.Intake(f.Key("k1"))
+	other := f.Intake()
 
 	var inner, otherRan bool
 
@@ -782,18 +656,17 @@ func testScheduleLock(f *fixture) {
 	}
 }
 
-// SourceTally counts the factory's items since the instant by source, "" for none recorded;
 // TriggerStats counts each trigger's items since then, those merged, and their cost.
 func testTallies(f *fixture) {
 	t := f.t
 	since := t0.Add(-7 * 24 * time.Hour)
 
-	f.item(domain.ItemFromGitHub, flaky, since.Add(-time.Hour)) // before the window
-	a := f.item(domain.ItemFromGitHub, flaky, t0)
-	b := f.item(domain.ItemFromGitHub, flaky, t0)
-	f.item(domain.ItemFromSchedule, nightly, t0)
-	f.item(domain.ItemFromPeople, "", t0)
-	f.item("", "", t0)
+	f.item(flaky, since.Add(-time.Hour)) // before the window
+	a := f.item(flaky, t0)
+	b := f.item(flaky, t0)
+	f.item(nightly, t0)
+	f.item("", t0)
+	f.item("", t0)
 
 	if err := f.Store.AppendEvents(f.ctx(), domain.Event{
 		FactoryID: f.factory, ItemID: a.ID, At: t0, Kind: domain.EventMerged, Station: station, Actor: domain.ActorEngine,
@@ -808,16 +681,9 @@ func testTallies(f *fixture) {
 	otherFactory := f.NewFactory(t, f.org)
 	if _, err := f.Store.CreateItem(f.ctx(), domain.NewItem{
 		FactoryID: otherFactory, Type: typeFix, Title: "elsewhere", Station: station, State: domain.StateQueued,
-		Class: domain.ClassStandard, CreatedAt: t0, Source: domain.ItemFromGitHub, Trigger: flaky,
+		Class: domain.ClassStandard, CreatedAt: t0, Trigger: flaky,
 	}); err != nil {
 		t.Fatal(err)
-	}
-
-	tally, err := f.in.SourceTally(f.ctx(), f.factory, since)
-	want := []domain.SourceCount{{Source: "", Items: 1}, {Source: domain.ItemFromGitHub, Items: 2}, {Source: domain.ItemFromPeople, Items: 1}, {Source: domain.ItemFromSchedule, Items: 1}}
-
-	if err != nil || !slices.Equal(tally, want) {
-		t.Errorf("SourceTally = %v, %v; want %v", tally, err, want)
 	}
 
 	stats, err := f.in.TriggerStats(f.ctx(), f.factory, since)
@@ -828,34 +694,36 @@ func testTallies(f *fixture) {
 	}
 }
 
-// ItemSources counts the factory's newest items only, by source, with their first and last
-// instants; a factory without items has none.
-func testItemSources(f *fixture) {
+// NewestItems counts the factory's newest items only, whatever their source, with their first and
+// last instants; a factory without items has none.
+func testNewestItems(f *fixture) {
 	t := f.t
 
-	if got, err := f.in.ItemSources(f.ctx(), f.factory, 48); err != nil || len(got.Counts) != 0 || !got.From.IsZero() || !got.To.IsZero() {
-		t.Errorf("ItemSources of no items = %+v, %v; want none", got, err)
+	if got, err := f.in.NewestItems(f.ctx(), f.factory, 48); err != nil || got != (domain.ItemWindow{}) {
+		t.Errorf("NewestItems of no items = %+v, %v; want none", got, err)
 	}
 
-	f.item(domain.ItemFromPeople, "", t0.Add(-4*time.Hour)) // older than the newest 4
-	f.item(domain.ItemFromCLI, "", t0.Add(-3*time.Hour))
-	f.item(domain.ItemFromGitHub, flaky, t0.Add(-2*time.Hour))
-	f.item(domain.ItemFromGitHub, flaky, t0.Add(-time.Hour))
-	f.item("", "", t0)
+	f.item("", t0.Add(-4*time.Hour)) // older than the newest 4
+	f.item("", t0.Add(-3*time.Hour))
+	f.item(flaky, t0.Add(-2*time.Hour))
+	f.item(flaky, t0.Add(-time.Hour))
+	f.item("", t0)
 
 	otherFactory := f.NewFactory(t, f.org)
 	if _, err := f.Store.CreateItem(f.ctx(), domain.NewItem{
 		FactoryID: otherFactory, Type: typeFix, Title: "elsewhere", Station: station, State: domain.StateQueued,
-		Class: domain.ClassStandard, CreatedAt: t0.Add(time.Hour), Source: domain.ItemFromAPI,
+		Class: domain.ClassStandard, CreatedAt: t0.Add(time.Hour),
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := f.in.ItemSources(f.ctx(), f.factory, 4)
-	want := []domain.SourceCount{{Source: "", Items: 1}, {Source: domain.ItemFromCLI, Items: 1}, {Source: domain.ItemFromGitHub, Items: 2}}
+	got, err := f.in.NewestItems(f.ctx(), f.factory, 4)
+	if err != nil || got.Items != 4 || !got.From.Equal(t0.Add(-3*time.Hour)) || !got.To.Equal(t0) {
+		t.Errorf("NewestItems(4) = %+v, %v; want 4 from %v to %v", got, err, t0.Add(-3*time.Hour), t0)
+	}
 
-	if err != nil || !slices.Equal(got.Counts, want) || !got.From.Equal(t0.Add(-3*time.Hour)) || !got.To.Equal(t0) {
-		t.Errorf("ItemSources(4) = %+v, %v; want %v from %v to %v", got, err, want, t0.Add(-3*time.Hour), t0)
+	if got, err := f.in.NewestItems(f.ctx(), f.factory, 48); err != nil || got.Items != 5 || !got.From.Equal(t0.Add(-4*time.Hour)) {
+		t.Errorf("NewestItems(48) = %+v, %v; want all 5 from %v", got, err, t0.Add(-4*time.Hour))
 	}
 }
 
@@ -864,12 +732,12 @@ func testTriggerDays(f *fixture) {
 	t := f.t
 	day1 := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 
-	f.fire(flaky, "before", "", f.item(domain.ItemFromGitHub, flaky, t0).ID, t0.Add(-2*time.Hour))
-	f.fire(flaky, "e1", "", f.item(domain.ItemFromGitHub, flaky, t0).ID, t0)
-	f.fire(flaky, "e2", "", f.item(domain.ItemFromGitHub, flaky, t0).ID, t0.Add(time.Hour))
-	f.fire(flaky, "e3", "", f.item(domain.ItemFromGitHub, flaky, t0).ID, t0.Add(13*time.Hour)) // 01:00 the next day
+	f.fire(flaky, "before", "", f.item(flaky, t0).ID, t0.Add(-2*time.Hour))
+	f.fire(flaky, "e1", "", f.item(flaky, t0).ID, t0)
+	f.fire(flaky, "e2", "", f.item(flaky, t0).ID, t0.Add(time.Hour))
+	f.fire(flaky, "e3", "", f.item(flaky, t0).ID, t0.Add(13*time.Hour)) // 01:00 the next day
 	f.fire(flaky, "skipped", "", "", t0)
-	f.fire(nightly, "n1", "", f.item(domain.ItemFromSchedule, nightly, t0).ID, t0)
+	f.fire(nightly, "n1", "", f.item(nightly, t0).ID, t0)
 
 	got, err := f.in.TriggerDays(f.ctx(), f.factory, t0.Add(-time.Hour))
 	want := []domain.TriggerDay{
@@ -890,8 +758,8 @@ func testTriggerDays(f *fixture) {
 // Firings are the trigger's own, newest first, with their items' numbers and merged events.
 func testFirings(f *fixture) {
 	t := f.t
-	a := f.item(domain.ItemFromGitHub, flaky, t0)
-	b := f.item(domain.ItemFromGitHub, flaky, t0)
+	a := f.item(flaky, t0)
+	b := f.item(flaky, t0)
 
 	if err := f.Store.AppendEvents(f.ctx(), domain.Event{
 		FactoryID: f.factory, ItemID: a.ID, At: t0, Kind: domain.EventMerged, Station: station, Actor: domain.ActorEngine,
@@ -957,26 +825,17 @@ func (f *fixture) spent(it domain.Item, usd float64) {
 	}
 }
 
-// Another organization reads, opens, rotates, deletes and delivers to none of the fixture's
-// endpoints.
+// Another organization reads, deletes and delivers to none of the fixture's endpoints.
 func testIsolation(f *fixture) {
 	t := f.t
-	s := f.endpoint(hooks, domain.WebhookGeneric)
-	f.deliver(s.Endpoint.ID, t0)
+	s := f.endpoint(hooks)
+	f.deliver(s.ID, t0)
 
 	labs := domain.WithOrg(t.Context(), f.NewOrg(t))
-	id := s.Endpoint.ID
+	id := s.ID
 
 	if _, err := f.in.Endpoint(labs, id); !errors.Is(err, ports.ErrNotFound) {
 		t.Errorf("labs Endpoint = %v; want ErrNotFound", err)
-	}
-
-	if _, err := f.in.OpenSecret(labs, id); !errors.Is(err, ports.ErrNotFound) {
-		t.Errorf("labs OpenSecret = %v; want ErrNotFound", err)
-	}
-
-	if _, err := f.in.RotateSecret(labs, id); !errors.Is(err, ports.ErrNotFound) {
-		t.Errorf("labs RotateSecret = %v; want ErrNotFound", err)
 	}
 
 	if err := f.in.DeleteEndpoint(labs, id); !errors.Is(err, ports.ErrNotFound) {
@@ -992,21 +851,21 @@ func testIsolation(f *fixture) {
 		t.Errorf("acme's deliveries = %d; want its 1", len(got))
 	}
 
-	if _, err := f.in.OpenSecret(f.ctx(), id); err != nil {
-		t.Errorf("acme OpenSecret: %v", err)
+	if _, err := f.in.Endpoint(f.ctx(), id); err != nil {
+		t.Errorf("acme Endpoint: %v", err)
 	}
 }
 
 // Another organization lists, counts and tallies none of the fixture's rows.
 func testIsolatedReads(f *fixture) {
 	t := f.t
-	s := f.endpoint(hooks, domain.WebhookGeneric)
-	f.deliver(s.Endpoint.ID, t0)
-	it := f.item(domain.ItemFromGitHub, flaky, t0)
+	s := f.endpoint(hooks)
+	f.deliver(s.ID, t0)
+	it := f.item(flaky, t0)
 	f.fire(flaky, "e1", "unit", it.ID, t0)
 
 	labs := domain.WithOrg(t.Context(), f.NewOrg(t))
-	id := s.Endpoint.ID
+	id := s.ID
 
 	if got, err := f.in.ListEndpoints(labs, f.factory); err != nil || len(got) != 0 {
 		t.Errorf("labs ListEndpoints = %v, %v; want none", got, err)
@@ -1024,10 +883,6 @@ func testIsolatedReads(f *fixture) {
 		t.Errorf("labs OpenItemByDedupe = %q, %v, %v; want none", got, ok, err)
 	}
 
-	if got, err := f.in.SourceTally(labs, f.factory, t0.Add(-time.Hour)); err != nil || len(got) != 0 {
-		t.Errorf("labs SourceTally = %v, %v; want none", got, err)
-	}
-
 	if got, err := f.in.TriggerStats(labs, f.factory, t0.Add(-time.Hour)); err != nil || len(got) != 0 {
 		t.Errorf("labs TriggerStats = %v, %v; want none", got, err)
 	}
@@ -1035,12 +890,12 @@ func testIsolatedReads(f *fixture) {
 	f.isolatedIntakeReads(labs)
 }
 
-// isolatedIntakeReads checks that labs reads none of the fixture's sources and trigger days.
+// isolatedIntakeReads checks that labs reads none of the fixture's newest items and trigger days.
 func (f *fixture) isolatedIntakeReads(labs context.Context) {
 	t := f.t
 
-	if got, err := f.in.ItemSources(labs, f.factory, 48); err != nil || len(got.Counts) != 0 || !got.From.IsZero() {
-		t.Errorf("labs ItemSources = %+v, %v; want none", got, err)
+	if got, err := f.in.NewestItems(labs, f.factory, 48); err != nil || got != (domain.ItemWindow{}) {
+		t.Errorf("labs NewestItems = %+v, %v; want none", got, err)
 	}
 
 	if got, err := f.in.TriggerDays(labs, f.factory, t0.Add(-time.Hour)); err != nil || len(got) != 0 {
@@ -1072,19 +927,13 @@ func testIsolatedFirings(f *fixture) {
 func testNoOrg(f *fixture) {
 	t := f.t
 	ctx := t.Context()
-	s := f.endpoint(hooks, domain.WebhookGeneric)
-	id := s.Endpoint.ID
+	s := f.endpoint(hooks)
+	id := s.ID
 
 	calls := map[string]func() error{
-		"CreateEndpoint": func() error {
-			_, err := f.in.CreateEndpoint(ctx, domain.NewWebhookEndpoint{FactoryID: f.factory, Name: "other", Kind: domain.WebhookGeneric})
-			return err
-		},
 		"ListEndpoints":  func() error { _, err := f.in.ListEndpoints(ctx, f.factory); return err },
 		"Endpoint":       func() error { _, err := f.in.Endpoint(ctx, id); return err },
-		"RotateSecret":   func() error { _, err := f.in.RotateSecret(ctx, id); return err },
 		"DeleteEndpoint": func() error { return f.in.DeleteEndpoint(ctx, id) },
-		"OpenSecret":     func() error { _, err := f.in.OpenSecret(ctx, id); return err },
 		"RecordDelivery": func() error {
 			_, err := f.in.RecordDelivery(ctx, domain.NewWebhookDelivery{EndpointID: id, ReceivedAt: t0, Outcome: domain.DeliveryAccepted})
 			return err
@@ -1103,9 +952,8 @@ func testNoOrg(f *fixture) {
 		"OpenItemByDedupe": func() error { _, _, err := f.in.OpenItemByDedupe(ctx, f.factory, flaky, "unit"); return err },
 		"Firing":           func() error { _, _, err := f.in.Firing(ctx, f.factory, flaky, "k"); return err },
 		"FailureStreak":    func() error { _, err := f.in.FailureStreak(ctx, f.factory, flaky, "unit"); return err },
-		"SourceTally":      func() error { _, err := f.in.SourceTally(ctx, f.factory, t0); return err },
 		"TriggerStats":     func() error { _, err := f.in.TriggerStats(ctx, f.factory, t0); return err },
-		"ItemSources":      func() error { _, err := f.in.ItemSources(ctx, f.factory, 48); return err },
+		"NewestItems":      func() error { _, err := f.in.NewestItems(ctx, f.factory, 48); return err },
 		"TriggerDays":      func() error { _, err := f.in.TriggerDays(ctx, f.factory, t0); return err },
 		"OriginTally":      func() error { _, err := f.in.OriginTally(ctx, f.factory, t0); return err },
 		"ComingUp":         func() error { _, _, err := f.in.ComingUp(ctx, f.factory, 10); return err },
@@ -1123,8 +971,7 @@ func testNoOrg(f *fixture) {
 			_, err := f.in.Receive(ctx, domain.NewReceipt{WebhookID: id, ReceivedAt: t0, Receipt: domain.ReceiptAccepted, DeliveryID: "d"})
 			return err
 		},
-		"UnnamedDays":      func() error { _, err := f.in.UnnamedDays(ctx, id, t0); return err },
-		"ConvertEndpoints": func() error { _, err := f.in.ConvertEndpoints(ctx, domain.LocalUser); return err },
+		"UnnamedDays": func() error { _, err := f.in.UnnamedDays(ctx, id, t0); return err },
 	}
 
 	for name, call := range calls {

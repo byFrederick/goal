@@ -49,7 +49,7 @@ vi.mock('./use-review', () => ({
     hasDraft: state.hasDraft,
     current: state.current,
     next: state.next,
-    detail: { name: 'Line' },
+    detail: { name: 'line', title: 'The Line' },
   }),
 }));
 
@@ -102,7 +102,7 @@ describe('PublishCard', () => {
     const published = screen.getByRole('button', { name: 'Published' });
     expect(published.getAttribute('aria-disabled')).toBe('true');
     expect(screen.queryByRole('button', { name: 'Publish v5' })).toBeNull();
-    expect(toast).toHaveBeenCalledWith('Line v5 published');
+    expect(toast).toHaveBeenCalledWith('The Line v5 published');
     expect(screen.getByText('v5 is published and running.')).toBeTruthy();
     expect(closeDraft).toHaveBeenCalledOnce();
     await waitFor(() => expect(publishDraft).toHaveBeenCalledOnce());

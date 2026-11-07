@@ -10,8 +10,9 @@ import { Chip } from '../../ui/chip';
 import { NotAvailable } from '../../ui/not-available';
 import { payersOf, usedByText } from './view';
 
-export function Payers({ budgets, org, total }: { budgets: readonly SpendBudget[]; org: string; total: number }) {
+export function Payers({ budgets, org }: { budgets: readonly SpendBudget[]; org: string }) {
   const payers = payersOf(budgets);
+  const titles = budgets.map((b) => b.factory.title);
   return (
     <section aria-labelledby="acc-h" className="flex min-w-0 flex-col rounded-card border border-line bg-card p-4">
       <h2 id="acc-h" className="m-0 mb-2 text-heading text-ink">
@@ -26,7 +27,7 @@ export function Payers({ budgets, org, total }: { budgets: readonly SpendBudget[
             <span className="flex min-w-0 flex-1 flex-col leading-snug">
               <b className="font-semibold text-ink">{c.name}</b>
               <span className="text-secondary text-muted">
-                Secret {c.name}, {usedByText(c.used, total)}
+                Secret {c.name}, {usedByText(c.used, titles)}
               </span>
             </span>
             <Chip tone="ok" dot>

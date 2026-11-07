@@ -17,9 +17,17 @@ const acme1 = "/v1/orgs/acme/items/acme%231"
 func (h *harness) personNote(t *testing.T, it domain.Item, at time.Time) {
 	t.Helper()
 
+	h.noteAt(t, it, domain.LocalUser.Ref(), domain.LocalUser.Name, at)
+}
+
+// noteAt appends a note on it at `at` straight to the store, by the person ref names and with the
+// name its event keeps.
+func (h *harness) noteAt(t *testing.T, it domain.Item, ref, name string, at time.Time) {
+	t.Helper()
+
 	err := h.store.AppendEvents(inOrg(t), domain.Event{
 		FactoryID: it.FactoryID, ItemID: it.ID, At: at, Kind: domain.EventNote, Station: it.Station,
-		Actor: domain.LocalUser.Name, Data: map[string]any{"actor": domain.LocalUser.Ref(), "text": "see the docs"},
+		Actor: name, Data: map[string]any{"actor": ref, "text": "see the docs"},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -179,7 +179,7 @@ func EvaluationFor(l Line, w WebhookEndpoint, ev IntakeEvent) (NewDeliveryEvalua
 	}
 
 	repo := ev.Fields[FieldRepo]
-	if o, ok := w.Opening(l.FactoryID); w.OrgLevel() && (!ok || !o.Admits(repo)) {
+	if o, ok := w.Opening(l.FactoryID); !ok || !o.Admits(repo) {
 		return NewDeliveryEvaluation{}, false
 	}
 

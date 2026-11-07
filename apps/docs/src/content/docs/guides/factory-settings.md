@@ -26,7 +26,7 @@ Settings lists its sections in this order. Every section is open; scroll the pag
 
 ### General
 
-The factory's name, its purpose from the definition, and its Badge: the colour and letter the sidebar shows. All three are read-only here.
+The factory's title, its name (the one used in URLs and the CLI), its purpose from the definition, and its Badge: the colour and letter the sidebar shows. All four are read-only here.
 
 ### Code
 

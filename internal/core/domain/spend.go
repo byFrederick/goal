@@ -3,6 +3,7 @@ package domain
 import (
 	"cmp"
 	"fmt"
+	"math"
 	"slices"
 	"time"
 )
@@ -111,18 +112,20 @@ type FactoryDaySpend struct {
 
 // SpendFacts are the sums a store reads for OrgSpend, for the organization in ctx: Days and
 // Merged (the items that reached done, still in state done) over [ReadSince, Now), ByAgent,
-// ByModel and ReworkUSD over the window. NewOrgSpend lays them out.
+// ByModel, ReworkUSD, UsageByAgent and UsageByStation over the window. NewOrgSpend lays them out.
 type SpendFacts struct {
-	Days      []FactoryDaySpend
-	Merged    []DayCount
-	ByAgent   []AgentSpend
-	ByModel   []ModelSpend
-	ReworkUSD float64
+	Days           []FactoryDaySpend
+	Merged         []DayCount
+	ByAgent        []AgentSpend
+	ByModel        []ModelSpend
+	ReworkUSD      float64
+	UsageByAgent   []RunUsage
+	UsageByStation []RunUsage
 }
 
 // OrgSpend is what an organization's agent runs cost, for the spend screen. A run counts on the
-// day it started, with its cost so far: a running run counts, with 0 until it finishes. Box
-// compute time is not recorded, so it is not in here.
+// day it started, with its cost so far: a running run counts, with 0 until it finishes. What a
+// box costs is not recorded, so it is not in here; its CPU time and peak memory are, in Usage.
 type OrgSpend struct {
 	Period       SpendPeriod
 	Since, Until time.Time
@@ -149,6 +152,9 @@ type OrgSpend struct {
 	// Factories is each factory that spent since ReadSince with its spend today and this week
 	// (UTC), by id, for its budget; a factory not here spent nothing.
 	Factories []FactorySpendNow
+	// UsageByAgent and UsageByStation are the CPU time and peak memory of the window's runs, by
+	// factory, agent (or station) and box size, the highest CPUSecondsP90 first.
+	UsageByAgent, UsageByStation []RunUsage
 }
 
 // DaySpend is one UTC day's spend.
@@ -177,6 +183,41 @@ type AgentModelSpend struct {
 	Agent     string
 	Model     string
 	USD       float64
+}
+
+// RunUsage is the CPU time and peak memory of the runs of a factory's agent or station in boxes
+// of one size, over the runs that reported a value. A run without a value is left out of that
+// value's percentiles, and a group none of whose runs reported a value is not a RunUsage.
+type RunUsage struct {
+	FactoryID FactoryID
+	// Name is the agent's or the station's name in its factory.
+	Name string
+	// BoxSize is the runs' box size; empty for runs from before box sizes were recorded.
+	BoxSize SandboxSize
+	// Runs counts the runs that reported a CPU time or a peak memory.
+	Runs int
+	// The medians and 90th percentiles, interpolated linearly between the closest runs as
+	// PostgreSQL's percentile_cont does; nil when none of the runs reported the value.
+	CPUSecondsP50, CPUSecondsP90           *float64
+	PeakMemoryBytesP50, PeakMemoryBytesP90 *float64
+}
+
+// FloatPercentile is the p-th fraction (0 to 1) of sorted, interpolated linearly between the two
+// closest values as PostgreSQL's percentile_cont does; nil when sorted is empty.
+func FloatPercentile(sorted []float64, p float64) *float64 {
+	if len(sorted) == 0 {
+		return nil
+	}
+
+	at := p * float64(len(sorted)-1)
+	lo := math.Floor(at)
+	v := sorted[int(lo)]
+
+	if hi := math.Ceil(at); hi != lo {
+		v += (sorted[int(hi)] - v) * (at - lo)
+	}
+
+	return &v
 }
 
 // ModelSpend is the spend on a model.
@@ -215,7 +256,27 @@ func NewOrgSpend(w SpendWindow, f SpendFacts) OrgSpend {
 		l.addMerged(m)
 	}
 
-	return l.finish(f.ByAgent, f.ByModel)
+	out := l.finish(f.ByAgent, f.ByModel)
+	out.UsageByAgent, out.UsageByStation = sortedUsage(f.UsageByAgent), sortedUsage(f.UsageByStation)
+
+	return out
+}
+
+// sortedUsage orders usage rows by CPUSecondsP90, highest first and those without one last, then
+// by factory, name and box size.
+func sortedUsage(rows []RunUsage) []RunUsage {
+	p90 := func(u RunUsage) float64 {
+		if u.CPUSecondsP90 == nil {
+			return math.Inf(-1)
+		}
+
+		return *u.CPUSecondsP90
+	}
+
+	return slices.SortedFunc(slices.Values(rows), func(a, b RunUsage) int {
+		return cmp.Or(cmp.Compare(p90(b), p90(a)), cmp.Compare(a.FactoryID, b.FactoryID), cmp.Compare(a.Name, b.Name),
+			cmp.Compare(a.BoxSize, b.BoxSize))
+	})
 }
 
 // spendLayout is NewOrgSpend's work in progress: the window's days by date, the weekly series

@@ -234,8 +234,7 @@ func (s *server) GetOrgWebhookDelivery(ctx context.Context, req gen.GetOrgWebhoo
 	return gen.GetOrgWebhookDelivery200JSONResponse(out), nil
 }
 
-// orgWebhook is the organization's webhook ref, a name or an id; a factory's endpoint answers as
-// unknown.
+// orgWebhook is the organization's webhook ref, a name or an id.
 func (s *server) orgWebhook(ctx context.Context, ref string) (domain.WebhookEndpoint, error) {
 	w, err := s.intake.WebhookByName(ctx, ref)
 	if err == nil || !errors.Is(err, ports.ErrNotFound) {
@@ -243,11 +242,12 @@ func (s *server) orgWebhook(ctx context.Context, ref string) (domain.WebhookEndp
 	}
 
 	if _, perr := uuid.Parse(ref); perr == nil {
-		if w, err = s.intake.Endpoint(ctx, domain.WebhookEndpointID(ref)); err == nil && w.OrgLevel() {
+		w, err = s.intake.Endpoint(ctx, domain.WebhookEndpointID(ref))
+		if err == nil {
 			return w, nil
 		}
 
-		if err != nil && !errors.Is(err, ports.ErrNotFound) {
+		if !errors.Is(err, ports.ErrNotFound) {
 			return domain.WebhookEndpoint{}, err
 		}
 	}
@@ -302,13 +302,8 @@ func (s *server) unused(ctx context.Context, w domain.WebhookEndpoint, p domain.
 	return nil
 }
 
-// deletable refuses to delete the organization's webhook w while published triggers use it; a
-// factory's endpoint is always deletable, as it was before ADR 0040.
+// deletable refuses to delete the organization's webhook w while published triggers use it.
 func (s *server) deletable(ctx context.Context, w domain.WebhookEndpoint) error {
-	if !w.OrgLevel() {
-		return nil
-	}
-
 	uses, err := s.webhookUses(ctx)
 	if err != nil {
 		return err

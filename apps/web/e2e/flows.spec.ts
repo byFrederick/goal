@@ -95,9 +95,9 @@ test('the factories home shows each factory’s line, what needs you and the wee
   await page.goto('/o/acme');
   const row = (name: string) =>
     page.getByRole('article').filter({ has: page.getByRole('heading', { name, exact: true }) });
-  await expect(row('software').getByText('Running')).toBeVisible();
-  await expect(row('sre').getByText('Andon pulled')).toBeVisible();
-  await expect(page.getByRole('region', { name: 'sre line' })).toBeVisible();
+  await expect(row('Software').getByText('Running')).toBeVisible();
+  await expect(row('SRE').getByText('Andon pulled')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'SRE line' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Needs you first' })).toBeVisible();
   await expect(
     page.getByRole('region', { name: 'Needs you first' }).getByRole('link', { name: 'Open all' }),
@@ -111,8 +111,8 @@ test('the factories home shows each factory’s line, what needs you and the wee
 test('on a phone: a factory’s name opens its floor, and its line scrolls in its own box', async ({ page }) => {
   test.skip(!isPhone(page), 'the phone layout of the factories home');
   await page.goto('/o/acme');
-  await expect(page.getByRole('region', { name: 'sre line' })).toBeVisible();
-  await page.getByRole('link', { name: 'sre', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'SRE line' })).toBeVisible();
+  await page.getByRole('link', { name: 'SRE', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
 });
 
@@ -154,9 +154,9 @@ test('an unknown organization or factory says so', async ({ page }) => {
 
 test('pages are titled most specific first', async ({ page }) => {
   await page.goto('/o/acme/f/sre/board');
-  await expect(page).toHaveTitle('Board · sre · Acme · Goal');
+  await expect(page).toHaveTitle('Board · SRE · Acme · Goal');
   await page.goto('/o/acme/f/goal/items/12');
-  await expect(page).toHaveTitle('goal#12 · goal · Acme · Goal');
+  await expect(page).toHaveTitle('goal#12 · Goal · Acme · Goal');
 });
 
 test('the sidebar opens a factory and marks its pages', async ({ page }) => {
@@ -166,7 +166,7 @@ test('the sidebar opens a factory and marks its pages', async ({ page }) => {
 
   const sidebar = orgNav(page);
   // The mark is Sr: software, which sorts before sre, also starts with S.
-  const sre = sidebar.getByRole('link', { name: 'Sr sre 3 waiting on you' });
+  const sre = sidebar.getByRole('link', { name: 'Sr SRE 3 waiting on you' });
   await sre.click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/sre$/);
   await expect(sre).toHaveAttribute('aria-current', 'page');
@@ -198,7 +198,7 @@ test('the drawer opens a factory on a phone', async ({ page }) => {
   test.skip(!isPhone(page), 'the drawer is the phone navigation');
   await page.goto('/o/acme');
   await openNavigation(page);
-  const sre = orgNav(page).getByRole('link', { name: 'Sr sre 3 waiting on you' });
+  const sre = orgNav(page).getByRole('link', { name: 'Sr SRE 3 waiting on you' });
   await sre.click();
   await expect(page).toHaveURL(/\/o\/acme\/f\/sre$/);
   await expect(page.getByRole('dialog', { name: 'Acme' })).toBeHidden();
@@ -211,14 +211,14 @@ test('a decision made elsewhere updates the badges without a reload', async ({ p
   await page.goto('/o/acme/f/goal/board');
   await boardIsLive(page);
   await openNavigation(page);
-  const goal = orgNav(page).getByRole('link', { name: /^G goal / });
-  await expect(goal).toHaveAccessibleName('G goal 3 waiting on you, 1 item blocked');
-  await expect(orgNav(page).getByRole('link', { name: /^\S+ sre .*blocked: andon pulled$/ })).toBeVisible();
+  const goal = orgNav(page).getByRole('link', { name: /^G Goal / });
+  await expect(goal).toHaveAccessibleName('G Goal 3 waiting on you, 1 item blocked');
+  await expect(orgNav(page).getByRole('link', { name: /^\S+ SRE .*blocked: andon pulled$/ })).toBeVisible();
 
   // Someone else approves (the CLI, another tab): the stream brings the change.
   await request.post('/v1/orgs/acme/items/goal%2312/approve', { data: {} });
 
-  await expect(goal).toHaveAccessibleName('G goal 2 waiting on you, 1 item blocked');
+  await expect(goal).toHaveAccessibleName('G Goal 2 waiting on you, 1 item blocked');
 });
 
 test('the sidebar marks Home on the organization pages', async ({ page }) => {
@@ -232,7 +232,7 @@ test('the sidebar marks Home on the organization pages', async ({ page }) => {
   await expect(sidebar.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeFocused();
 
-  await page.getByRole('link', { name: 'sre', exact: true }).click();
+  await page.getByRole('link', { name: 'SRE', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Floor' })).toBeVisible();
 });
 
@@ -567,7 +567,7 @@ test('pull the andon cord, then clear it: the line stops and runs again', async 
     await openNavigation(page);
     const goal = orgNav(page)
       .filter({ visible: true })
-      .getByRole('link', { name: /^G goal/ });
+      .getByRole('link', { name: /^G Goal/ });
     if (pulled) await expect(goal).toHaveAccessibleName(name);
     else await expect(goal).not.toHaveAccessibleName(name);
     if (isPhone(page)) {

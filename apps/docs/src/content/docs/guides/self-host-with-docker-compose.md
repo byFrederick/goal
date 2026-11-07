@@ -67,6 +67,10 @@ goald applies the database's new migrations when it starts. Before you upgrade p
 
 On a database that was not converted, migration 00135 refuses to run and changes nothing. goald does not start, and its error says `run a release that converts connections (ADR 0037) first`. Start that release once, then upgrade again.
 
+Before you upgrade past migration 00138, which drops the columns of the old factory webhook endpoints and the old `source` of items, the database must have run ADR 0040's release (migrations 00113 to 00126), and goald must have started on it once. That release moves each factory's webhook endpoint to the organization, signed by a secret.
+
+On a database that has not, migration 00138 refuses to run and changes nothing. goald does not start, and its error says `run ADR 0040's release first, then this one`. Start that release once, then upgrade again.
+
 ## If it does not start
 
 - A refusal that names `GOAL_AUTH=none` means the sign-in settings are missing. Set the variables in step 1, or use `GOAL_AUTH=none`.

@@ -13,7 +13,7 @@ test('factory settings is accessible and fits the screen', async ({ page }) => {
   await page.goto('/o/acme/f/goal/settings');
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'General' })).toBeVisible();
-  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('goal');
+  await expect(page.getByLabel('Name (in URLs and the CLI)', { exact: true })).toHaveValue('goal');
   await expect(page.getByLabel('Purpose')).toHaveAttribute('readonly', '');
   await expect(page.getByRole('region', { name: 'People with access' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'People with access' }).getByText('Organization owner')).toBeVisible();
@@ -69,9 +69,9 @@ test('Save changes is in the top bar, not in the page', async ({ page }) => {
 test('pausing and resuming the factory from the Danger zone', async ({ page }) => {
   await page.goto('/o/acme/f/goal/settings');
   await page.getByRole('button', { name: 'Pause' }).click();
-  await expectToast(page, 'Paused goal');
+  await expectToast(page, 'Paused Goal');
   await page.getByRole('button', { name: 'Resume' }).click();
-  await expectToast(page, 'Resumed goal');
+  await expectToast(page, 'Resumed Goal');
   await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
 });
 

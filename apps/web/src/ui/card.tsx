@@ -8,6 +8,8 @@ interface SectionCardProps extends Omit<ComponentProps<'section'>, 'title'> {
   /** Right side of the header: a link, a count or a menu. */
   aside?: ReactNode;
   headingLevel?: 'h2' | 'h3';
+  /** The heading's id, when something inside the card names itself by the title (`Field`'s `labelledBy`). */
+  headingId?: string;
 }
 
 /** A titled card (the card token, 14px radius) labelled by its heading. */
@@ -16,11 +18,13 @@ export function SectionCard({
   description,
   aside,
   headingLevel: H = 'h2',
+  headingId,
   className,
   children,
   ...props
 }: SectionCardProps) {
-  const id = useId();
+  const generated = useId();
+  const id = headingId ?? generated;
   return (
     <section
       aria-labelledby={id}

@@ -493,7 +493,7 @@ func (s *Store) StartRun(ctx context.Context, r ports.NewRun) (domain.RunID, err
 	err = s.inTx(ctx, func(q *db.Queries) error {
 		err := q.InsertRun(ctx, db.InsertRunParams{
 			ID: id, FactoryID: factory, DefinitionVersionID: version, ItemID: item, Station: r.Station, Agent: r.Agent,
-			Model: r.Model, StartedAt: r.StartedAt, Kind: string(kind),
+			Model: r.Model, StartedAt: r.StartedAt, Kind: string(kind), BoxSize: optional(string(r.Size)),
 		})
 		if isForeignKeyViolation(err) {
 			return fmt.Errorf("insert run: its item or factory: %w", ports.ErrNotFound)
@@ -805,6 +805,8 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 			ID: run, Status: string(res.Status), SessionID: optional(res.SessionID), Turns: int64(res.Turns),
 			InputTokens: res.InputTokens, OutputTokens: res.OutputTokens, CostUsd: res.CostUSD,
 			Error: optional(res.Error), EndedAt: &endedAt, Output: jsonOrNull(res.Output),
+			CpuSeconds: res.CPUSeconds, PeakMemoryBytes: res.PeakMemoryBytes,
+			PeakMemorySource: optional(string(res.PeakMemorySource)),
 		})
 		if notFound(err) {
 			return nil // already finished

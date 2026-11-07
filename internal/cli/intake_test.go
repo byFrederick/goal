@@ -584,7 +584,7 @@ func TestWebhooks_Deliveries(t *testing.T) {
 	}
 }
 
-// create posts the name, the sender (standard by default, --kind generic|github its alias) and
+// create posts the name, the sender (standard by default) and
 // the secret named; a generated value prints alone on stdout, the address and the warning on
 // stderr.
 func TestWebhooks_CreatePrintsSecretOnce(t *testing.T) {
@@ -597,8 +597,6 @@ func TestWebhooks_CreatePrintsSecretOnce(t *testing.T) {
 		sender gen.WebhookSender
 	}{
 		{[]string{intakeEndpoint, "--sender", importedGitHub}, gen.WebhookSenderGithub},
-		{[]string{intakeEndpoint, flagKind, importedGitHub}, gen.WebhookSenderGithub},
-		{[]string{intakeEndpoint, flagKind, "generic"}, gen.WebhookSenderStandard},
 		{[]string{intakeEndpoint}, gen.WebhookSenderStandard},
 	} {
 		stdout, stderr, err := goalIntake(t, g.srv.URL, append([]string{cmdWebhooks, verbCreate}, tc.args...)...)
@@ -755,8 +753,8 @@ func TestIntakeCommands_JSONAsSent(t *testing.T) {
 	}
 }
 
-// Missing or extra arguments, an unknown subcommand (rotate included), a kind other than generic
-// or github, an unknown sender and both --sender and --kind are the usage, before goald is asked.
+// Missing or extra arguments, an unknown subcommand (rotate included), an unknown sender and the
+// removed --kind (ADR 0040 decision 24) are the usage, before goald is asked.
 func TestIntakeCommands_Usage(t *testing.T) {
 	t.Parallel()
 
@@ -781,9 +779,9 @@ func TestIntakeCommands_Usage(t *testing.T) {
 		{cmdWebhooks, subList, argExtra},
 		{cmdWebhooks, verbCreate},
 		{cmdWebhooks, verbCreate, intakeEndpoint, argExtra},
-		{cmdWebhooks, verbCreate, intakeEndpoint, flagKind, "gitlab"},
+		{cmdWebhooks, verbCreate, intakeEndpoint, flagKind, importedGitHub},
+		{cmdWebhooks, verbCreate, intakeEndpoint, flagKind, "generic"},
 		{cmdWebhooks, verbCreate, intakeEndpoint, "--sender", "bitbucket"},
-		{cmdWebhooks, verbCreate, intakeEndpoint, "--sender", importedGitHub, flagKind, importedGitHub},
 		{cmdWebhooks, subOpen, intakeEndpoint},
 		{cmdWebhooks, subOpen, intakeEndpoint, intakeFactory, argExtra},
 		{cmdWebhooks, subClose, intakeEndpoint},

@@ -534,7 +534,7 @@ func itemPath(kind domain.KnowledgeSourceKind, item domain.SourceItem, taken map
 		if item.Folder != "" && domain.CheckFilePath(item.Folder) == nil && domain.CheckFilePath(in) == nil && len(markdownName(in))+len("-")+hashChars <= domain.MaxFilePath {
 			name = in
 		}
-	case domain.SourceRepository, domain.SourceSynced, domain.SourceLive:
+	case domain.SourceRepository, domain.SourceSynced:
 		name = item.ID
 	}
 

@@ -70,7 +70,7 @@ func (h *harness) receive(t *testing.T, ev domain.IntakeEvent) domain.TriggerFir
 func (h *harness) items(t *testing.T) int {
 	t.Helper()
 
-	tally, err := h.intake.SourceTally(inOrg(t), factoryID, time.Time{})
+	tally, err := h.intake.OriginTally(inOrg(t), factoryID, time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,15 +117,14 @@ func TestIntake_MatchCreatesItem(t *testing.T) {
 		Type, Station, Lane string
 		State               domain.ItemState
 		Class               domain.ClassOfService
-		Source              domain.ItemSource
 		Trigger             string
 		Origin              domain.Origin
 		CreatedBy           string
 	}
 
-	got := placed{it.Type, it.Station, it.Lane, it.State, it.Class, it.Source, it.Trigger, it.Origin, it.CreatedBy}
+	got := placed{it.Type, it.Station, it.Lane, it.State, it.Class, it.Trigger, it.Origin, it.CreatedBy}
 	if want := (placed{
-		typeFeature, stWork, laneBack, domain.StateQueued, domain.ClassExpedite, domain.ItemFromGitHub, trFlaky, domain.OriginTrigger,
+		typeFeature, stWork, laneBack, domain.StateQueued, domain.ClassExpedite, trFlaky, domain.OriginTrigger,
 		domain.EngineActor.Ref(),
 	}); got != want {
 		t.Errorf("item = %+v; want the trigger's create %+v", got, want)
