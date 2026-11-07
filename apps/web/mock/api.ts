@@ -1740,6 +1740,8 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
       jonah.reset();
       views.reset();
       webhooks.reset();
+      policy.reset();
+      // Spend is derived from the budgets and the clock: it keeps no state to reset.
       // A reset that signs someone in sets their session cookie on whoever asked (page.request).
       const cookie = auth.reset(authSettings(body.auth));
       if (cookie) res.setHeader('Set-Cookie', cookie);
