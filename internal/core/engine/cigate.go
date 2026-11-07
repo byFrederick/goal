@@ -85,7 +85,7 @@ func (e *Engine) ciGate(ctx context.Context, log *slog.Logger, c claimed) (strin
 		case !ok, w.Outcome == domain.CIUnreadable && w.EndedAt.Before(reset):
 			pending = append(pending, cm)
 		case w.Outcome == domain.CIUnreadable:
-			unreadable = append(unreadable, e.ciUnreadable(ctx, c.line, w))
+			unreadable = append(unreadable, ciUnreadable(c.line, w))
 		default:
 			settled = append(settled, w)
 		}
@@ -144,7 +144,7 @@ func (e *Engine) withPullRequests(ctx context.Context, log *slog.Logger, l domai
 		}
 
 		commits[i].prURL = url
-		if head, err := e.pullRequestHead(ctx, l, it, url, commits[i].sha); err != nil {
+		if head, err := e.pullRequestHead(ctx, l, url, commits[i].sha); err != nil {
 			log.WarnContext(ctx, "ci gate kept the pushed head", slog.String("pull_request", url), slog.Any("error", err))
 		} else {
 			commits[i].sha = head
@@ -179,7 +179,7 @@ func pushedHeads(runs []domain.Run) []ciCommit {
 
 // pullRequestHead is the current head of the pull request at url, which Checks returns with the
 // checks of sha, read with the host and token a merge uses (repositoryHost).
-func (e *Engine) pullRequestHead(ctx context.Context, l domain.Line, it domain.Item, url, sha string) (string, error) {
+func (e *Engine) pullRequestHead(ctx context.Context, l domain.Line, url, sha string) (string, error) {
 	t, err := e.repositoryHost(ctx, l, url)
 	if err != nil {
 		return "", err
@@ -263,7 +263,7 @@ func (e *Engine) waitForCI(ctx context.Context, log *slog.Logger, c claimed, com
 // ciUnreadable is the block reason for w, a wait that ended because the token cannot read CI
 // (ADR 0044 decision 8): the repository and commit, the token's source and the permission it
 // needs, from the poll's recorded error.
-func (e *Engine) ciUnreadable(ctx context.Context, l domain.Line, w domain.CIWaitRecord) string {
+func ciUnreadable(l domain.Line, w domain.CIWaitRecord) string {
 	why := w.Poll.LastError
 	if why == "" {
 		why = "the token cannot read CI"
