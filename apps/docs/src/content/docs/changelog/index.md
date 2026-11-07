@@ -7,6 +7,7 @@ This page lists the changes a person using Goal would notice, newest first, grou
 
 ## Week of 2026-11-02
 
+- Home's row for a published line that has no model key now says **Needs a model key**, as the Floor does, instead of a green **Running**. In onboarding, the Code card's text wraps between words at 375 px instead of splitting "repository" in the middle.
 - The Floor's Where work waits card no longer suggests one more agent that saves under an hour of lead time (or under a tenth of it), or at a station whose WIP limit already caps its slots. A spend under $1 a day reads "Under $1 more a day" instead of "$0".
 - On the Floor, a line without repositories says "done" instead of "merged" at its Done station and in Throughput by week, and Throughput by week starts at the factory's first week instead of 12 weeks back.
 - A new version of Goal is ready now shows only when a newer build than the page runs is waiting. After a deploy, a tab that already loaded the new build no longer shows the toast on every page.
