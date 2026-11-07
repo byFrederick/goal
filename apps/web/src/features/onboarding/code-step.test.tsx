@@ -93,6 +93,8 @@ beforeEach(() => {
         ],
       },
     },
+    etags: { basics: 'b1', line: 'l1', agents: 'a1', connections: 'c1', review: 'r1' },
+    revision: 1,
   } as never);
 });
 
