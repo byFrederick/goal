@@ -1,6 +1,6 @@
 ## When you change
 
-The engine's tool approvals or the domain functions they read: `internal/core/engine/toolapproval.go` (`RequestToolApproval`, `DecideToolApproval`, `RevokeStandingRule`, the "## Approved tool calls" and "## Denied tool calls" briefs) or `internal/core/domain/toolapproval.go` (`OpenToolApproval`, `ToolDecisionsSinceLastRun`, `GrantedCalls`, `EffectiveToolModes`, `CanonicalJSON`)
+The engine's tool approvals or the domain functions they read: `internal/core/engine/toolapproval.go` (`RequestToolApproval`, `DecideToolApproval`, `RevokeStandingRule`, the "## Approved tool calls" and "## Denied tool calls" briefs) or `internal/core/domain/toolapproval.go` (`OpenToolApproval`, `ToolDecisionsSinceLastRun`, `GrantedCalls`, `ServerToolModes`, `CanonicalJSON`)
 
 ## Also change
 
