@@ -281,3 +281,18 @@ export async function pinClock(page: Page, request: APIRequestContext, at = '12:
   await page.clock.setFixedTime(browser);
   return noon;
 }
+
+/**
+ * Makes the constraint's one-more-agent estimate save `hours`, so a test of the what-if button does not depend on
+ * the mock's figures, which move with the time of day.
+ */
+export async function setConstraintSaving(page: Page, hours: number) {
+  await page.route(/\/factories\/[^/]+\/constraint(\?|$)/, async (route) => {
+    const response = await route.fetch();
+    const report = await response.json();
+    for (const candidate of report.candidates) {
+      if (candidate.estimate) candidate.estimate.extra_slot_saves_hours = hours;
+    }
+    await route.fulfill({ response, json: report });
+  });
+}
