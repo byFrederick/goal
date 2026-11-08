@@ -27,6 +27,6 @@ Save the policy on the revision you read. The API sends it as the `ETag`, and `P
 ## When a model is not allowed
 
 - **Publishing:** a definition whose `spec.runtime.model` or an agent's `model` is not on the allowlist gets the error `model-not-allowed` at that key, naming the agent and the allowed models. Fix the model or allow it in the policy.
-- **Running:** the engine checks the policy again when it claims an item. When the policy no longer allows the model an agent runs on, the run does not start. The item waits at its station with the reason in its event, which names the model, the agent and the allowed models. Choose an allowed model for the agent, or allow the model in the policy.
+- **Running:** the engine checks the policy again when it claims an item. When the policy no longer allows the model an agent runs on, the run does not start. The item waits for a person, in Needs you with the reason in its event, which names the model, the agent and the allowed models. Choose an allowed model for the agent, or allow the model in the policy.
 
 See also [Agents](/docs/concepts/agents/) and [Access and secrets](/docs/concepts/access-and-secrets/). The decision behind the policy is ADR 0024.
