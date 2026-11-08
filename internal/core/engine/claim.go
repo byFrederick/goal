@@ -175,6 +175,28 @@ func (e *Engine) claimFor(ctx context.Context, o *orgTurn, tick *tickState) (boo
 	return false, errors.Join(errs...)
 }
 
+// firstTurn starts a station's turns in a tick: it holds the waiting items whose paths overlap
+// an earlier open item's and reads which slots are held.
+func (e *Engine) firstTurn(ctx context.Context, l domain.Line, st domain.Station, s *stationTurn) error {
+	if err := e.holdOverlaps(ctx, l, st); err != nil {
+		return err
+	}
+
+	leases, err := e.store.Leases(ctx, l.FactoryID, st.ID)
+	if err != nil {
+		return fmt.Errorf("station %s: list leases: %w", st.ID, err)
+	}
+
+	s.taken = make(map[int]bool, len(leases))
+	s.empty = map[string]bool{}
+
+	for _, ls := range leases {
+		s.taken[ls.Slot] = true
+	}
+
+	return nil
+}
+
 // claimAt claims the next item waiting at one agent station into a free slot and starts its
 // run. On its first turn in a tick it first holds the waiting items whose paths overlap an
 // open item's that goes first on the line (holdOverlaps), so the claim gate skips them. At a
@@ -186,22 +208,9 @@ func (e *Engine) claimFor(ctx context.Context, o *orgTurn, tick *tickState) (boo
 // as it was: the factory or the organization is what is done.
 func (e *Engine) claimAt(ctx context.Context, l domain.Line, st domain.Station, s *stationTurn) (bool, error) {
 	if s.taken == nil {
-		if err := e.holdOverlaps(ctx, l, st); err != nil {
+		if err := e.firstTurn(ctx, l, st, s); err != nil {
 			s.done = true
 			return false, err
-		}
-
-		leases, err := e.store.Leases(ctx, l.FactoryID, st.ID)
-		if err != nil {
-			s.done = true
-			return false, fmt.Errorf("station %s: list leases: %w", st.ID, err)
-		}
-
-		s.taken = make(map[int]bool, len(leases))
-		s.empty = map[string]bool{}
-
-		for _, ls := range leases {
-			s.taken[ls.Slot] = true
 		}
 	}
 
@@ -222,7 +231,7 @@ func (e *Engine) claimAt(ctx context.Context, l domain.Line, st domain.Station, 
 		})
 
 		switch {
-		case errors.Is(err, ports.ErrNoWork) && lanes.Lane == "" && len(lanes.Exclude) == 0:
+		case errors.Is(err, ports.ErrNoWork) && lanes.TakesEvery():
 			s.done = true // a slot that takes every lane found nothing: nothing waits
 			return false, nil
 		case errors.Is(err, ports.ErrNoWork):

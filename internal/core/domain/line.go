@@ -548,6 +548,11 @@ func (sl SlotLane) Takes(lane string) bool {
 	return !slices.Contains(sl.Exclude, lane)
 }
 
+// TakesEvery reports whether the slot takes every item, whatever its lane.
+func (sl SlotLane) TakesEvery() bool {
+	return sl.Lane == "" && len(sl.Exclude) == 0
+}
+
 // SlotLanes lays out the station's Capacity() slots (ADR 0012 decision 9): each lane with a
 // route count keeps that many consecutive slots, the lanes sorted by name and cut off at the
 // capacity, and the slots after them are shared, excluding every lane with a count. Without

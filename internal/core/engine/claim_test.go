@@ -259,8 +259,8 @@ func TestEngine_ClaimKeepsSlotsForALane(t *testing.T) {
 
 	build := domain.Station{
 		ID: stWork, Kind: domain.KindAgent, Agents: 3,
-		Route:       map[string]string{"backend": agBackend, "frontend": agFrontend},
-		RouteAgents: map[string]int{"backend": 1},
+		Route:       map[string]string{laneBack: agBackend, laneFront: agFrontend},
+		RouteAgents: map[string]int{laneBack: 1},
 	}
 
 	release := make(chan struct{})
@@ -273,7 +273,8 @@ func TestEngine_ClaimKeepsSlotsForALane(t *testing.T) {
 
 	// The backend items go first in pull order, so slots that ignored lanes would take them both.
 	lane := map[domain.ItemID]string{}
-	for i, l := range []string{"backend", "backend", "frontend", "frontend", "frontend", "frontend"} {
+
+	for i, l := range []string{laneBack, laneBack, laneFront, laneFront, laneFront, laneFront} {
 		it := h.submit(t, domain.NewItem{Title: l, Lane: l, Priority: 6 - i})
 		lane[it.ID] = l
 	}
@@ -290,11 +291,12 @@ func TestEngine_ClaimKeepsSlotsForALane(t *testing.T) {
 	}
 
 	got := map[int]string{}
+
 	for _, l := range leases {
 		got[l.Slot] = lane[l.ItemID]
 	}
 
-	want := map[int]string{0: "backend", 1: "frontend", 2: "frontend"}
+	want := map[int]string{0: laneBack, 1: laneFront, 2: laneFront}
 	if !maps.Equal(got, want) {
 		t.Fatalf("slots hold lanes %v; want %v", got, want)
 	}
@@ -305,8 +307,9 @@ func TestEngine_ClaimKeepsSlotsForALane(t *testing.T) {
 	}
 
 	var backend int
+
 	for _, it := range waiting {
-		if it.Lane == "backend" {
+		if it.Lane == laneBack {
 			backend++
 		}
 	}

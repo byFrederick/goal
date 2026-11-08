@@ -299,12 +299,15 @@ func TestStation_WaitsForCI(t *testing.T) {
 	}
 }
 
+// laneData is the lane the slot layout tests keep slots for.
+const laneData = "data"
+
 // Kept slots come first, by lane name, cut off at the station's capacity; the rest are shared
 // and take no lane that keeps slots.
 func TestStation_SlotLanes(t *testing.T) {
 	t.Parallel()
 
-	route := map[string]string{"api": "api-dev", "backend": "api-dev", "web": "web-dev"}
+	route := map[string]string{"db": "db-dev", laneData: "db-dev", "ui": "ui-dev"}
 
 	for _, tt := range []struct {
 		name string
@@ -314,18 +317,18 @@ func TestStation_SlotLanes(t *testing.T) {
 		{"no counts", Station{Kind: KindAgent, Route: route, Agents: 2}, []SlotLane{{}, {}}},
 		{
 			"one lane keeps one of three",
-			Station{Kind: KindAgent, Route: route, Agents: 3, RouteAgents: map[string]int{"backend": 1}},
-			[]SlotLane{{Lane: "backend"}, {Exclude: []string{"backend"}}, {Exclude: []string{"backend"}}},
+			Station{Kind: KindAgent, Route: route, Agents: 3, RouteAgents: map[string]int{laneData: 1}},
+			[]SlotLane{{Lane: laneData}, {Exclude: []string{laneData}}, {Exclude: []string{laneData}}},
 		},
 		{
 			"lanes in name order",
-			Station{Kind: KindAgent, Route: route, Agents: 5, RouteAgents: map[string]int{"web": 1, "api": 2}},
-			[]SlotLane{{Lane: "api"}, {Lane: "api"}, {Lane: "web"}, {Exclude: []string{"api", "web"}}, {Exclude: []string{"api", "web"}}},
+			Station{Kind: KindAgent, Route: route, Agents: 5, RouteAgents: map[string]int{"ui": 1, "db": 2}},
+			[]SlotLane{{Lane: "db"}, {Lane: "db"}, {Lane: "ui"}, {Exclude: []string{"db", "ui"}}, {Exclude: []string{"db", "ui"}}},
 		},
 		{
 			"cut off at wip",
-			Station{Kind: KindAgent, Route: route, Agents: 4, WIP: 2, RouteAgents: map[string]int{"web": 1, "api": 2}},
-			[]SlotLane{{Lane: "api"}, {Lane: "api"}},
+			Station{Kind: KindAgent, Route: route, Agents: 4, WIP: 2, RouteAgents: map[string]int{"ui": 1, "db": 2}},
+			[]SlotLane{{Lane: "db"}, {Lane: "db"}},
 		},
 	} {
 		if got := tt.st.SlotLanes(); !reflect.DeepEqual(got, tt.want) {
@@ -339,19 +342,27 @@ func TestStation_SlotLanes(t *testing.T) {
 func TestSlotLane_Takes(t *testing.T) {
 	t.Parallel()
 
-	kept, shared := SlotLane{Lane: "backend"}, SlotLane{Exclude: []string{"backend"}}
+	kept, shared := SlotLane{Lane: laneData}, SlotLane{Exclude: []string{laneData}}
 
 	for _, tt := range []struct {
 		slot SlotLane
 		lane string
 		want bool
 	}{
-		{kept, "backend", true}, {kept, "web", false}, {kept, "", false},
-		{shared, "backend", false}, {shared, "web", true}, {shared, "", true},
-		{SlotLane{}, "backend", true},
+		{kept, laneData, true},
+		{kept, "ui", false},
+		{kept, "", false},
+		{shared, laneData, false},
+		{shared, "ui", true},
+		{shared, "", true},
+		{SlotLane{}, laneData, true},
 	} {
 		if got := tt.slot.Takes(tt.lane); got != tt.want {
 			t.Errorf("%#v takes %q = %v, want %v", tt.slot, tt.lane, got, tt.want)
 		}
+	}
+
+	if kept.TakesEvery() || shared.TakesEvery() || !(SlotLane{}).TakesEvery() {
+		t.Error("only the zero slot lane takes every lane")
 	}
 }
