@@ -21,6 +21,7 @@ import { SectionCard } from '../../ui/card';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
 import { touchLink } from '../../ui/touch-target';
+import { buildCacheClass, buildCacheLabel } from '../runs/build-cache';
 import { activeRun, type RunEntry, runRole, type Trace } from './timeline';
 
 /** The run the item is in, else the one that worked it last. */
@@ -123,6 +124,12 @@ export function DetailsCard({
     if (owner) rows.push({ label: 'Owner', value: owner });
     if (run) rows.push({ label: 'Working on it', value: runRole(run) });
     if (run?.model) rows.push({ label: 'Model', value: run.model });
+    const cache = run ? runs.find((r) => r.id === run.id)?.build_cache : null;
+    if (cache)
+      rows.push({
+        label: 'Build cache',
+        value: <span className={buildCacheClass(cache)}>{buildCacheLabel(cache)}</span>,
+      });
     const station = item.lane ? `${humanize(item.station)}, ${item.lane} lane` : humanize(item.station);
     rows.push({ label: 'Station', value: station });
     if (code.data === true || repositories.length > 1) {
