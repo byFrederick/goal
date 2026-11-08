@@ -22,6 +22,7 @@ import { ViewOnlyBanner } from '../../ui/view-only-banner';
 import { SectionView } from './definition-page';
 import { useDraft, useDraftSession, useModel } from './draft/use-draft';
 import { ConflictDialog, DiscardedDialog, FileConflictDialog } from './frame/conflict-dialog';
+import { DraftLoading } from './frame/draft-states';
 import { useUndoKeys } from './frame/editor-frame';
 import { UnsavedGuard } from './frame/unsaved-guard';
 import { DraftSaved, WizardFooter, WizardHeader, WizardViewToggle } from './frame/wizard-frame';
@@ -87,6 +88,9 @@ export function WizardEditor({
   });
 
   const name = model.basics.name || detail.data?.name || 'New factory';
+
+  // A published factory must never flash the draft wizard (and its Delete) while its detail loads.
+  if (detail.isPending) return <DraftLoading />;
 
   if (detail.data?.current) {
     return (
