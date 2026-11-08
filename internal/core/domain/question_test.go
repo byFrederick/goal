@@ -83,10 +83,11 @@ func TestAnswersSinceLastRun(t *testing.T) {
 	two := 1
 
 	events := []Event{
-		ev(1, EventRunStarted), asked(2, "Old?"), answered(3, "old", nil),
-		ev(4, EventRunStarted), asked(5, "Org or factory?", "Org", "Factory"), answered(6, "Factory", float64(1)),
-		asked(7, "Withdrawn?"), ev(8, EventMoved),
-		asked(9, "Free?"), answered(10, "Write it short.", nil),
+		started(1, runOne), agentStarted(2, runOne), asked(3, "Old?"), answered(4, "old", nil),
+		started(5, "run-2"), agentStarted(6, "run-2"),
+		asked(7, "Org or factory?", "Org", "Factory"), answered(8, "Factory", float64(1)),
+		asked(9, "Withdrawn?"), ev(10, EventMoved),
+		asked(11, "Free?"), answered(12, "Write it short.", nil),
 	}
 
 	got := AnswersSinceLastRun(events)
@@ -103,7 +104,25 @@ func TestAnswersSinceLastRun(t *testing.T) {
 		t.Errorf("second answer %+v; want the free text and no choice", got[1])
 	}
 
-	if none := AnswersSinceLastRun(append(events, ev(11, EventRunStarted))); len(none) != 0 {
-		t.Errorf("after a later run started: %+v; want none", none)
+	if none := AnswersSinceLastRun(append(events, started(13, "run-3"), agentStarted(14, "run-3"))); len(none) != 0 {
+		t.Errorf("after a later run's agent started: %+v; want none", none)
+	}
+}
+
+func TestAnswersSinceLastRun_KeepsWhatARunWhoseAgentNeverStartedMissed(t *testing.T) {
+	t.Parallel()
+
+	events := []Event{
+		asked(1, "Remove it?"), answered(2, "Yes", nil),
+		started(3, "run-2"), // prepare failed: its agent never started
+		started(4, "run-3"),
+	}
+
+	if got := AnswersSinceLastRun(events); len(got) != 1 || got[0].Answer != "Yes" {
+		t.Errorf("AnswersSinceLastRun = %+v; want the answer run-2's agent never read", got)
+	}
+
+	if none := AnswersSinceLastRun(append(events, agentStarted(5, "run-3"))); len(none) != 0 {
+		t.Errorf("after run-3's agent started: %+v; want none", none)
 	}
 }

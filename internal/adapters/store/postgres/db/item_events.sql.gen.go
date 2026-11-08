@@ -316,12 +316,17 @@ const notesSinceLastRun = `-- name: NotesSinceLastRun :many
 SELECT n.id, n.factory_id, n.item_id, n.run_id, n.at, n.kind, n.station, n.actor, n.data, n.org_id FROM item_events n
 WHERE n.item_id = $1 AND n.kind IN ('note', 'item_note')
   AND n.id > coalesce((SELECT max(r.id) FROM item_events r
-                       WHERE r.item_id = $1 AND r.kind = 'run_started'), 0)
+                       WHERE r.item_id = $1 AND r.kind = 'run_started'
+                         AND EXISTS (SELECT 1 FROM item_events a
+                                     WHERE a.item_id = $1 AND a.kind = 'agent_started'
+                                       AND a.run_id = r.run_id AND a.id > r.id)), 0)
 ORDER BY n.id
 `
 
-// An item's notes, a person's and other items' (item_note), after its latest run_started event,
-// both on item_events_item_idx: what the next run's brief carries.
+// An item's notes, a person's and other items' (item_note), after the run_started event of its
+// latest run whose agent started (an agent_started event with the same run_id; domain.
+// SinceLastBrief), on item_events_item_idx: what the next run's brief carries. A run that failed
+// before its agent started read no brief, so the notes before it stay.
 func (q *Queries) NotesSinceLastRun(ctx context.Context, itemID uuid.UUID) ([]ItemEvent, error) {
 	rows, err := q.db.Query(ctx, notesSinceLastRun, itemID)
 	if err != nil {

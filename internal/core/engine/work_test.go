@@ -78,7 +78,7 @@ func TestRun_SuccessMovesItemToTheNextStation(t *testing.T) {
 
 			wantKinds := []domain.EventKind{
 				domain.EventCreated, domain.EventMoved, domain.EventClaimed, domain.EventRunStarted, domain.EventSandboxStarted,
-				domain.EventPrepared, domain.EventRunFinished,
+				domain.EventPrepared, domain.EventAgentStarted, domain.EventRunFinished,
 			}
 			if !slices.Equal(h.kinds(it.ID)[:len(wantKinds)], wantKinds) {
 				t.Errorf("events %v, want them to start with %v", h.kinds(it.ID), wantKinds)
