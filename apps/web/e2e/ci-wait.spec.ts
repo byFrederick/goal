@@ -58,6 +58,8 @@ async function patchBoard(page: Page, waiting: unknown): Promise<() => string | 
 // On a phone, picks the patched station's tab so its column is the one shown.
 async function showStation(page: Page, station: () => string | undefined) {
   await expect.poll(station).toBeDefined();
+  // The tabs render with the board's first cards; checking them earlier skips the click on a phone.
+  await expect(page.getByRole('article').first()).toBeVisible();
   const tab = page.locator(`[role="tab"][data-station="${station()}"]`);
   if (await tab.isVisible()) await tab.click();
 }

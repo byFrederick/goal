@@ -257,28 +257,26 @@ function Matrix({ groups, now }: { groups: readonly AccessGroup[]; now: number }
                     // The organization's own setting: no factory or environment uses it.
                     <td colSpan={columns.length || 1} />
                   ) : (
-                    <>
-                      {columns.map((c) => {
-                        const use = row.uses.find((u) => placeLabel(u) === placeLabel(c));
-                        return (
-                          <td key={placeLabel(c)} className="text-center">
-                            {use ? (
-                              <EnvLink
-                                use={use}
-                                label={`${row.name} in ${placeLabel(use)}`}
-                                className="inline-flex size-6 items-center justify-center"
-                              >
-                                <span aria-hidden="true" className="size-2 rounded-full bg-ink" />
-                              </EnvLink>
-                            ) : (
-                              <span aria-hidden="true" className="text-muted">
-                                –
-                              </span>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </>
+                    columns.map((c) => {
+                      const use = row.uses.find((u) => placeLabel(u) === placeLabel(c));
+                      return (
+                        <td key={placeLabel(c)} className="text-center">
+                          {use ? (
+                            <EnvLink
+                              use={use}
+                              label={`${row.name} in ${placeLabel(use)}`}
+                              className="inline-flex size-6 items-center justify-center"
+                            >
+                              <span aria-hidden="true" className="size-2 rounded-full bg-ink" />
+                            </EnvLink>
+                          ) : (
+                            <span aria-hidden="true" className="text-muted">
+                              –
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })
                   )}
                   <td>
                     <Keys row={row} />
