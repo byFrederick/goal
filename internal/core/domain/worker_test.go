@@ -160,7 +160,7 @@ func TestWorkerFinished_ResultKeepsAKnownBuildCache(t *testing.T) {
 		{"off", `,"build_cache":"off"`, BuildCacheOff},
 		{"error", `,"build_cache":"error"`, BuildCacheError},
 		{"unknown value", `,"build_cache":"warm"`, ""},
-		{"null", `,"build_cache":null`, ""},
+		{"null value", `,"build_cache":null`, ""},
 		{"missing", ``, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
