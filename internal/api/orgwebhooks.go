@@ -217,7 +217,27 @@ func (s *server) ListOrgWebhookDeliveries(ctx context.Context, req gen.ListOrgWe
 		return nil, err
 	}
 
+	if page.UnnamedDays, err = s.unnamedDays(ctx, w.ID); err != nil {
+		return nil, err
+	}
+
 	return gen.ListOrgWebhookDeliveries200JSONResponse(page), nil
+}
+
+// unnamedDays are webhook id's daily counts of deliveries no trigger named over the delivery
+// log's window, from the UTC day domain.DeliveryRetention ago through today, oldest first.
+func (s *server) unnamedDays(ctx context.Context, id domain.WebhookEndpointID) ([]gen.WebhookUnnamedDay, error) {
+	counts, err := s.intake.UnnamedDays(ctx, id, s.clock.Now().Add(-domain.DeliveryRetention))
+	if err != nil {
+		return nil, webhookError(err)
+	}
+
+	out := make([]gen.WebhookUnnamedDay, 0, len(counts))
+	for _, c := range counts {
+		out = append(out, gen.WebhookUnnamedDay{Day: openapi_types.Date{Time: c.Day}, Count: c.Count})
+	}
+
+	return out, nil
 }
 
 func (s *server) GetOrgWebhookDelivery(ctx context.Context, req gen.GetOrgWebhookDeliveryRequestObject) (gen.GetOrgWebhookDeliveryResponseObject, error) {

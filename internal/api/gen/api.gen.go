@@ -8791,7 +8791,7 @@ type WebhookDeliveryDay struct {
 	// Day The UTC day
 	Day openapi_types.Date `json:"day"`
 
-	// Delivered Deliveries accepted
+	// Delivered Deliveries accepted, with or without an item created, including those no enabled trigger names
 	Delivered int `json:"delivered"`
 	Refused   int `json:"refused"`
 }
@@ -8838,6 +8838,9 @@ type WebhookDeliveryPage struct {
 
 	// NextAfter Pass as `after` for the next page; null on the last page
 	NextAfter *string `json:"next_after"`
+
+	// UnnamedDays The webhook's daily counts of accepted deliveries no enabled trigger names, which the log does not keep, from the UTC day 30 days ago through today, oldest first; a day without one has no entry
+	UnnamedDays []WebhookUnnamedDay `json:"unnamed_days"`
 }
 
 // WebhookDeliveryRequest defines model for WebhookDeliveryRequest.
@@ -8940,6 +8943,15 @@ type WebhookTrigger struct {
 	Factory     string `json:"factory"`
 	FactoryName string `json:"factory_name"`
 	Trigger     string `json:"trigger"`
+}
+
+// WebhookUnnamedDay defines model for WebhookUnnamedDay.
+type WebhookUnnamedDay struct {
+	// Count Accepted deliveries no enabled trigger named that day
+	Count int `json:"count"`
+
+	// Day The UTC day
+	Day openapi_types.Date `json:"day"`
 }
 
 // WeekCost defines model for WeekCost.
@@ -11918,7 +11930,7 @@ type ClientInterface interface {
 
 	// ListOrgWebhookDeliveries One page of a webhook's deliveries, newest first
 	//
-	// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
+	// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). The log keeps only deliveries an enabled trigger names; the others, such as GitHub's ping or one that arrives before a trigger names the webhook, are only counted per UTC day, and unnamed_days carries those counts for the log's 30 days. Every page carries the same unnamed_days. 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
 	//
 	// Corresponds with GET /v1/orgs/{org}/webhooks/{webhook}/deliveries (the `ListOrgWebhookDeliveries` operationId).
 	ListOrgWebhookDeliveries(ctx context.Context, org OrgRef, webhook WebhookRef, params *ListOrgWebhookDeliveriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -16375,7 +16387,7 @@ func (c *Client) PatchWebhook(ctx context.Context, org OrgRef, webhook WebhookRe
 
 // ListOrgWebhookDeliveries One page of a webhook's deliveries, newest first
 //
-// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
+// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). The log keeps only deliveries an enabled trigger names; the others, such as GitHub's ping or one that arrives before a trigger names the webhook, are only counted per UTC day, and unnamed_days carries those counts for the log's 30 days. Every page carries the same unnamed_days. 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
 //
 // Corresponds with GET /v1/orgs/{org}/webhooks/{webhook}/deliveries (the `ListOrgWebhookDeliveries` operationId).
 func (c *Client) ListOrgWebhookDeliveries(ctx context.Context, org OrgRef, webhook WebhookRef, params *ListOrgWebhookDeliveriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -28912,7 +28924,7 @@ type ClientWithResponsesInterface interface {
 
 	// ListOrgWebhookDeliveriesWithResponse One page of a webhook's deliveries, newest first
 	//
-	// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
+	// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). The log keeps only deliveries an enabled trigger names; the others, such as GitHub's ping or one that arrives before a trigger names the webhook, are only counted per UTC day, and unnamed_days carries those counts for the log's 30 days. Every page carries the same unnamed_days. 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -41875,7 +41887,7 @@ func (c *ClientWithResponses) PatchWebhookWithResponse(ctx context.Context, org 
 
 // ListOrgWebhookDeliveriesWithResponse One page of a webhook's deliveries, newest first
 //
-// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
+// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). The log keeps only deliveries an enabled trigger names; the others, such as GitHub's ping or one that arrives before a trigger names the webhook, are only counted per UTC day, and unnamed_days carries those counts for the log's 30 days. Every page carries the same unnamed_days. 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
 //
 // Returns a wrapper object for the known response body format(s).
 //

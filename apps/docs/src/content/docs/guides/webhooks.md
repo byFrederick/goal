@@ -43,10 +43,12 @@ goal webhooks list
 goal webhooks deliveries github-acme --limit 20
 ```
 
-`list` shows each webhook's sender, address, signing secret's name, open factories, the triggers that use it and its deliveries in 7 days; never a secret's value. The triggers are those of its open factories that name the webhook, enabled or not, and the enabled ones that name its sender with an event, by factory name, then trigger. `deliveries` lists what it received, newest first, in the columns RECEIVED, OUTCOME, RECEIPT, REASON, ITEM and EVALUATIONS. EVALUATIONS is `<factory>: <outcome>` for each factory, by factory name, or the evaluation's state (`pending`) while it has no outcome; a column with nothing to show prints `-`. With `--json` it prints the API's answer, where each delivery has its `event` and these fields:
+`list` shows each webhook's sender, address, signing secret's name, open factories, the triggers that use it and its deliveries in 7 days; never a secret's value. The 7-day count of delivered deliveries includes those no enabled trigger names, such as GitHub's ping or one that arrives before a trigger names the webhook, which goald only counts. The triggers are those of its open factories that name the webhook, enabled or not, and the enabled ones that name its sender with an event, by factory name, then trigger. `deliveries` lists what it received, newest first, in the columns RECEIVED, OUTCOME, RECEIPT, REASON, ITEM and EVALUATIONS. EVALUATIONS is `<factory>: <outcome>` for each factory, by factory name, or the evaluation's state (`pending`) while it has no outcome; a column with nothing to show prints `-`. With `--json` it prints the API's answer, where each delivery has its `event` and these fields:
 
 - **`receipt`:** `accepted`, `duplicate` or `refused`, with the `reason` when refused. A duplicate keeps no row of its own: the webhook already took this delivery id, nothing is created, and the first delivery's `duplicates` counts it.
 - **`evaluations`, per factory, by factory name:** `created` with the item and its ref (`acme#88`), `skipped` with the reason, or `failed` with the error.
+
+The answer also carries `unnamed_days`: the webhook's counts of accepted deliveries no enabled trigger names, which the log does not list, as `{day, count}` per UTC day over the log's 30 days, oldest first. A day without one has no entry, and every page carries the same counts.
 
 `goal webhooks list --json` also gives each webhook's `pinged_at`, when goald last accepted GitHub's ping, and its `setup_events`: the events its enabled triggers use, the ones to choose in GitHub. `setup_all_events` is true when a trigger names the webhook with no event.
 

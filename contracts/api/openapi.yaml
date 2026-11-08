@@ -3144,8 +3144,11 @@ paths:
       summary: One page of a webhook's deliveries, newest first
       description: >-
         What the webhook received in the last 30 days, each with its outcome, without its headers
-        and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not
-        answer; 404 webhook-not-found.
+        and body (getOrgWebhookDelivery). The log keeps only deliveries an enabled trigger names;
+        the others, such as GitHub's ping or one that arrives before a trigger names the webhook,
+        are only counted per UTC day, and unnamed_days carries those counts for the log's 30 days.
+        Every page carries the same unnamed_days. 400 webhook-invalid for a cursor this route did
+        not answer; 404 webhook-not-found.
       parameters:
         - name: limit
           in: query
@@ -10359,7 +10362,9 @@ components:
       required: [day, delivered, refused]
       properties:
         day: { type: string, format: date, description: The UTC day }
-        delivered: { type: integer, description: Deliveries accepted, with or without an item created }
+        delivered:
+          type: integer
+          description: Deliveries accepted, with or without an item created, including those no enabled trigger names
         refused: { type: integer }
     WebhookDeliveryOutcome:
       type: string
@@ -10428,15 +10433,28 @@ components:
         number: { type: integer, format: int64 }
     WebhookDeliveryPage:
       type: object
-      required: [deliveries, next_after]
+      required: [deliveries, next_after, unnamed_days]
       properties:
         deliveries:
           type: array
           items: { $ref: "#/components/schemas/WebhookDelivery" }
+        unnamed_days:
+          type: array
+          description: >-
+            The webhook's daily counts of accepted deliveries no enabled trigger names, which the
+            log does not keep, from the UTC day 30 days ago through today, oldest first; a day
+            without one has no entry
+          items: { $ref: "#/components/schemas/WebhookUnnamedDay" }
         next_after:
           type: string
           nullable: true
           description: Pass as `after` for the next page; null on the last page
+    WebhookUnnamedDay:
+      type: object
+      required: [day, count]
+      properties:
+        day: { type: string, format: date, description: The UTC day }
+        count: { type: integer, description: Accepted deliveries no enabled trigger named that day }
     WebhookDeliveryRequest:
       allOf:
         - $ref: "#/components/schemas/WebhookDelivery"
