@@ -72,7 +72,8 @@ type ciWaitOn struct {
 //
 //   - every check finished: CIPassed when none failed, else CIFailed;
 //   - Max passed since the wait started: CITimedOut;
-//   - no check seen within Grace after the wait started: CINoCI;
+//   - no check seen within Grace after the commit was first polled, or the wait started if
+//     earlier: CINoCI, so a later wait on a commit that showed no CI ends at its first poll;
 //   - the token cannot read CI (ports.ErrCINotReadable): CIUnreadable;
 //   - the pull request's head moved: the wait moves to the new head (Store.ReplaceCIWaitSHA).
 //
@@ -143,6 +144,10 @@ func (e *Engine) decideCIWaits(ctx context.Context, p domain.CIPoll, waits []ciW
 	}
 
 	r := domain.CIPollResult{Checks: raw, Interval: domain.CIPollMinInterval}
+	if p.FirstPolledAt.IsZero() {
+		p.FirstPolledAt, r.FirstPolledAt = now, now
+	}
+
 	if sameChecks(p.Checks, raw) {
 		r.Interval = ciBackoff(p.Interval)
 	}
@@ -153,7 +158,7 @@ func (e *Engine) decideCIWaits(ctx context.Context, p domain.CIPoll, waits []ciW
 	}
 
 	for _, w := range waits {
-		if outcome, ok := ciOutcome(checks, w, seen, now); ok {
+		if outcome, ok := ciOutcome(checks, w, p.FirstPolledAt, seen, now); ok {
 			e.endCIWaits(ctx, []ciWaitOn{w}, outcome, checks)
 		}
 	}
@@ -161,10 +166,16 @@ func (e *Engine) decideCIWaits(ctx context.Context, p domain.CIPoll, waits []ciW
 	return e.recordCIPoll(ctx, p, r)
 }
 
-// ciOutcome is how w ends with checks read at now, the poll's first check seen at seen; false
-// while it stays open.
-func ciOutcome(checks ports.CommitChecks, w ciWaitOn, seen, now time.Time) (domain.CIOutcome, bool) {
+// ciOutcome is how w ends with checks read at now, the commit first polled at polled and its
+// first check seen at seen; false while it stays open. Max counts from the wait's start, and the
+// grace from the earlier of the commit's first poll and the wait's start (ADR 0044 decision 7).
+func ciOutcome(checks ports.CommitChecks, w ciWaitOn, polled, seen, now time.Time) (domain.CIOutcome, bool) {
 	since := now.Sub(w.wait.StartedAt)
+
+	graceFrom := w.wait.StartedAt
+	if !polled.IsZero() && polled.Before(graceFrom) {
+		graceFrom = polled
+	}
 
 	switch {
 	case checks.Finished() && len(checks.Failed()) > 0:
@@ -173,7 +184,7 @@ func ciOutcome(checks ports.CommitChecks, w ciWaitOn, seen, now time.Time) (doma
 		return domain.CIPassed, true
 	case since >= w.limits.Max:
 		return domain.CITimedOut, true
-	case len(checks.Checks) == 0 && seen.IsZero() && since >= w.limits.Grace:
+	case len(checks.Checks) == 0 && seen.IsZero() && now.Sub(graceFrom) >= w.limits.Grace:
 		return domain.CINoCI, true
 	}
 

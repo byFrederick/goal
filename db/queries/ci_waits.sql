@@ -49,13 +49,14 @@ RETURNING p.*;
 
 -- name: RecordCIPoll :execrows
 -- Records a poll's result under its lease owner and releases the lease; no row when another
--- owner holds the poll or none does. A NULL checks, an empty etag and a first_check_seen_at
--- already set keep what the poll has.
+-- owner holds the poll or none does. A NULL checks, an empty etag, and a first_check_seen_at or
+-- first_polled_at already set keep what the poll has.
 UPDATE ci_polls
 SET checks = coalesce(sqlc.narg(checks), checks),
     etag = CASE WHEN sqlc.arg(etag)::text = '' THEN etag ELSE sqlc.arg(etag)::text END,
     last_error = sqlc.arg(last_error),
     first_check_seen_at = coalesce(first_check_seen_at, sqlc.narg(first_check_seen_at)),
+    first_polled_at = coalesce(first_polled_at, sqlc.narg(first_polled_at)),
     next_poll_at = sqlc.arg(next_poll_at), interval_seconds = sqlc.arg(interval_seconds),
     lease_owner = NULL, lease_until = NULL
 WHERE host = sqlc.arg(host) AND repo = sqlc.arg(repo) AND sha = sqlc.arg(sha) AND lease_owner = sqlc.arg(owner);

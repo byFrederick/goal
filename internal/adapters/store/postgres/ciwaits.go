@@ -174,7 +174,8 @@ func (s *Store) RecordCIPoll(ctx context.Context, key domain.CIPollKey, owner st
 
 	n, err := fetch(ctx, s.inTx, func(q *db.Queries) (int64, error) {
 		return q.RecordCIPoll(ctx, db.RecordCIPollParams{
-			Checks: checks, Etag: r.ETag, LastError: r.Error, FirstCheckSeenAt: optionalTime(r.FirstCheckSeenAt), NextPollAt: r.NextPollAt,
+			Checks: checks, Etag: r.ETag, LastError: r.Error, FirstCheckSeenAt: optionalTime(r.FirstCheckSeenAt),
+			FirstPolledAt: optionalTime(r.FirstPolledAt), NextPollAt: r.NextPollAt,
 			IntervalSeconds: int32(r.Interval / time.Second), Host: //nolint:gosec // Check bounds it to 15..120
 			key.Host, Repo:  key.Repo, Sha: key.SHA, Owner: &owner,
 		})
@@ -315,6 +316,10 @@ func ciPollFrom(r db.CiPoll) domain.CIPoll {
 
 	if r.FirstCheckSeenAt != nil {
 		p.FirstCheckSeenAt = r.FirstCheckSeenAt.UTC()
+	}
+
+	if r.FirstPolledAt != nil {
+		p.FirstPolledAt = r.FirstPolledAt.UTC()
 	}
 
 	if r.LeaseUntil != nil {

@@ -188,6 +188,10 @@ func (s *Store) RecordCIPoll(ctx context.Context, key domain.CIPollKey, owner st
 		p.FirstCheckSeenAt = r.FirstCheckSeenAt
 	}
 
+	if p.FirstPolledAt.IsZero() {
+		p.FirstPolledAt = r.FirstPolledAt
+	}
+
 	p.LastError, p.NextPollAt, p.Interval = r.Error, r.NextPollAt, r.Interval
 	p.LeaseOwner, p.LeaseUntil = "", time.Time{}
 
