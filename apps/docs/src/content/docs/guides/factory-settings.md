@@ -22,7 +22,7 @@ The draft is shared with the Definition editor. Saving publishes everything in i
 
 ## Sections
 
-Settings lists its sections in this order. Every section is open; scroll the page or use the "On this page" list at the right, which marks the section in view.
+Settings lists nine sections in this order: General, Code, Runtime, Budgets and targets, Flow, Jonah, Notifications, People with access and Danger zone. Every section is open; scroll the page or use the "On this page" list at the right, which marks the section in view. The Danger zone shows only to someone who may pause, archive or delete the factory.
 
 ### General
 
@@ -41,7 +41,9 @@ Test asks the host's API whether the token can do what the access asks, without 
 | Branch names | none | Read only: `goal/<number>-<slug>`, in every repository an item changes. |
 | Default branch | none yet | Shows "Not available yet". The API does not return the host's default branch. |
 
-Creating a secret or opening a webhook needs an owner or admin; the ⓘ beside Repositories says so. Ask one if the token you need is not in the secret list. See [Connect code to a factory](../connect-code/) and [Access and secrets](../../concepts/access-and-secrets/).
+Under each repository's test summary, a second line says whether the token can read CI. It shows "The token can read CI." or "Can’t read CI. <reason>", where the reason is the host's. The second is a warning only when a station of the line sets `waitFor`, because goald then waits for CI on that station; otherwise it is plain muted text. Its ⓘ gives the token step. A result kept from before goald checked CI shows no CI line. The scopes CI read needs are in [Connect code to a factory](/docs/guides/connect-code/).
+
+Creating a secret or opening a webhook needs an owner or admin; the ⓘ beside Repositories says so. Ask one if the token you need is not in the secret list. See [Connect code to a factory](/docs/guides/connect-code/) and [Access and secrets](/docs/concepts/access-and-secrets/).
 
 ### Runtime
 
@@ -94,6 +96,43 @@ A value out of range shows its message and is not saved. Like every group, Jonah
 ### Notifications
 
 A read-only Slack row. It shows "Sent with the secret `slack-bot`." when the organization has chosen a Slack secret, and "Slack is off" when it has not. Slack sends direct messages only, so a factory has no channel of its own. The secret is organization-wide: a person who holds `org:manage` sees a "Change in organization settings" link to pick or turn it off there. Without that permission the row has no link. If the setting cannot be read, the row says "Couldn’t load the Slack setting."
+
+### People with access
+
+The section lists who can see this factory: the organization's owners and admins, and the members who hold a factory role on it. Each row shows the person's name, a role chip and a line saying what the role allows:
+
+| Chip | Line |
+|---|---|
+| Owner | Organization owner |
+| Admin | Organization admin |
+| Editor | Edits the definition and creates items |
+| Approver | Approves and decides |
+| Viewer | Sees the floor, creates items |
+
+Owners and admins hold every factory role through their organization role, so their rows have no change control. The list is empty only when nobody has access: it then says "No people with access yet."
+
+With `member:manage` (owners and admins), you can:
+
+- Add a member: "Add people" opens a dialog with a Person list and a Role list (Viewer, Approver or Editor). Add gives them that role. When every member already has a role here, the dialog says "Everyone in the organization already has a role here."
+- Change a role: "Change role" on a member's row opens a dialog with the Role list and Save. Changes apply at once.
+- Remove a member: "Remove from factory" in the same dialog takes the role away, and the member no longer sees the factory.
+
+Without `member:manage`, "Add people" is disabled, with the tip "Only owners and admins change who has access." and rows have no "Change role". See [Access and secrets](/docs/concepts/access-and-secrets/) for the roles.
+
+### Danger zone
+
+The Danger zone holds the actions that change whether the factory works at all. They apply when you press them, not with Save changes. Each row shows only to someone who holds its permission; with none, the whole section is hidden.
+
+| Row | Button | Needs | What it does |
+|---|---|---|---|
+| Pause the factory | Pause, then Resume | `factory:manage` on the factory | Running items finish their run; nothing new starts until you resume. While paused, the row reads "It takes no work. Resume starts it again." Hidden on an archived factory. |
+| Archive | Archive | `factory:archive` (organization) | Hides the factory from the sidebar and the Factories home. It stops taking work and stays readable, with its items, versions and history. |
+| Restore | Restore | `factory:archive` (organization) | Replaces Archive on an archived factory. Lists it again in the sidebar and the Factories home. It stays paused until you resume it. |
+| Delete | Delete | `factory:delete` (organization) | Removes the factory's items, runs, events and versions for good. The audit history stays. |
+
+Archive opens "Archive <factory>?" with the button "Archive factory". A factory that is running cannot be archived, so the dialog reads "Pause first": it pauses the factory, then archives it. Pause it yourself first to get "Archive factory". If goald refuses, for example because items are being worked, the dialog shows its reason.
+
+Delete is disabled, with "Archive the factory first", until the factory is archived. Then it opens "Delete <factory>?" and asks you to type the factory's name before "Delete factory" is enabled. After it, you land on the organization's home.
 
 ## Related
 
