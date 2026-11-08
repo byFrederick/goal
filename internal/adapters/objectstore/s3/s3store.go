@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -114,14 +115,31 @@ func New(ctx context.Context, cfg Config) (*Store, error) {
 // PresignGet implements ports.ObjectStore with a SigV4 query-signed GET, signed locally with the
 // store's credentials.
 func (s *Store) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	return presignURL("presign", key, ttl, func(opt func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
+		return s.presign.PresignGetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)}, opt)
+	})
+}
+
+// PresignPut implements ports.ObjectStore with a SigV4 query-signed PUT, signed locally with the
+// store's credentials.
+func (s *Store) PresignPut(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	return presignURL("presign upload", key, ttl, func(opt func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error) {
+		return s.presign.PresignPutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)}, opt)
+	})
+}
+
+// presignURL refuses a ttl at or below zero, then signs with sign for ttl and returns the URL;
+// what names the operation in the error.
+func presignURL(what, key string, ttl time.Duration,
+	sign func(opt func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error),
+) (string, error) {
 	if ttl <= 0 {
-		return "", fmt.Errorf("presign %s for %s: %w", key, ttl, domain.ErrInvalid)
+		return "", fmt.Errorf("%s %s for %s: %w", what, key, ttl, domain.ErrInvalid)
 	}
 
-	req, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)},
-		s3.WithPresignExpires(ttl))
+	req, err := sign(s3.WithPresignExpires(ttl))
 	if err != nil {
-		return "", fmt.Errorf("presign %s: %w", key, err)
+		return "", fmt.Errorf("%s %s: %w", what, key, err)
 	}
 
 	return req.URL, nil

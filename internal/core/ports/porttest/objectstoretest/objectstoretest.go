@@ -1,5 +1,5 @@
 // Package objectstoretest is the conformance suite for ports.ObjectStore's ranged read, streamed
-// write (ADR 0038 decision 3) and presigned read (decision 7). The in-memory fake in porttest and the S3/R2 adapter run
+// write (ADR 0038 decision 3), presigned read (decision 7) and presigned upload. The in-memory fake in porttest and the S3/R2 adapter run
 // it, so a test that reads part of a knowledge snapshot's zip, or streams one in, on the fake
 // holds for the bucket.
 package objectstoretest
@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"io"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -39,6 +40,7 @@ func Run(t *testing.T, newStore func(t *testing.T) ports.ObjectStore) {
 		{"PutStream_SmallAndEmptyReplace", testStreamSmall},
 		{"PutStream_ReaderErrorLeavesTheKey", testStreamReaderError},
 		{"PresignGet", testPresignGet},
+		{"PresignPut", testPresignPut},
 	}
 
 	for _, tc := range tests {
@@ -299,6 +301,50 @@ func testPresignGet(f fixture) {
 	for _, ttl := range []time.Duration{0, -time.Second} {
 		if _, err := s.PresignGet(t.Context(), digitsKey, ttl); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("PresignGet with ttl %s = %v, want ErrInvalid", ttl, err)
+		}
+	}
+}
+
+func testPresignPut(f fixture) {
+	t, s := f.t, f.s
+
+	const key = "orgs/acme/cache/repo/go.tar.zst"
+
+	body := "a cache archive"
+
+	u, err := s.PresignPut(t.Context(), key, 15*time.Minute)
+	if err != nil {
+		t.Fatalf("PresignPut: %v", err)
+	}
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, u, strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("PresignPut = an unusable URL: %v", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT to the signed URL: %v", err)
+	}
+
+	_ = resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT to the signed URL = %d, want 200", resp.StatusCode)
+	}
+
+	got, err := s.Get(t.Context(), key)
+	if err != nil {
+		t.Fatalf("Get after the signed upload: %v", err)
+	}
+
+	if string(got.Body) != body {
+		t.Errorf("after the signed upload the object is %q, want %q", got.Body, body)
+	}
+
+	for _, ttl := range []time.Duration{0, -time.Second} {
+		if _, err := s.PresignPut(t.Context(), key, ttl); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("PresignPut with ttl %s = %v, want ErrInvalid", ttl, err)
 		}
 	}
 }
