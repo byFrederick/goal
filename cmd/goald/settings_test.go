@@ -153,6 +153,10 @@ func TestSettings_DocsDir(t *testing.T) {
 			t.Errorf("%s=%s: %v; want an error naming it", docsDirEnv, bad, err)
 		}
 	}
+
+	if _, err := settingsFrom(envOf(map[string]string{docsDirEnv: file})); err == nil || !strings.Contains(err.Error(), "task docs:site:build") {
+		t.Errorf("%s=%s: %v; want an error naming task docs:site:build", docsDirEnv, file, err)
+	}
 }
 
 // Containers run on compose.yaml's agents network unless GOAL_SANDBOX_NETWORK names another;
