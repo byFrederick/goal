@@ -131,6 +131,7 @@ func testCIWaitsFirstPolledAtSetOnce(f *fixture) {
 	f.openCIWait(t, ciWait(it.ID, ciSHA))
 
 	key := domain.CIPollKey{Host: ciHost, Repo: ciRepo, SHA: ciSHA}
+
 	if p := f.openCIWaits(t, it.ID)[0].Poll; !p.FirstPolledAt.IsZero() {
 		t.Errorf("first polled at before any poll = %s; want zero", p.FirstPolledAt)
 	}

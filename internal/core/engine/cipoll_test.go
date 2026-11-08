@@ -169,6 +169,14 @@ func checksOf(result ports.CheckResult, states ...ports.CheckState) porttest.Che
 	return porttest.ChecksAnswer{Checks: c}
 }
 
+// lintPassedTestFailed are finished checks: lint passed and test failed.
+func lintPassedTestFailed() porttest.ChecksAnswer {
+	return porttest.ChecksAnswer{Checks: ports.CommitChecks{Checks: []ports.Check{
+		{Name: "lint", State: ports.CheckFinished, Result: ports.CheckPassed},
+		{Name: "test", State: ports.CheckFinished, Result: ports.CheckFailed},
+	}}}
+}
+
 // Every check finished ends a wait: passed when none failed, else failed, naming the failed checks.
 func TestCIPoller_PassedAndFailed(t *testing.T) {
 	t.Parallel()
@@ -178,10 +186,7 @@ func TestCIPoller_PassedAndFailed(t *testing.T) {
 	failed := h.openWait(t, appRepo, ciNewSHA, "")
 
 	h.codehost.SetChecks(appRepo, ciSHA, checksOf(ports.CheckPassed, ports.CheckFinished, ports.CheckFinished))
-	h.codehost.SetChecks(appRepo, ciNewSHA, porttest.ChecksAnswer{Checks: ports.CommitChecks{Checks: []ports.Check{
-		{Name: "lint", State: ports.CheckFinished, Result: ports.CheckPassed},
-		{Name: "test", State: ports.CheckFinished, Result: ports.CheckFailed},
-	}}})
+	h.codehost.SetChecks(appRepo, ciNewSHA, lintPassedTestFailed())
 
 	pollCI(t, h.e)
 
@@ -261,10 +266,7 @@ func TestCIPoller_SettledCommitEndsNewWait(t *testing.T) {
 
 	h := newCIHarness(t)
 	h.codehost.SetChecks(appRepo, ciSHA, checksOf(ports.CheckPassed, ports.CheckFinished, ports.CheckFinished))
-	h.codehost.SetChecks(appRepo, ciNewSHA, porttest.ChecksAnswer{Checks: ports.CommitChecks{Checks: []ports.Check{
-		{Name: "lint", State: ports.CheckFinished, Result: ports.CheckPassed},
-		{Name: "test", State: ports.CheckFinished, Result: ports.CheckFailed},
-	}}})
+	h.codehost.SetChecks(appRepo, ciNewSHA, lintPassedTestFailed())
 
 	for _, c := range []struct {
 		sha  string
