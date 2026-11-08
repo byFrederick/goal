@@ -303,7 +303,9 @@ type Store interface {
 	// longer running (finished by their instance or by the sweeps) and no longer holding their
 	// lease (the item's lease at the run's station acquired no later than the run started, which
 	// a run's checks use after its agent task ended): it was released, taken, or swept as expired
-	// (RequeueExpiredLeases). Such a run's sandbox may be deleted (engine.ReapOrphans). Ids that
+	// (RequeueExpiredLeases). A succeeded run is not over either while a newer lease holds its item
+	// at its station and no newer run of the item started, as that claim may run the run's checks
+	// again in a box named after it (the engine's resume). Such a run's sandbox may be deleted (engine.ReapOrphans). Ids that
 	// name no run of the organization are not returned: they may be another deployment's runs on a
 	// shared sandbox backend. Order is unspecified.
 	RunsOver(ctx context.Context, runs []domain.RunID) ([]domain.RunID, error)

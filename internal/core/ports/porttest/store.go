@@ -1322,12 +1322,29 @@ func (s *Store) RunsOver(ctx context.Context, runs []domain.RunID) ([]domain.Run
 			continue
 		}
 
-		if _, gone := s.leaseEnded(r); r.Result.Status != domain.RunRunning && gone {
+		if _, gone := s.leaseEnded(r); r.Result.Status != domain.RunRunning && gone && !s.resuming(r) {
 			over = append(over, id)
 		}
 	}
 
 	return over, nil
+}
+
+// resuming reports whether r is a succeeded run whose item a lease holds at its station again
+// and that no newer run of the item followed: that claim may run r's checks again in a box named
+// after r (the engine's resume). The store's lock is held.
+func (s *Store) resuming(r *domain.Run) bool {
+	if l, ok := s.leases[r.ItemID]; !ok || l.Station != r.Station || r.Result.Status != domain.RunSucceeded {
+		return false
+	}
+
+	for _, n := range s.runs {
+		if n.ItemID == r.ItemID && n.StartedAt.After(r.StartedAt) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // JoinItemRepositories implements ports.Store.

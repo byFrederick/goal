@@ -97,7 +97,8 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 	c := claimed{line: l, station: st, item: it, lease: lease}
 	log := e.log.With(slog.String("factory", string(it.FactoryID)), slog.String("item", string(it.ID)), slog.String("station", st.ID))
 
-	if !e.ready(ctx, log, &c) {
+	rejection, ok := e.ready(ctx, log, &c)
+	if !ok {
 		return
 	}
 
@@ -123,7 +124,7 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 	var b box
 	defer e.deleteBox(ctx, log, &b)
 
-	rejection, attempt, lost := "", 1, 0
+	attempt, lost := firstAttempt(rejection), 0
 
 	for {
 		res, chk, err := e.runOnce(ctx, c, &b, joinParts(preloaded, feedbackOf(said, rejection)))
@@ -161,10 +162,19 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 			log.WarnContext(ctx, "notes left during the run do not reach its retry", slog.Any("error", err))
 		}
 
-		rejection = "Your previous attempt was rejected: " + rejected.err.Error() +
-			"\nFix that and return output that satisfies the station contract."
+		rejection = rejectionOf(rejected.err)
 		attempt++
 	}
+}
+
+// firstAttempt is the attempt the claim's first run is: its second when a resumed run's output
+// failed its checks (resume) and ready returned the rejection, else its first.
+func firstAttempt(rejection string) int {
+	if rejection != "" {
+		return 2
+	}
+
+	return 1
 }
 
 // cut reports whether the claim ended under its run or wait: a person moved the item (its run is
@@ -255,22 +265,48 @@ func (e *Engine) backoff(ctx context.Context, lease domain.Lease, d time.Duratio
 // CI on the item's commits has finished, keeping what CI said for its brief (ciGate, ADR 0044
 // decision 2), and then only once it is admitted. When the claim's CI wait held a run's outcome
 // and CI passed (ADR 0044 decision 3), no run starts: the outcome is applied (applyHeld).
-func (e *Engine) ready(ctx context.Context, log *slog.Logger, c *claimed) bool {
+//
+// First, when the item's latest run here succeeded but a cut claim never applied its output
+// (resumableRun), the claim is admitted and, while the branch's heads are still what the run
+// pushed (headsKept), the run is resumed instead (resume): no run starts, unless its output fails
+// its checks again, when the run starts as the claim's second attempt with the rejection returned.
+func (e *Engine) ready(ctx context.Context, log *slog.Logger, c *claimed) (string, bool) {
+	r, resumable := e.resumableRun(ctx, log, *c)
+	if resumable {
+		if !e.admitted(ctx, log, c) {
+			return "", false
+		}
+
+		if e.headsKept(ctx, log, *c, r) {
+			switch rejection, outcome := e.resume(ctx, log, *c, r); outcome {
+			case resumeSettled:
+				return "", false
+			case resumeRetry:
+				return rejection, true
+			case resumeSkipped:
+			}
+		}
+	}
+
 	var (
 		held domain.RunID
 		ok   bool
 	)
 
 	if c.ci, held, ok = e.ciGate(ctx, log, *c); !ok {
-		return false
+		return "", false
 	}
 
 	if held != "" {
 		e.applyHeld(ctx, log, *c, held)
-		return false
+		return "", false
 	}
 
-	return e.admitted(ctx, log, c)
+	if resumable {
+		return "", true
+	}
+
+	return "", e.admitted(ctx, log, c)
 }
 
 // admitted finds the claim's agent (agentFor), applies the organization policy to it
