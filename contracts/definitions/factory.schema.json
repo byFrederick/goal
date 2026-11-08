@@ -775,13 +775,13 @@
               "properties": {
                 "transient": {
                   "type": "object",
-                  "description": "Runs whose sandbox was lost to its infrastructure (a redeploy, a box restart, a network blip): each runs again in a new box after a backoff that doubles with each loss.",
+                  "description": "Runs whose sandbox was lost to its infrastructure (a redeploy, a box restart, a network blip) or whose prepare failed before the agent started (goal-agent prepare exited non-zero, such as a tool download that timed out): each runs again in a new box after a backoff that doubles with each loss.",
                   "additionalProperties": false,
                   "properties": {
                     "attempts": {
                       "type": "integer",
                       "minimum": 1,
-                      "description": "The most runs one claim makes when its sandbox is lost; the loss that reaches it blocks the item. Default 3."
+                      "description": "The most runs one claim makes when its sandbox is lost or its prepare fails, both counted together; the failure that reaches it blocks the item. Default 3."
                     }
                   }
                 }

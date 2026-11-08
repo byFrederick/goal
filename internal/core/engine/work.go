@@ -91,7 +91,8 @@ var webTools = []string{"WebFetch", "WebSearch"}
 // work runs the agent on a claimed item until the item moves on, is blocked, is released (at
 // shutdown, or cancelled by the weekly budget) or the lease is lost to another instance. The
 // claim's runs share one sandbox, deleted when work returns; a run whose sandbox was lost
-// (ports.ErrSandboxLost) runs again in a new one (retryLost).
+// (ports.ErrSandboxLost) or whose prepare failed before the agent started (errPrepareFailed)
+// runs again in a new one (retryLost). Any other failure blocks the item at once.
 func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it domain.Item, lease domain.Lease) {
 	c := claimed{line: l, station: st, item: it, lease: lease}
 	log := e.log.With(slog.String("factory", string(it.FactoryID)), slog.String("item", string(it.ID)), slog.String("station", st.ID))
@@ -134,7 +135,7 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 		var rejected *outputError
 
 		switch {
-		case errors.Is(err, ports.ErrSandboxLost):
+		case errors.Is(err, ports.ErrSandboxLost), errors.Is(err, errPrepareFailed):
 			if lost++; !e.retryLost(ctx, log, c, &b, lost, err) {
 				return
 			}
@@ -184,19 +185,27 @@ func (e *Engine) cut(ctx context.Context, log *slog.Logger, c claimed, err error
 	return false
 }
 
-// retryLost follows the lost-th run of a claim whose sandbox was lost (err, scrubbed): a
-// redeploy, a box restart or a network blip, not the item's fault. It deletes the box, so the
-// next run creates a new one (the branch keeps what was pushed), and below the line's
-// flow.retry.transient.attempts records run_retried and waits TransientBackoff, doubled with
-// each loss, while heartbeating the lease. It reports whether to run again; when not, the item is blocked with err, released at shutdown
-// or no longer this instance's.
+// retryLost follows the lost-th run of a claim whose sandbox was lost or whose prepare failed
+// before the agent started (err, scrubbed): a redeploy, a box restart, a network blip or a
+// download that timed out, not the item's fault. Both kinds count toward the same limit. It
+// deletes the box, so the next run creates a new one (the branch keeps what was pushed), and
+// below the line's flow.retry.transient.attempts records run_retried and waits TransientBackoff,
+// doubled with each loss, while heartbeating the lease. It reports whether to run again; when
+// not, the item is blocked with err, released at shutdown or no longer this instance's. A prepare
+// that will never pass (a bad tool version, a commit that is gone) so blocks after the backoff.
 func (e *Engine) retryLost(ctx context.Context, log *slog.Logger, c claimed, b *box, lost int, err error) bool {
 	e.deleteBox(ctx, log, b)
 	*b = box{}
 
 	limit := c.line.Flow.Retry.Transient()
 	if lost >= limit {
-		e.block(ctx, log, c, fmt.Sprintf("the sandbox was lost %d times: %v", lost, err))
+		what := "the sandbox was lost"
+		if errors.Is(err, errPrepareFailed) {
+			what = "prepare failed"
+		}
+
+		e.block(ctx, log, c, fmt.Sprintf("%s %d times: %v", what, lost, err))
+
 		return false
 	}
 

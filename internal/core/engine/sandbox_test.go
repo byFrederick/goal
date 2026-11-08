@@ -284,37 +284,6 @@ func TestRun_NoFeedbackWhenThereIsNothingToAdd(t *testing.T) {
 	}
 }
 
-// A sandbox that cannot be prepared fails its run and blocks the item; no agent runs, and the
-// sandbox goes.
-func TestRun_PrepareFailureFailsTheRun(t *testing.T) {
-	t.Parallel()
-
-	h := newHarness(t, repoLine(), porttest.Succeed(`{}`))
-	h.worker.FailPrepare(1, "goal-agent prepare: git clone exited 128 with "+codeToken)
-	it := h.submit(t, domain.NewItem{})
-
-	h.step(t)
-
-	if got := h.item(t, it.ID); got.State != domain.StateBlocked {
-		t.Fatalf("item is %s, want blocked (events %v)", got.State, h.kinds(it.ID))
-	}
-
-	reason, _ := h.eventsOf(it.ID, domain.EventBlocked)[0].Data["reason"].(string)
-	if !strings.Contains(reason, "prepare") || !strings.Contains(reason, "git clone exited 128") || strings.Contains(reason, codeToken) {
-		t.Errorf("blocked reason %q, want prepare's failure without the token", reason)
-	}
-
-	if runs := h.runs(t, testOrg, it.ID); len(runs) != 1 || runs[0].Result.Status != domain.RunFailed {
-		t.Errorf("runs %+v, want one failed", runs)
-	}
-
-	if n := len(h.worker.Runs()); n != 0 {
-		t.Errorf("%d agent runs in a sandbox that was not prepared, want 0", n)
-	}
-
-	h.noSandboxes(t)
-}
-
 // A version whose runs cannot start blocks its items with what to do, before any run, box,
 // connection or credential is opened: one on connections (ADR 0037 decision 19), one that still
 // has a form connections replaced, and one on secrets that names no model key.
