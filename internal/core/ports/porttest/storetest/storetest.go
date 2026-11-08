@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -104,6 +105,7 @@ func suiteCases() []suiteCase {
 		{"Notes_AppendToOpenItemsReadSinceTheLatestRun", testNotes},
 		{"Notes_RefusedOnClosedItems", testNotesOnClosedItems},
 		{"ItemEvents_PagesInAppendOrder", testItemEvents},
+		{"AskEvents_OnlyAskKindsOfTheItemsInAppendOrder", testAskEvents},
 		{"FactoryActivity_NewestMilestonesOfOneFactory", testFactoryActivity},
 		{"ItemByNumber_PerFactory", testItemByNumber},
 		{"ListItems_NewestFirstFilteredAndPaged", testListItems},
@@ -164,18 +166,22 @@ func suiteCases() []suiteCase {
 		{"OrgTouches_EachFactoryAndTheirTotal", testOrgTouches},
 		{"LabelTouch_OnTheNamingEventOnly", testLabelTouch},
 		{"Touches_NeedAnOrgAndSeeOnlyItsItems", testTouchesTenancy},
-		{"SavedViews_SharedFirstThenOwnByName", testSavedViewsListOrderAndVisibility},
-		{"SavedViews_NameTakenPerOwnerOrFactory", testSavedViewsNameTaken},
-		{"SavedViews_UpdateAndDelete", testSavedViewsUpdateAndDelete},
-		{"SavedViews_OtherOrgSeesNothing", testSavedViewsOtherOrgSeesNothing},
 		{"OpenToolApprovals_ByConnection", testOpenToolApprovals},
 	}
 	tests = append(append(append(tests, jonahTests...), fileTests...), startTests...)
 	tests = append(append(append(tests, triesTests...), keptTestsTests...), graderChecksTests...)
 	tests = append(append(append(tests, followUpsTests...), followUpFilingTests...), repositoriesTests...)
-	tests = append(append(tests, baseCommitTests...), ciWaitsTests...)
+	tests = append(append(append(tests, baseCommitTests...), ciWaitsTests...), savedViewsTests...)
 
 	return tests
+}
+
+// savedViewsTests are the cases of the saved views.
+var savedViewsTests = []suiteCase{
+	{"SavedViews_SharedFirstThenOwnByName", testSavedViewsListOrderAndVisibility},
+	{"SavedViews_NameTakenPerOwnerOrFactory", testSavedViewsNameTaken},
+	{"SavedViews_UpdateAndDelete", testSavedViewsUpdateAndDelete},
+	{"SavedViews_OtherOrgSeesNothing", testSavedViewsOtherOrgSeesNothing},
 }
 
 // Run runs the suite. Tests run in parallel and call newHarness once each; every harness must
@@ -980,6 +986,60 @@ func testItemEvents(f *fixture) {
 	none, err := f.Store.ItemEvents(f.ctx(t), missingItem, 0, 10)
 	if err != nil || len(none) != 0 {
 		t.Errorf("events of an unknown item = %v, %v; want none and no error", none, err)
+	}
+}
+
+func testAskEvents(f *fixture) {
+	t := f.t
+
+	it := f.create(t, domain.NewItem{})
+	other := f.create(t, domain.NewItem{})
+	quiet := f.create(t, domain.NewItem{})
+
+	ev := func(id domain.ItemID, kind domain.EventKind) domain.Event {
+		return domain.Event{FactoryID: f.factory, ItemID: id, At: t1, Kind: kind, Actor: agWorker}
+	}
+
+	// Every ask kind, each between events of other kinds and of other items.
+	events := []domain.Event{ev(it.ID, domain.EventToolCall), ev(quiet.ID, domain.EventToolResult)}
+	for _, k := range domain.AskKinds {
+		events = append(events, ev(it.ID, k), ev(other.ID, k), ev(it.ID, domain.EventAgentMessage))
+	}
+
+	if err := f.Store.AppendEvents(f.ctx(t), events...); err != nil {
+		t.Fatal(err)
+	}
+
+	var want []domain.Event
+
+	for _, e := range f.Events(t, it.ID) {
+		if slices.Contains(domain.AskKinds, e.Kind) {
+			want = append(want, e)
+		}
+	}
+
+	if len(want) != len(domain.AskKinds) {
+		t.Fatalf("%d ask events, want %d", len(want), len(domain.AskKinds))
+	}
+
+	got, err := f.Store.AskEvents(f.ctx(t), []domain.ItemID{it.ID, quiet.ID, missingItem})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(got) != 1 {
+		t.Errorf("AskEvents has %d items, want only %s: an item with no ask events and an unknown one are left out", len(got), it.ID)
+	}
+
+	sameEvents(t, got[it.ID], want)
+
+	if _, ok := got[other.ID]; ok {
+		t.Errorf("AskEvents returned %s, which was not asked for", other.ID)
+	}
+
+	none, err := f.Store.AskEvents(f.ctx(t), nil)
+	if err != nil || len(none) != 0 {
+		t.Errorf("AskEvents of no items = %v, %v; want an empty map", none, err)
 	}
 }
 

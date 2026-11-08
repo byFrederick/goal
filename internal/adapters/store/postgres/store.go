@@ -1168,6 +1168,35 @@ func (s *Store) ItemEvents(ctx context.Context, id domain.ItemID, after int64, l
 	return convertAll(rows, eventFrom)
 }
 
+// AskEvents implements ports.Store.
+func (s *Store) AskEvents(ctx context.Context, ids []domain.ItemID) (map[domain.ItemID][]domain.Event, error) {
+	out := map[domain.ItemID][]domain.Event{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+
+	uids, err := parseIDs("item", ids)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.ItemEvent, error) { return q.AskEvents(ctx, uids) })
+	if err != nil {
+		return nil, fmt.Errorf("ask events of %d items: %w", len(ids), err)
+	}
+
+	events, err := convertAll(rows, eventFrom)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, e := range events {
+		out[e.ItemID] = append(out[e.ItemID], e)
+	}
+
+	return out, nil
+}
+
 // FactoryActivity implements ports.Store.
 func (s *Store) FactoryActivity(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ActivityEvent, error) {
 	fid, err := parseID("factory", string(factory))
