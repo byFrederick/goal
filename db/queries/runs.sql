@@ -174,11 +174,17 @@ FOR NO KEY UPDATE OF w SKIP LOCKED;
 
 -- name: RunsOver :many
 -- The runs among ids that are over: no longer running and no longer holding their lease (the
--- item's lease at the run's station acquired no later than the run started). Looked up by
--- primary key.
+-- item's lease at the run's station acquired no later than the run started). A succeeded run is
+-- not over either while a newer lease holds its item at its station and no newer run of the item
+-- started: that claim runs its checks again in a box named after it (the engine's resume).
+-- Looked up by primary key.
 SELECT r.id FROM agent_runs r
 WHERE r.id = ANY (sqlc.arg(ids)::uuid[]) AND r.status <> 'running' AND NOT EXISTS (
-  SELECT 1 FROM leases l WHERE l.item_id = r.item_id AND l.station = r.station AND l.acquired_at <= r.started_at
+  SELECT 1 FROM leases l WHERE l.item_id = r.item_id AND l.station = r.station AND (
+    l.acquired_at <= r.started_at OR (r.status = 'succeeded' AND NOT EXISTS (
+      SELECT 1 FROM agent_runs n WHERE n.item_id = r.item_id AND n.started_at > r.started_at
+    ))
+  )
 );
 
 -- name: CancelLostRuns :many
