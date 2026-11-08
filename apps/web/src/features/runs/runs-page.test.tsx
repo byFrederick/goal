@@ -241,6 +241,33 @@ describe('the Runs page states', () => {
     expect(within(rows[1] as HTMLElement).getAllByText('—')).toHaveLength(3);
   });
 
+  it('shows the build cache outcome beside the CPU time, and nothing when there is none', async () => {
+    const list = fromMock({});
+    const base = list.runs[0] as OrgRun;
+    const outcomes = ['hit', 'miss', 'off', 'error', null] as const;
+    calls.answer = () => ({
+      ...list,
+      runs: outcomes.map((build_cache, i) => ({
+        ...base,
+        id: `cache-run-${i}`,
+        status: 'succeeded' as const,
+        error: null,
+        cpu_seconds: 60,
+        build_cache,
+      })),
+    });
+    renderRuns();
+    const table = await screen.findByRole('table');
+    const rows = within(table).getAllByRole('row').slice(1);
+
+    const labels = ['Cache hit', 'Cache miss', 'Cache off', 'Cache error'];
+    labels.forEach((label, i) => {
+      const el = within(rows[i] as HTMLElement).getByText(label);
+      expect(el.className).toContain(label === 'Cache error' ? 'text-rework-ink' : 'text-muted');
+    });
+    expect(within(rows[4] as HTMLElement).queryByText(/^Cache /)).toBeNull();
+  });
+
   it('explains the figures in a tip beside the CPU header', async () => {
     renderRuns();
     await screen.findByRole('table');
