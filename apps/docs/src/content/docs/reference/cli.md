@@ -71,7 +71,7 @@ Flags: `--teardown`.
 goal approve <item> [--always-allow]
 ```
 
-approve an item waiting at a human station, or the tool call its agent waits on; --always-allow also lets that agent role call that tool without asking from now on (a standing rule; needs connection:manage)
+approve an item waiting at a human station, or the tool call its agent waits on; --always-allow also lets that agent role call that tool without asking from now on (a standing rule; needs standing\_rule:manage)
 
 Flags: `--always-allow`.
 
