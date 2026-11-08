@@ -128,6 +128,21 @@ func (h *harness) expectPosition(t *testing.T, id domain.ItemID, pos domain.Posi
 	}
 }
 
+// stepUntil steps until the item is at pos, failing after max steps.
+func (h *harness) stepUntil(t *testing.T, id domain.ItemID, pos domain.Position, maxSteps int) {
+	t.Helper()
+
+	for range maxSteps {
+		h.step(t)
+
+		if h.item(t, id).Position() == pos {
+			return
+		}
+	}
+
+	h.expectPosition(t, id, pos)
+}
+
 var (
 	queuedAtMerge = domain.Position{Station: stReview, State: domain.StateQueued}
 	isDone        = domain.Position{Station: stDone, State: domain.StateDone}
@@ -313,19 +328,16 @@ func TestEngine_TurnCIHeldHolderKeepsItsTurn(t *testing.T) {
 		t.Errorf("a's turn edges = %+v, want none: a holds the turn", edges)
 	}
 
+	// The held approval is applied in the claim without an agent run, so a can merge and leave
+	// while the tick still claims: b finishes in that step or the next.
 	h.endCI(t, pushSHA1, checksOf(ports.CheckPassed, ports.CheckFinished))
-	h.step(t)
+	h.stepUntil(t, b.ID, isDone, 3)
 
 	h.expectPosition(t, a.ID, isDone)
-	h.expectPosition(t, b.ID, queuedAtMerge)
 
 	if removed := h.eventsOf(b.ID, domain.EventEdgeRemoved); len(removed) != 0 && removed[0].Data["reason"] != "needed item left the station" {
 		t.Errorf("b's edge_removed events %+v, want only a leaving the station", removed)
 	}
-
-	h.step(t)
-
-	h.expectPosition(t, b.ID, isDone)
 
 	if m := h.codehost.Merges(); len(m) != 2 || m[0].URL != prOf(a) || m[1].URL != prOf(b) {
 		t.Errorf("merges = %+v; want a's, then b's", m)
