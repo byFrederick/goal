@@ -41,7 +41,7 @@ Pull requests merged before a refusal stay merged, and merging again skips them.
 
 goald merges a pull request only when its head is the item's branch in that repository, or, for an assembly's landing, the assembly's integration branch there. A pull request from a fork or from any other branch is refused with a reason that names it and its branch, because no station checked it. goald also merges only in a repository an entry with `access: write` covers (see [repositories and what agents may write](/docs/concepts/access-and-secrets/#repositories-and-what-agents-may-write)).
 
-An approved item waits at the station for a person to merge it in two cases: the organization's policy does not let agents merge, or the item was made from a webhook delivery, whose text comes from outside the organization.
+An approved item waits at the station for a person to merge it in two cases: the organization's policy does not let agents merge, or the item was made from a webhook delivery whose trigger is not marked `create.trusted`, so its text comes from outside the organization.
 
 ## Human touches
 
