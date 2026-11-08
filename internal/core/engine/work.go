@@ -124,10 +124,7 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 	var b box
 	defer e.deleteBox(ctx, log, &b)
 
-	attempt, lost := 1, 0
-	if rejection != "" { // the resumed run's output failed its checks (resume)
-		attempt = 2
-	}
+	attempt, lost := firstAttempt(rejection), 0
 
 	for {
 		res, chk, err := e.runOnce(ctx, c, &b, joinParts(preloaded, feedbackOf(said, rejection)))
@@ -168,6 +165,16 @@ func (e *Engine) work(ctx context.Context, l domain.Line, st domain.Station, it 
 		rejection = rejectionOf(rejected.err)
 		attempt++
 	}
+}
+
+// firstAttempt is the attempt the claim's first run is: its second when a resumed run's output
+// failed its checks (resume) and ready returned the rejection, else its first.
+func firstAttempt(rejection string) int {
+	if rejection != "" {
+		return 2
+	}
+
+	return 1
 }
 
 // cut reports whether the claim ended under its run or wait: a person moved the item (its run is

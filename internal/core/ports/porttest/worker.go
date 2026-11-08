@@ -35,14 +35,14 @@ type Worker struct {
 	prepared      []domain.WorkerRepository
 	exits         map[string][]int
 	// holds counts the next runs of each check command that wait for their ctx to end (HoldCheck).
-	holds map[string]int
-	diff          string
-	diffCode      int
-	diffs         []ExecCall
-	prepares      []ExecCall
-	runs          []ExecCall
-	checks        []ExecCall
-	changes       changes
+	holds    map[string]int
+	diff     string
+	diffCode int
+	diffs    []ExecCall
+	prepares []ExecCall
+	runs     []ExecCall
+	checks   []ExecCall
+	changes  changes
 }
 
 // NewWorker returns a worker whose agent runs play agent.
