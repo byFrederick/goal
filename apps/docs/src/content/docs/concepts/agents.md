@@ -9,24 +9,25 @@ An agent is a role in a factory: a prompt, a model, the skills and environment i
 
 ## Where an agent is declared
 
-An agent is one entry of the `agents` list in the factory definition. Its schema is `contracts/definitions/factory.schema.json` in the repository, and the [reference](../../reference/) lists the fields.
+An agent is one entry of the `agents` list in the factory definition. Its schema is `contracts/definitions/factory.schema.json` in the repository, and the [reference](/docs/reference/) lists the fields.
 
 | Field | What it sets |
 | --- | --- |
 | `name` | The role's name, a slug. Events, tool approvals and standing rules name the agent by this name. |
-| `prompt` | The agent's instructions, sent to the model at the start of every run. |
-| `model` | The Claude model the agent uses. When it is left out, the factory's `runtime.model` applies. The [organization policy](/docs/concepts/organization-policy/) lists the models an agent may use. |
+| `prompt` | The path of the agent's instructions file in the definition. Its text is sent to the model at the start of every run. A path with no file fails the definition's check. |
+| `model` | The Claude model the agent uses. The agent's `model` wins, then the factory's `runtime.model`, then the [organization policy](/docs/concepts/organization-policy/)'s default model. A model the policy does not allow blocks the run until the agent or the policy changes. |
+| `code` | `write` lets the agent push, open pull requests and merge. `read` lets it only read the code. It defaults to `write` when the factory has an entry that writes, and to `read` otherwise. |
 | `maxTurns`, `perItemUsd` | Limits for this agent. They override the factory's `runtime.budget` values. |
-| `skills` | The names of the definition's skills this agent may load. See [skills and rules](../skills-and-rules/). |
-| `environment` | The environment file the agent's box gets, `environments/<name>.yaml`. `default` when omitted. See [access and secrets](../access-and-secrets/). |
-| `tools` or `builtins` | Which tools the agent may call. An agent has one or the other, never both. |
+| `skills` | The names of the definition's skills this agent may load. See [skills and rules](/docs/concepts/skills-and-rules/). |
+| `environment` | The environment file the agent's box gets, `environments/<name>.yaml`. `default` when omitted. See [access and secrets](/docs/concepts/access-and-secrets/). |
+| `tools` or `builtins` | Which tools the agent may call. An agent has one or the other, never both. With neither, the agent gets only Read, Grep and Glob. |
 
-The Definition's Agents section edits the prompt. Reset to default in it, and beside the prompt on the agent's page, restores the running version's prompt file, as described in [Add an agent, skill or rule](../guides/add-an-agent-skill-or-rule/).
+The Definition's Agents section edits the prompt. Reset to default in it, and beside the prompt on the agent's page, restores the running version's prompt file, as described in [Add an agent, skill or rule](/docs/guides/add-an-agent-skill-or-rule/).
 
-`builtins` sets each group of Claude Code's built-in tools to `off`, `ask` or `allowed`:
+`builtins` sets each group of Claude Code's built-in tools to `off`, `ask` or `allowed`. A group left out is `off`, so an agent with `builtins` gets only the groups it names:
 
 - `read` (Read, Grep, Glob), `edit` (Edit, Write), `run` (Bash, optionally limited to named commands), `web` (WebFetch, WebSearch) and `subagents` (Task).
-- `ask` is served as `off` for built-in tools. Only MCP server tools can ask a person first (see [skills and rules](../skills-and-rules/#tools-that-ask-first)).
+- `ask` is served as `off` for built-in tools. Only MCP server tools can ask a person first (see [skills and rules](/docs/concepts/skills-and-rules/#tools-that-ask-first)).
 
 `tools` takes custom allow and deny lists in Claude Code's permission syntax. Deny always wins. Rules for an MCP server's tools use the form `<server>__<tool>`.
 
@@ -40,14 +41,14 @@ A station can run several copies of its agent in parallel. Each copy has a slot,
 2. The box's `prepare` step fetches the run bundle from the gateway with the run's task token. It clones the repository on the item's branch, installs tools with mise, and writes the factory's rules into the agent's user-level configuration, outside the repository, so they cannot be committed.
 3. The worker starts the agent with the task's prompt, the skills the agent may load, its environment and its tool policy.
 4. Each note a person leaves on the item while the run works is passed to the agent as the run continues.
-5. The run ends with exactly one `finished` event, and the item moves on or waits. A run that needs a person ends early: see [questions](../questions/) and [tool approvals](../skills-and-rules/#tools-that-ask-first).
+5. The run ends with exactly one `finished` event, and the item moves on or waits. A run that needs a person ends early: see [questions](/docs/concepts/questions/) and [tool approvals](/docs/concepts/skills-and-rules/#tools-that-ask-first).
 
 The worker source is in `apps/worker/src`. `agent.ts` builds the agent's options and its permission checks, `run.ts` runs one task, and `prepare.ts` sets the box up.
 
 ## Where you meet agents
 
 - The factory builder edits the `agents` list. Its draft is published as a new version.
-- `goal runs` lists the organization's agent runs, with the factory, item, station, agent, model and cost of each. The [CLI reference](../../reference/) lists its flags.
-- `goal spend` reads what the agent runs cost. Try another model, on the agent's page or with `goal agent try-model`, has [Jonah](../jonah/#try-another-model) try a different model on the agent's past items as a proposal.
+- `goal runs` lists the organization's agent runs, with the factory, item, station, agent, model and cost of each. The [CLI reference](/docs/reference/) lists its flags.
+- `goal spend` reads what the agent runs cost. Try another model, on the agent's page or with `goal agent try-model`, has [Jonah](/docs/concepts/jonah/#try-another-model) try a different model on the agent's past items as a proposal.
 
-For the words used here, see the [glossary](../../reference/).
+For the words used here, see the [glossary](/docs/reference/).
