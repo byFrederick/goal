@@ -194,7 +194,9 @@ func testFactoryLeases(f *fixture) {
 	}
 
 	want := append(f.leases(t, stNext), f.leases(t, stWork)...)
-	slices.SortStableFunc(want, func(a, b domain.Lease) int { return cmp.Or(cmp.Compare(a.Station, b.Station), cmp.Compare(a.Slot, b.Slot)) })
+	slices.SortStableFunc(want, func(a, b domain.Lease) int {
+		return cmp.Or(cmp.Compare(a.Station, b.Station), cmp.Compare(a.Slot, b.Slot))
+	})
 
 	if len(want) != 3 || !reflect.DeepEqual(got, want) {
 		t.Errorf("FactoryLeases =\n  %+v\nwant the leases at %s then %s\n  %+v", got, stNext, stWork, want)

@@ -199,16 +199,7 @@ func (b *budgetSeed) seedItems(t *testing.T, openItems int, now time.Time) {
 			t.Fatalf("assemble %d: %v", i, err)
 		}
 
-		if _, err := b.store.SetIntegrationBranch(ctx, p.it.ID, fmt.Sprintf("goal/a%d", i), budgetReview, at); err != nil {
-			t.Fatalf("integration branch of %d: %v", i, err)
-		}
-
-		if last := planned.Items[len(planned.Items)-1]; last.ID != planned.Items[0].ID {
-			if _, err := b.store.AddEdge(ctx, domain.NewEdge{Item: last.ID, Needs: planned.Items[0].ID, Kind: domain.EdgeTurn, By: domain.EngineActor, At: at}); err != nil {
-				t.Fatalf("turn of assembly %d: %v", i, err)
-			}
-		}
-
+		b.branchAndTurn(t, p.it.ID, planned.Items, fmt.Sprintf("goal/a%d", i), at)
 		b.parts += partsEach
 	}
 
@@ -231,18 +222,41 @@ func (b *budgetSeed) seedItems(t *testing.T, openItems int, now time.Time) {
 
 	for i := range 4 * openItems {
 		doneAt := now.Add(-time.Duration(i%(14*24)) * time.Hour).Add(-time.Minute)
-		it := file(fmt.Sprintf("done %d", i), budgetReview, domain.StateWaitingHuman, doneAt.Add(-6*time.Hour))
-
-		if _, err := b.store.Transition(ctx, ports.Transition{
-			ItemID: it.ID, From: it.Position(), To: domain.Position{Station: budgetDone, State: domain.StateDone}, At: doneAt, DoneAt: doneAt,
-		}); err != nil {
-			t.Fatalf("finish %s: %v", it.Title, err)
-		}
-
-		b.done++
+		b.finish(t, file(fmt.Sprintf("done %d", i), budgetReview, domain.StateWaitingHuman, doneAt.Add(-6*time.Hour)), doneAt)
 	}
 
 	b.open = openItems
+}
+
+// finish moves it to done at doneAt.
+func (b *budgetSeed) finish(t *testing.T, it domain.Item, doneAt time.Time) {
+	t.Helper()
+
+	if _, err := b.store.Transition(b.ctx(t), ports.Transition{
+		ItemID: it.ID, From: it.Position(), To: domain.Position{Station: budgetDone, State: domain.StateDone}, At: doneAt, DoneAt: doneAt,
+	}); err != nil {
+		t.Fatalf("finish %s: %v", it.Title, err)
+	}
+
+	b.done++
+}
+
+// branchAndTurn gives the assembly root its integration branch and makes its last part wait for
+// the turn of its first, as the engine does for parts merging into one branch.
+func (b *budgetSeed) branchAndTurn(t *testing.T, root domain.ItemID, parts []domain.Item, branch string, at time.Time) {
+	t.Helper()
+
+	ctx := b.ctx(t)
+
+	if _, err := b.store.SetIntegrationBranch(ctx, root, branch, budgetReview, at); err != nil {
+		t.Fatalf("integration branch of %s: %v", root, err)
+	}
+
+	if first, last := parts[0], parts[len(parts)-1]; first.ID != last.ID {
+		if _, err := b.store.AddEdge(ctx, domain.NewEdge{Item: last.ID, Needs: first.ID, Kind: domain.EdgeTurn, By: domain.EngineActor, At: at}); err != nil {
+			t.Fatalf("turn of %s: %v", root, err)
+		}
+	}
 }
 
 // seedBuild claims n items at build, on the slots after the from the planning claims took, and
@@ -418,7 +432,7 @@ func budgetReads() []budgetRead {
 		{name: "metrics compare previous", path: f + "/metrics?compare=previous", budget: 31},
 		{name: "draft", path: f + "/draft", budget: 61},
 		{name: "draft model", path: f + "/draft/model", budget: 29},
-		{name: "board", path: f + "/board", budget: 0, growsToday: true},
+		{name: "board", path: f + "/board", budget: 72},
 	}
 }
 

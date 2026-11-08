@@ -525,8 +525,11 @@ func testCIWaitsOfEachKey(f *fixture) {
 	})
 
 	keys := []domain.CIWaitKey{
-		{Item: it.ID, Station: ciStation}, {Item: it.ID, Station: stWork}, {Item: other.ID, Station: ciStation},
-		{Item: other.ID, Station: stWork}, {Item: missingItem, Station: ciStation},
+		{Item: it.ID, Station: ciStation},
+		{Item: it.ID, Station: stWork},
+		{Item: other.ID, Station: ciStation},
+		{Item: other.ID, Station: stWork},
+		{Item: missingItem, Station: ciStation},
 	}
 
 	got, err := f.Store.CIWaitsOf(ctx, keys)

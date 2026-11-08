@@ -475,7 +475,9 @@ func (s *Store) FactoryLeases(ctx context.Context, factory domain.FactoryID) ([]
 		}
 	}
 
-	slices.SortFunc(out, func(a, b domain.Lease) int { return cmp.Or(cmp.Compare(a.Station, b.Station), cmp.Compare(a.Slot, b.Slot)) })
+	slices.SortFunc(out, func(a, b domain.Lease) int {
+		return cmp.Or(cmp.Compare(a.Station, b.Station), cmp.Compare(a.Slot, b.Slot))
+	})
 
 	return out, nil
 }
