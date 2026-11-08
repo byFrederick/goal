@@ -666,7 +666,11 @@
               "additionalProperties": false,
               "properties": {
                 "reworkRate": { "type": "number", "minimum": 0, "maximum": 1 },
-                "window": { "type": "integer", "minimum": 1 }
+                "window": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "How many of a gate's last verdicts since the last clear of the andon cord the rework-rate warning counts. Defaults to 10."
+                }
               }
             },
             "targets": {
