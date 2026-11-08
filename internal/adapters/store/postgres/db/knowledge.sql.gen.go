@@ -212,7 +212,7 @@ SET status = CASE WHEN $1::text = '' THEN 'idle' ELSE 'failed' END,
     next_sync_at = CASE WHEN next_sync_at IS DISTINCT FROM $3::timestamptz THEN next_sync_at
                         ELSE $2::timestamptz + sync_every END,
     updated_at = now()
-WHERE id = $4 AND lease_token = $5::uuid AND kind <> 'live'
+WHERE id = $4 AND lease_token = $5::uuid
 `
 
 type FinishKnowledgeSyncParams struct {
@@ -327,7 +327,7 @@ VALUES ($1, $2, $3, $4, $5, $6,
         $7,
         CASE WHEN $8::bigint = 0 THEN NULL
              ELSE make_interval(secs => $8::bigint) END,
-        CASE WHEN $4::text = 'live' THEN NULL ELSE now() END, $9)
+        now(), $9)
 `
 
 type InsertKnowledgeSourceParams struct {
@@ -342,8 +342,8 @@ type InsertKnowledgeSourceParams struct {
 	CreatedBy        string
 }
 
-// org_id comes from its default, goal_org(). A live source never syncs; sync_every_seconds 0 is
-// on demand (a NULL sync_every, 00100), due once now for its first snapshot.
+// org_id comes from its default, goal_org(). sync_every_seconds 0 is on demand (a NULL
+// sync_every, 00100); either way the source is due now for its first snapshot.
 func (q *Queries) InsertKnowledgeSource(ctx context.Context, arg InsertKnowledgeSourceParams) error {
 	_, err := q.db.Exec(ctx, insertKnowledgeSource,
 		arg.ID,
@@ -827,17 +827,17 @@ func (q *Queries) SourceBlobs(ctx context.Context, sourceID uuid.UUID) ([]string
 	return items, nil
 }
 
-const syncKnowledgeSourceNow = `-- name: SyncKnowledgeSourceNow :one
-UPDATE knowledge_sources SET next_sync_at = CASE WHEN kind = 'live' THEN NULL ELSE now() END
+const syncKnowledgeSourceNow = `-- name: SyncKnowledgeSourceNow :execrows
+UPDATE knowledge_sources SET next_sync_at = now()
 WHERE name = $1
-RETURNING kind
 `
 
-func (q *Queries) SyncKnowledgeSourceNow(ctx context.Context, name string) (string, error) {
-	row := q.db.QueryRow(ctx, syncKnowledgeSourceNow, name)
-	var kind string
-	err := row.Scan(&kind)
-	return kind, err
+func (q *Queries) SyncKnowledgeSourceNow(ctx context.Context, name string) (int64, error) {
+	result, err := q.db.Exec(ctx, syncKnowledgeSourceNow, name)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const unheldBlobs = `-- name: UnheldBlobs :many
@@ -878,7 +878,7 @@ SET title = coalesce($1::text, title), config = coalesce($2::jsonb, config),
                              AND kind IN ('upload', 'repository', 'confluence') THEN now()
                         WHEN $5::bigint IS NULL THEN next_sync_at
                         WHEN $5::bigint = 0 THEN NULL
-                        WHEN kind <> 'live' AND next_sync_at IS NULL THEN now()
+                        WHEN next_sync_at IS NULL THEN now()
                         ELSE next_sync_at END,
     updated_at = now()
 WHERE name = $6
@@ -895,7 +895,7 @@ type UpdateKnowledgeSourceParams struct {
 }
 
 // sync_every_seconds 0 makes the source on demand, not due until Sync (00100); an interval makes
-// an on-demand source that is not live due at once. A new read-when line makes a source that
+// an on-demand source due at once. A new read-when line makes a source that
 // writes snapshots due at once, so its next snapshot carries the line. The CASEs read the row as it was.
 func (q *Queries) UpdateKnowledgeSource(ctx context.Context, arg UpdateKnowledgeSourceParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, updateKnowledgeSource,

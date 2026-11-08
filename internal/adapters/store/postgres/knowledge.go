@@ -351,12 +351,12 @@ func dropUnheld(ctx context.Context, q *db.Queries, blobs []string, drop ports.D
 
 // SyncNow implements ports.Knowledge.
 func (k *Knowledge) SyncNow(ctx context.Context, name string) error {
-	_, err := fetch(ctx, k.s.inTx, func(q *db.Queries) (string, error) { return q.SyncKnowledgeSourceNow(ctx, name) })
+	n, err := fetch(ctx, k.s.inTx, func(q *db.Queries) (int64, error) { return q.SyncKnowledgeSourceNow(ctx, name) })
 	switch {
-	case notFound(err):
-		return fmt.Errorf("knowledge source %q: %w", name, ports.ErrNotFound)
 	case err != nil:
 		return fmt.Errorf("sync knowledge source %q: %w", name, err)
+	case n == 0:
+		return fmt.Errorf("knowledge source %q: %w", name, ports.ErrNotFound)
 	default:
 		return nil
 	}
