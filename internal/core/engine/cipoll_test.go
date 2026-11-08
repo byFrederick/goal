@@ -169,6 +169,14 @@ func checksOf(result ports.CheckResult, states ...ports.CheckState) porttest.Che
 	return porttest.ChecksAnswer{Checks: c}
 }
 
+// lintPassedTestFailed are finished checks: lint passed and test failed.
+func lintPassedTestFailed() porttest.ChecksAnswer {
+	return porttest.ChecksAnswer{Checks: ports.CommitChecks{Checks: []ports.Check{
+		{Name: "lint", State: ports.CheckFinished, Result: ports.CheckPassed},
+		{Name: "test", State: ports.CheckFinished, Result: ports.CheckFailed},
+	}}}
+}
+
 // Every check finished ends a wait: passed when none failed, else failed, naming the failed checks.
 func TestCIPoller_PassedAndFailed(t *testing.T) {
 	t.Parallel()
@@ -178,10 +186,7 @@ func TestCIPoller_PassedAndFailed(t *testing.T) {
 	failed := h.openWait(t, appRepo, ciNewSHA, "")
 
 	h.codehost.SetChecks(appRepo, ciSHA, checksOf(ports.CheckPassed, ports.CheckFinished, ports.CheckFinished))
-	h.codehost.SetChecks(appRepo, ciNewSHA, porttest.ChecksAnswer{Checks: ports.CommitChecks{Checks: []ports.Check{
-		{Name: "lint", State: ports.CheckFinished, Result: ports.CheckPassed},
-		{Name: "test", State: ports.CheckFinished, Result: ports.CheckFailed},
-	}}})
+	h.codehost.SetChecks(appRepo, ciNewSHA, lintPassedTestFailed())
 
 	pollCI(t, h.e)
 
@@ -218,6 +223,90 @@ func TestCIPoller_NoChecksWithinGrace(t *testing.T) {
 	pollCI(t, h.e)
 	h.expectEnded(t, none, domain.CINoCI)
 	h.expectOpen(t, running)
+}
+
+// pollUntilEnded polls CI every domain.CIPollMaxInterval until w ends, failing the test when it is
+// still open after the station's max.
+func (h *harness) pollUntilEnded(t *testing.T, w domain.CIWaitRecord) {
+	t.Helper()
+
+	for end := h.clock.Now().Add(ciMax); h.clock.Now().Before(end); h.clock.Advance(domain.CIPollMaxInterval) {
+		pollCI(t, h.e)
+
+		if _, ok := h.ciEnds(t)[w.ID]; ok {
+			return
+		}
+	}
+
+	t.Fatalf("wait %s still open after %s", w.ID, ciMax)
+}
+
+// The grace counts from the commit's first poll, shared by every wait on it: a new wait on a
+// commit polled for longer than the grace with no check ends no_ci at its first poll, not a grace
+// later.
+func TestCIPoller_GraceCountsFromFirstPoll(t *testing.T) {
+	t.Parallel()
+
+	h := newCIHarness(t)
+	first := h.openWait(t, appRepo, ciSHA, "")
+	h.pollUntilEnded(t, first)
+	h.expectEnded(t, first, domain.CINoCI)
+
+	h.clock.Advance(domain.CIPollMaxInterval)
+	later := h.openWait(t, appRepo, ciSHA, "")
+
+	pollCI(t, h.e)
+	h.expectEnded(t, later, domain.CINoCI)
+}
+
+// A new wait on a commit whose checks all finished ends at its first poll with their result:
+// passed when none failed, failed when one did.
+func TestCIPoller_SettledCommitEndsNewWait(t *testing.T) {
+	t.Parallel()
+
+	h := newCIHarness(t)
+	h.codehost.SetChecks(appRepo, ciSHA, checksOf(ports.CheckPassed, ports.CheckFinished, ports.CheckFinished))
+	h.codehost.SetChecks(appRepo, ciNewSHA, lintPassedTestFailed())
+
+	for _, c := range []struct {
+		sha  string
+		want domain.CIOutcome
+	}{{ciSHA, domain.CIPassed}, {ciNewSHA, domain.CIFailed}} {
+		first := h.openWait(t, appRepo, c.sha, "")
+		pollCI(t, h.e)
+		h.expectEnded(t, first, c.want)
+
+		h.clock.Advance(domain.CIPollMaxInterval)
+		later := h.openWait(t, appRepo, c.sha, "")
+
+		pollCI(t, h.e)
+		h.expectEnded(t, later, c.want)
+	}
+}
+
+// A wait on a new commit (a fresh poll) waits the whole grace from that commit's first poll, even
+// when another commit of the repository was polled for longer than the grace.
+func TestCIPoller_NewCommitWaitsWholeGrace(t *testing.T) {
+	t.Parallel()
+
+	h := newCIHarness(t)
+	old := h.openWait(t, appRepo, ciSHA, "")
+	h.pollUntilEnded(t, old)
+	h.expectEnded(t, old, domain.CINoCI)
+
+	h.clock.Advance(domain.CIPollMaxInterval)
+	fresh := h.openWait(t, appRepo, ciNewSHA, "")
+	start := h.clock.Now()
+
+	for h.clock.Now().Before(start.Add(ciGrace - domain.CIPollMaxInterval)) {
+		pollCI(t, h.e)
+		h.expectOpen(t, fresh)
+		h.clock.Advance(domain.CIPollMaxInterval)
+	}
+
+	h.clock.Advance(domain.CIPollMaxInterval)
+	pollCI(t, h.e)
+	h.expectEnded(t, fresh, domain.CINoCI)
 }
 
 // A wait whose checks have not finished when the station's max has passed since it started ends
