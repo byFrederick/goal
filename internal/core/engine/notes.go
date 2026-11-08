@@ -60,8 +60,8 @@ func (e *Engine) Note(ctx context.Context, id domain.ItemID, by domain.Actor, te
 	return ev, nil
 }
 
-// withNotes adds to notes the ones left since the item's latest run started, each once, in the
-// order they were left.
+// withNotes adds to notes the ones left since the start of the item's latest run whose agent
+// started (ports.Store.NotesSinceLastRun), each once, in the order they were left.
 func (e *Engine) withNotes(ctx context.Context, item domain.ItemID, notes []domain.Event) ([]domain.Event, error) {
 	more, err := e.store.NotesSinceLastRun(ctx, item)
 	if err != nil {
