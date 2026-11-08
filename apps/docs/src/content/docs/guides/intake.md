@@ -28,7 +28,7 @@ It lists the items that have not started (when each may start, or the needs it w
 
 ## Items that have not started
 
-An item with a start time, or one waiting for other items, waits at the line's first station until it may start. On Intake, Coming up lists them soonest first, with where each came from. **Start now** clears the start time and the row leaves the list. A row that waits only for other items has no Start now, since those items still hold it. The API lists these as `coming_up`: items with a start first, soonest first, then items that wait only for open needs, oldest first. An assembly's parts are not listed, since the assembly's plan orders them: the assembly's page shows each part and what it waits for. To change a start or start an item now, read [Start an item later](../submit-and-follow-items/#start-an-item-later).
+An item with a start time, or one waiting for other items, waits at the line's first station until it may start. On Intake, Coming up lists them soonest first, with where each came from. **Start now** clears the start time and the row leaves the list. A row that waits only for other items has no Start now, since those items still hold it. The API lists these as `coming_up`: items with a start first, soonest first, then items that wait only for open needs, oldest first. An assembly's parts are not listed, since the assembly's plan orders them: the assembly's page shows each part and what it waits for. To change a start or start an item now, read [Start an item later](/docs/guides/submit-and-follow-items/#start-an-item-later).
 
 ## Triggers
 
@@ -49,11 +49,11 @@ An event trigger creates at most 10 items an hour unless `limits.perHour` says o
 
 A trigger's page opens from the Intake page. When picks the source (a schedule, GitHub or one organization webhook) and the event. For a GitHub event the page offers only the filters that event supplies: `action`, `conclusion`, `branch`, `repo` (one or a list), `label`, `paths` (for a push), `authors` and `skipBots`. A filter the event cannot supply is refused when you save, and the page shows the refusal under the field. More filters also takes payload matches: a dot path into the delivery's body and the values it may have, all of which must match (`filter.match`). Limits sets `perDay` and `perHour`.
 
-A file that still has the old keys `github.check_run.failed`, `github.issues.labeled` or `webhook.<name>` opens in the current words (`github.check_run` with `conclusion: failure`, and so on) and keeps its lines until you change `on` or `filter`. The page no longer offers the model check. A file that still has `only.modelAgrees` keeps the key when you save another change, and the definition warns that it is ignored.
+A file that still has the old keys `github.check_run.failed`, `github.issues.labeled` or `webhook.<name>` opens in the current words (`github.check_run` with `conclusion: failure`, and so on) and keeps its lines until you change `on` or `filter`. The page no longer offers the model check. A file that still has `only.modelAgrees` keeps the key when you save another change, and that trigger files nothing: it skips every event until you turn it into a check.
 
 ### Untrusted items
 
-An item made from a webhook delivery is untrusted: its brief carries the event's text inside `<untrusted-event-data>`, which agents treat as data and never as instructions, and a person merges what the item builds. Follow-ups from an untrusted item wait instead of being delivered or filed. A trigger's `create.trusted: true` lifts this for deliveries you vouch for; publishing refuses it for the `gitlab` and `token` senders and for GitHub without `filter.authors`.
+An item made from a webhook delivery is untrusted: its brief carries the event's text inside `<untrusted-event-data>`, which agents treat as data and never as instructions, and a person merges what the item builds. Its follow-ups do not go out on their own: see [Follow-ups of untrusted work](/docs/guides/follow-ups/#follow-ups-of-untrusted-work). A trigger's `create.trusted: true` lifts this for deliveries you vouch for; publishing refuses it for the `gitlab` and `token` senders and for GitHub without `filter.authors`.
 
 ### Repositories of an item
 
@@ -72,17 +72,17 @@ Each value is rendered with the event, then matched against the factory's `runti
 - A value that no entry matches skips the event at the Create step with the reason "acme/legacy is not one of SRE's repositories" (the repository and the factory's name), and nothing is filed.
 - Publishing refuses a fixed value (one without a placeholder) that no entry matches, with `trigger-repository-unknown`.
 
-An event from a repository the factory doesn't have is skipped before any trigger fires, with the same reason. Every `runtime.repositories` entry counts, owner patterns included. An event that names no repository still reaches the triggers.
+An event from a repository the factory doesn't have is skipped before any trigger fires, with the same reason. Every `runtime.repositories` entry counts, owner patterns included. An event that names no repository still reaches the triggers. A factory with no repositories at all takes events from every repository.
 
 ## Suggestions
 
-The API and `goal intake` return a definition's disabled triggers as `suggestions`.
+The API returns a definition's disabled triggers as `suggestions`. `goal intake` returns them as `suggestions` only with `--json`; otherwise it lists them with the triggers, marked `off`.
 
-On the web, a trigger that is off in the definition appears in the Triggers table as a suggestion; turning it on publishes a new version. A trigger that runs a check shows **Check** and the agent that runs it. The Webhooks section shows each open webhook as Receiving, No trigger yet or Closed, with **Manage** opening the organization's webhooks page.
+On the web, a trigger that is off in the definition appears in the Triggers table as a suggestion; turning it on publishes a new version. A trigger that runs a check shows **Check** and the agent that runs it. The Webhooks section shows each open webhook as Receiving, No trigger yet or Closed, with **Manage** opening the organization's webhooks page. Closed means the webhook is switched off: its address answers 404 and it delivers nothing. The organization's webhooks page calls the same state Switched off; [Receive events with organization webhooks](/docs/guides/webhooks/) shows how to switch one off or on.
 
 The New trigger dialog lists the same suggestions under "Or turn on a suggestion from the factory's definition", each with the station it creates items at. **Turn on** publishes a new version with the trigger on, and the row leaves the list. The block is absent when the definition has no disabled triggers. The onboarding Intake step offers the same suggestions as its starter triggers.
 
-New trigger's **Built in** group lists Schedule and **Check with an agent**. A second group, also called Check with an agent, lists each MCP server the agents' environments give them, such as GitHub, Cloudflare or Context7, and never a built-in tool or a permission pattern. Choose one and **Continue** to open a blank check on a free name, such as `new-check`, with the first agent whose environment has that server. When an environment file can't be read, the group says so and offers **Retry**. Choose the agent, write the brief and save. Webhook and Cloudflare have no Continue; set up a webhook from the organization's Webhooks page.
+New trigger's **Built in** group lists Schedule, Webhook and **Check with an agent**. A second group, also called Check with an agent, lists each MCP server the agents' environments give them, such as GitHub, Cloudflare or Context7, and never a built-in tool or a permission pattern. Choose one and **Continue** to open a blank check on a free name, such as `new-check`, with the first agent whose environment has that server. When an environment file can't be read, the group says so and offers **Retry**. Choose the agent, write the brief and save. Webhook and Cloudflare have no Continue; set up a webhook from the organization's Webhooks page.
 
 ## Try a trigger on a past event
 
@@ -94,10 +94,10 @@ On the trigger's page, choose Try with a delivery (Try with a past event for a s
 goal triggers try acme-line red-main --event <id>
 ```
 
-The CLI prints the steps; `--json` prints them as JSON. A missed event, or a delivery whose body is no longer kept, cannot be tried. Try for a trigger with a check runs the check instead; see [Ask an agent what to file](../checks/).
+The CLI prints the steps; `--json` prints them as JSON. A missed event, or a delivery whose body is no longer kept, cannot be tried. Try for a trigger with a check runs the check instead; see [Ask an agent what to file](/docs/guides/checks/).
 
 ## Next
 
-- To receive events from outside Goal, read [Receive events with organization webhooks](../webhooks/).
-- To look at a source that cannot send webhooks, read [Ask an agent what to file](../checks/).
-- To see what agents leave for later, read [Follow-ups](../follow-ups/).
+- To receive events from outside Goal, read [Receive events with organization webhooks](/docs/guides/webhooks/).
+- To look at a source that cannot send webhooks, read [Ask an agent what to file](/docs/guides/checks/).
+- To see what agents leave for later, read [Follow-ups](/docs/guides/follow-ups/).
