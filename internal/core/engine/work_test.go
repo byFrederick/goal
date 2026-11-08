@@ -696,6 +696,150 @@ func TestRun_LostSandboxBlocksAfterTheConfiguredAttempts(t *testing.T) {
 	h.noSandboxes(t)
 }
 
+// prepareFailure is a goal-agent prepare that exits 1 on a network failure, its stderr holding
+// the run's repository token.
+const prepareFailure = "mise: download timed out fetching https://github.com/acme/tool with " + codeToken
+
+func prepareScrubbed(s string) bool {
+	return strings.Contains(s, "goal-agent prepare exited 1") && strings.Contains(s, "download timed out") && !strings.Contains(s, codeToken)
+}
+
+// A prepare that exits non-zero before the agent starts (a download that timed out, a gateway
+// fetch that failed) is retried as a lost box: run_retried records it, the box is deleted and the
+// item runs again in a new one, which moves it on.
+func TestRun_FailedPrepareRetriesInAFreshBox(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, repoLine(), porttest.Succeed(`{}`))
+	h.worker.FailPrepareTimes(1, 1, prepareFailure)
+	it := h.submit(t, domain.NewItem{})
+
+	h.stepThroughBackoff(t)
+
+	if got := h.item(t, it.ID); got.State != domain.StateDone {
+		t.Fatalf("item is %s, want done (events %v)", got.State, h.kinds(it.ID))
+	}
+
+	h.expectPrepareRetried(t, it, 1, 3)
+
+	runs := h.runs(t, testOrg, it.ID)
+	if len(runs) != 2 || runs[0].Result.Status != domain.RunFailed || runs[1].Result.Status != domain.RunSucceeded {
+		t.Fatalf("runs %+v, want two, the first failed and the second succeeded", runs)
+	}
+
+	prepares := h.worker.Prepares()
+	if len(prepares) != 2 || prepares[0].Sandbox.RunID != runs[0].ID || prepares[1].Sandbox.RunID != runs[1].ID {
+		t.Errorf("prepares in boxes %v, want one in each run's box", prepares)
+	}
+
+	if agents := h.worker.Runs(); len(agents) != 1 || agents[0].Sandbox.RunID != runs[1].ID {
+		t.Errorf("agent runs %v, want one, in the second run's box", agents)
+	}
+
+	if h.sandboxes.Has(runs[0].ID) {
+		t.Error("the first box, whose prepare failed, was not deleted")
+	}
+
+	h.expectOutcomes(t, it.ID, domain.LeaseAdvanced)
+	h.noSandboxes(t)
+}
+
+// A prepare that fails on every attempt blocks the item after the line's
+// flow.retry.transient.attempts, with the last prepare error, scrubbed; no agent runs and no box
+// is left.
+func TestRun_FailedPrepareBlocksAfterTheConfiguredAttempts(t *testing.T) {
+	t.Parallel()
+
+	line := repoLine()
+	line.Flow.Retry.TransientAttempts = 2
+	h := newHarness(t, line, porttest.Succeed(`{}`))
+	h.worker.FailPrepare(1, prepareFailure)
+	it := h.submit(t, domain.NewItem{})
+
+	h.stepThroughBackoff(t)
+
+	if got := h.item(t, it.ID); got.State != domain.StateBlocked {
+		t.Fatalf("item is %s, want blocked (events %v)", got.State, h.kinds(it.ID))
+	}
+
+	reason, _ := h.eventsOf(it.ID, domain.EventBlocked)[0].Data["reason"].(string)
+	if !strings.HasPrefix(reason, "prepare failed 2 times: ") || !prepareScrubbed(reason) {
+		t.Errorf("blocked reason %q, want the configured cap and prepare's last error, scrubbed", reason)
+	}
+
+	h.expectPrepareRetried(t, it, 1, 2)
+
+	runs := h.runs(t, testOrg, it.ID)
+	if len(runs) != 2 || runs[0].Result.Status != domain.RunFailed || runs[1].Result.Status != domain.RunFailed {
+		t.Errorf("runs %+v, want two failed", runs)
+	}
+
+	if n, p := len(h.worker.Runs()), len(h.worker.Prepares()); n != 0 || p != 2 {
+		t.Errorf("%d agent runs after %d prepares, want none after 2", n, p)
+	}
+
+	h.expectOutcomes(t, it.ID, domain.LeaseBlocked)
+	h.noSandboxes(t)
+}
+
+// expectPrepareRetried fails the test unless the item has n run_retried events, attempts 1 to n
+// of limit, each with prepare's error scrubbed of the token.
+func (h *harness) expectPrepareRetried(t *testing.T, it domain.Item, n, limit int) {
+	t.Helper()
+
+	retried := h.eventsOf(it.ID, domain.EventRunRetried)
+	if len(retried) != n {
+		t.Fatalf("%d run_retried events, want %d (events %v)", len(retried), n, h.kinds(it.ID))
+	}
+
+	for i, ev := range retried {
+		reason, _ := ev.Data["reason"].(string)
+		if !prepareScrubbed(reason) || ev.Data["attempt"] != i+1 || ev.Data["max"] != limit {
+			t.Errorf("run_retried %+v; want prepare's scrubbed error, attempt %d of %d", ev.Data, i+1, limit)
+		}
+	}
+}
+
+// A run that fails after prepare succeeded and the agent started is the item's: it blocks at
+// once, with no run_retried.
+func TestRun_FailureAfterTheAgentStartedBlocks(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		result domain.RunResult
+	}{
+		{name: "the agent failed", result: domain.RunResult{Status: domain.RunFailed, Error: "goal-agent prepare exited 1: the agent quoted it"}},
+		{name: "the worker crashed", result: domain.RunResult{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t, repoLine(), porttest.Sequence(tt.result))
+			it := h.submit(t, domain.NewItem{})
+
+			h.stepThroughBackoff(t)
+
+			if got := h.item(t, it.ID); got.State != domain.StateBlocked {
+				t.Fatalf("item is %s, want blocked (events %v)", got.State, h.kinds(it.ID))
+			}
+
+			if n := len(h.eventsOf(it.ID, domain.EventRunRetried)); n != 0 {
+				t.Errorf("%d run_retried events, want none", n)
+			}
+
+			if p, n := len(h.worker.Prepares()), len(h.worker.Runs()); p != 1 || n != 1 {
+				t.Errorf("%d prepares, %d agent runs; want one of each", p, n)
+			}
+
+			h.expectOutcomes(t, it.ID, domain.LeaseBlocked)
+			h.noSandboxes(t)
+		})
+	}
+}
+
 // A shutdown while the engine waits to run a lost box's item again releases it to its queue.
 func TestRun_LostSandboxShutdownDuringTheBackoff(t *testing.T) {
 	t.Parallel()

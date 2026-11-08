@@ -43,7 +43,12 @@ async function installSkills(): Promise<void> {
  */
 const exec: Exec = (command, args, opts = {}) =>
   new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: opts.cwd, stdio: ['ignore', 2, opts.stderr ? 'pipe' : 2] });
+    const child = spawn(command, args, {
+      cwd: opts.cwd,
+      // spawn replaces the environment when given env, so the extras go over this process's own.
+      ...(opts.env ? { env: { ...process.env, ...opts.env } } : {}),
+      stdio: ['ignore', 2, opts.stderr ? 'pipe' : 2],
+    });
     const { stderr } = opts;
     if (stderr) {
       child.stderr?.on('data', (c: Buffer) => {

@@ -240,8 +240,8 @@ object, required.
       - `repositories`: string. The top-level output field whose list of repositories joins the item, recorded as joined output. Each entry is a runtime.repositories entry's name, owner/name or an https URL an entry covers, resolved as at filing. An item keeps at most 10 repositories: when the names would give it more, or one is not a repository of the factory, the output fails its check with the reason and the agent tries again. Repositories join only with an accepted output, never with a gate's rejection.
     - `followUpsFrom`: array of string matching `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`. The factories, by metadata.id, this factory accepts follow-ups from: their notes and their items. None by default.
     - `retry`: object. How often a claim runs an item again after a failure that is not the item's fault. Omitted keys take their defaults.
-      - `transient`: object. Runs whose sandbox was lost to its infrastructure (a redeploy, a box restart, a network blip): each runs again in a new box after a backoff that doubles with each loss.
-        - `attempts`: integer. The most runs one claim makes when its sandbox is lost; the loss that reaches it blocks the item. Default 3.
+      - `transient`: object. Runs whose sandbox was lost to its infrastructure (a redeploy, a box restart, a network blip) or whose prepare failed before the agent started (goal-agent prepare exited non-zero, such as a tool download that timed out): each runs again in a new box after a backoff that doubles with each loss.
+        - `attempts`: integer. The most runs one claim makes when its sandbox is lost or its prepare fails, both counted together; the failure that reaches it blocks the item. Default 3.
 - `learning`: object.
   - `librarian`: object. Ignored (ADR 0039): Jonah proposes knowledge from the line. A definition that has it loads with the warning field-ignored.
     - `agent`: string, required.

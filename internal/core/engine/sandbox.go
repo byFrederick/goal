@@ -95,7 +95,10 @@ func (e *Engine) open(ctx context.Context, t runTask, runID domain.RunID, env ma
 	case err != nil:
 		return nil, fmt.Errorf("prepare the sandbox: %w", scrub.err(err))
 	case st.Code != 0 || line == nil:
-		return nil, fmt.Errorf("prepare the sandbox: goal-agent prepare exited %d: %s", st.Code, scrub.string(strings.TrimSpace(st.StderrTail)))
+		return nil, &scrubbedError{
+			msg:  fmt.Sprintf("prepare the sandbox: goal-agent prepare exited %d: %s", st.Code, scrub.string(strings.TrimSpace(st.StderrTail))),
+			kind: errPrepareFailed,
+		}
 	}
 
 	data := map[string]any{"seconds": line.Seconds, "tools": line.Tools}
@@ -109,6 +112,11 @@ func (e *Engine) open(ctx context.Context, t runTask, runID domain.RunID, env ma
 
 	return line, nil
 }
+
+// errPrepareFailed is a goal-agent prepare that exited non-zero or printed no prepared line, so
+// the agent never started: most often a network failure (a tool download that timed out, a run
+// bundle fetch from the gateway that failed). work runs the item again in a new box (retryLost).
+var errPrepareFailed = errors.New("goal-agent prepare failed")
 
 // boxLife is how long a run's sandbox may live: as long as a claim may (Config.LongestClaim), since
 // a retry runs in the same sandbox, and never longer than the organization policy's box time limit.
@@ -247,12 +255,17 @@ func newScrubber(values ...string) scrubber {
 
 func (s scrubber) string(v string) string { return s.r.Replace(v) }
 
-// err scrubs err's message. Of what err wraps it keeps only ports.ErrSandboxLost, which the
-// engine decides on and whose message holds no secret.
+// err scrubs err's message. Of what err wraps it keeps only ports.ErrSandboxLost and
+// errPrepareFailed, the sentinels work retries a run in a new box on, whose messages hold no
+// secret.
 func (s scrubber) err(err error) error {
 	scrubbed := &scrubbedError{msg: s.string(err.Error())}
-	if errors.Is(err, ports.ErrSandboxLost) {
-		scrubbed.kind = ports.ErrSandboxLost
+
+	for _, kind := range []error{ports.ErrSandboxLost, errPrepareFailed} {
+		if errors.Is(err, kind) {
+			scrubbed.kind = kind
+			break
+		}
 	}
 
 	return scrubbed
