@@ -29,7 +29,7 @@ describe('orgCanOf (contracts/api/permissions.yaml)', () => {
         'member:read',
         'personal_token:read',
         'personal_token:manage',
-        'connection:read',
+        'standing_rule:read',
         'secret:read',
         'access:read',
         'knowledge:read',

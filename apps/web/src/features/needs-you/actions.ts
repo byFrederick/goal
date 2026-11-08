@@ -29,11 +29,11 @@ export function decisionOf(entry: InboxEntry): 'approve' | 'merge' {
 
 /**
  * Whether the Always allow checkbox is offered for an Approval: the API offers it for this call
- * (always_allow_offered), and the caller may manage connections (connection:manage), which the
+ * (always_allow_offered), and the caller may manage standing rules (standing_rule:manage), which the
  * API checks again.
  */
-export function alwaysAllowOffered(entry: InboxEntry, canManageConnections: boolean): boolean {
-  return canManageConnections && entry.tool_approval?.always_allow_offered === true;
+export function alwaysAllowOffered(entry: InboxEntry, canManageStandingRules: boolean): boolean {
+  return canManageStandingRules && entry.tool_approval?.always_allow_offered === true;
 }
 
 /** Runs an entry's decision: the item's approve, merge or reject, or the tool call's decision, with a toast. */

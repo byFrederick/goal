@@ -2962,7 +2962,7 @@ export interface paths {
         put?: never;
         /**
          * Approve or deny the tool call an item's agent asked to make
-         * @description Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs connection:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without connection:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
+         * @description Decides the item's open tool approval (Item.tool_approval), as ADR 0031 decides. approve records tool_approval_granted and grants that one call, with exactly its input, to the item's next run; with always_allow it also creates the standing rule that lets the agent role call the tool of the connection without asking (audited as standing_rule.created), which also needs standing_rule:manage in the organization and so a sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which the next run's brief carries. Either way the item goes back to its station's arrival state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a note that is not 1 to 2000 characters; 403 for always_allow without standing_rule:manage (reauth-required for a session signed in longer ago), the item unchanged; 409 no-open-tool-approval when the item has none (none was asked, it was decided, or a move, pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set and the approval does not offer it, item-closed for a done or cancelled item, item-changed when it moved meanwhile.
          */
         post: operations["decideToolApproval"];
         delete?: never;
@@ -4725,7 +4725,7 @@ export interface components {
             /** @enum {string} */
             decision: "approve" | "deny";
             /**
-             * @description With approve only: also let the agent role call this tool of this connection without asking from now on (a standing rule); needs connection:manage
+             * @description With approve only: also let the agent role call this tool of this connection without asking from now on (a standing rule); needs standing_rule:manage
              * @default false
              */
             always_allow?: boolean;

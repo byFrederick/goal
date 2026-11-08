@@ -623,7 +623,7 @@ const approval: InboxEntry = {
 /** Renders the page with the approval among the entries and the caller's organization grants. */
 function renderApproval({
   entries = [approval],
-  can = ['connection:manage'],
+  can = ['standing_rule:manage'],
   search = {},
 }: {
   entries?: InboxEntry[];
@@ -697,7 +697,7 @@ describe('Needs you: Approvals', () => {
     expect(screen.queryByRole('checkbox')).toBeNull();
   });
 
-  it('hides Always allow from a person who lacks connection:manage', async () => {
+  it('hides Always allow from a person who lacks standing_rule:manage', async () => {
     renderApproval({ search: { entry: 'tool_approval:item-151' }, can: ['item:decide'] });
 
     await screen.findByRole('button', { name: /^Approve/ });

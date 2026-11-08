@@ -42,10 +42,10 @@ permissions:
   # for a fresh sign-in), creating one (manage: a fresh sign-in, in the browser only).
   - {name: personal_token:read,   level: org, org_roles: [owner, admin, member]}
   - {name: personal_token:manage, level: org, org_roles: [owner, admin, member], fresh: true}
-  # The organization's standing rules (ADR 0031 decision 7), under the names the connections had:
-  # members list them; owners and admins revoke them after a recent sign-in, never with a key.
-  - {name: connection:read,    level: org, org_roles: [owner, admin, member], keys: true, pat: true}
-  - {name: connection:manage,  level: org, org_roles: [owner, admin], fresh: true}
+  # The organization's standing rules (ADR 0031 decisions 7 and 8): members list them; owners
+  # and admins revoke them after a recent sign-in, never with a key.
+  - {name: standing_rule:read,   level: org, org_roles: [owner, admin, member], keys: true, pat: true}
+  - {name: standing_rule:manage, level: org, org_roles: [owner, admin], fresh: true}
   # The organization's secrets (ADR 0037 decision 4, in place of ADR 0017's credential:*):
   # members, keys and tokens read names, metadata and where each is used, never a value; owners
   # and admins create, change, replace, delete and import them after a recent sign-in, never with

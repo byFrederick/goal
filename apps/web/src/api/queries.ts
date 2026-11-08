@@ -966,7 +966,7 @@ export const catalogQuery = () =>
     staleTime: 5 * 60_000,
   });
 
-/** The organization's active standing rules (connection:read); the Environments form picks the ones of its servers. */
+/** The organization's active standing rules (standing_rule:read); the Environments form picks the ones of its servers. */
 export const standingRulesQuery = (org: string) =>
   queryOptions({
     queryKey: keys.standingRules(org),

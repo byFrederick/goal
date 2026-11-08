@@ -793,13 +793,13 @@ export function subscribeToOrg(org: string, handlers: StreamHandlers): () => voi
   return subscribe(apiBase, { org }, handlers);
 }
 
-/** The organization's active standing rules (connection:read), oldest first. */
+/** The organization's active standing rules (standing_rule:read), oldest first. */
 export async function listStandingRules(org: string, signal?: AbortSignal): Promise<StandingRule[]> {
   const body = await unwrap(goal.GET(orgPath('/standing-rules'), { params: { path: { org } }, ...cancel(signal) }));
   return body.rules;
 }
 
-/** Revokes a rule: its agent asks again from its next run (connection:manage, a sign-in from the last 10 minutes; 409 standing-rule-revoked, 404 for an unknown rule). */
+/** Revokes a rule: its agent asks again from its next run (standing_rule:manage, a sign-in from the last 10 minutes; 409 standing-rule-revoked, 404 for an unknown rule). */
 export function revokeStandingRule(org: string, rule: string): Promise<StandingRule> {
   return unwrap(goal.DELETE(orgPath('/standing-rules/{rule}'), { params: { path: { org, rule } } }));
 }

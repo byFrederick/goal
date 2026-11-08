@@ -83,8 +83,8 @@ describe('a row', () => {
   });
 });
 
-describe('connection:read label', () => {
+describe('standing_rule:read label', () => {
   it('is called See standing rules', () => {
-    expect(scope('connection:read').label).toBe('See standing rules');
+    expect(scope('standing_rule:read').label).toBe('See standing rules');
   });
 });

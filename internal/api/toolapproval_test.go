@@ -236,9 +236,9 @@ func TestAPI_ToolApprovalRefusals(t *testing.T) {
 	}
 }
 
-// Deciding needs item:decide; Always allow also needs connection:manage, from a recent sign-in,
+// Deciding needs item:decide; Always allow also needs standing_rule:manage, from a recent sign-in,
 // and a refusal leaves the item waiting with no rule.
-func TestAPI_ToolApprovalAlwaysAllowNeedsConnectionManage(t *testing.T) {
+func TestAPI_ToolApprovalAlwaysAllowNeedsStandingRuleManage(t *testing.T) {
 	t.Parallel()
 
 	h := newSignedIn(t)
@@ -254,7 +254,7 @@ func TestAPI_ToolApprovalAlwaysAllowNeedsConnectionManage(t *testing.T) {
 	must(t, h.identity.GrantFactoryRole(testOrg, viewerID, lineID, domain.FactoryApprover))
 
 	if p := problem(t, h.as(t, viewerToken, http.MethodPost, toolApprovalPath(it), always)); p.Status != http.StatusForbidden {
-		t.Errorf("an approver without connection:manage allowing always = %+v; want 403", p)
+		t.Errorf("an approver without standing_rule:manage allowing always = %+v; want 403", p)
 	}
 
 	if p := problem(t, h.as(t, ownerToken, http.MethodPost, toolApprovalPath(it), always)); p.Status != http.StatusForbidden || deref(p.Code) != codeReauth {
