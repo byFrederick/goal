@@ -171,10 +171,7 @@ export async function buildCacheKey(deps: RestoreDeps): Promise<{ key: string; d
  * miss; a download or unpack that fails or runs past timeoutMs is error, logged, and the run goes on
  * cold. It never throws.
  */
-export async function restoreBuildCache(
-  deps: RestoreDeps,
-  enabled: boolean,
-): Promise<BuildCacheState | undefined> {
+export async function restoreBuildCache(deps: RestoreDeps, enabled: boolean): Promise<BuildCacheState | undefined> {
   if (!enabled) return { outcome: 'off' };
   let found: { key: string; dirs: string[] } | undefined;
   try {

@@ -52,7 +52,9 @@ function fakeBucket(opts: { archiveStatus?: number; putStatus?: number; doneStat
     const [, key = '', sub] = m;
     const entry = entries.get(key);
     if (sub === 'archive' && method === 'PUT') {
-      const body = Buffer.from(await new Response(init?.body as BodyInit).arrayBuffer());
+      const body = Buffer.from(
+        await new Response(init?.body as ConstructorParameters<typeof Response>[0]).arrayBuffer(),
+      );
       requests.push({ method, path: url.pathname, auth });
       if (opts.putStatus) return new Response('', { status: opts.putStatus });
       if (entry) entry.object = body;
@@ -85,7 +87,11 @@ function fakeBucket(opts: { archiveStatus?: number; putStatus?: number; doneStat
 /** tar for real; signal ends it. */
 const exec: Exec = (command, args, opts = {}) =>
   new Promise((resolve) => {
-    const child = spawn(command, args, { cwd: opts.cwd, stdio: 'ignore', ...(opts.signal ? { signal: opts.signal } : {}) });
+    const child = spawn(command, args, {
+      cwd: opts.cwd,
+      stdio: 'ignore',
+      ...(opts.signal ? { signal: opts.signal } : {}),
+    });
     child.once('error', () => resolve(1));
     child.once('close', (code) => resolve(code ?? 1));
   });
@@ -128,7 +134,11 @@ async function box(
   return { ws, goal: join(root, name, 'goal'), dirs, output, calls };
 }
 
-const both = { 'go.mod': 'module example.com/acme\n', 'go.sum': 'example.com/x v1.0.0 h1:abc=\n', 'pnpm-lock.yaml': "lockfileVersion: '9.0'\n" };
+const both = {
+  'go.mod': 'module example.com/acme\n',
+  'go.sum': 'example.com/x v1.0.0 h1:abc=\n',
+  'pnpm-lock.yaml': "lockfileVersion: '9.0'\n",
+};
 
 function restoreDeps(b: Box, fake: typeof fetch, logs: string[] = []): RestoreDeps {
   return {

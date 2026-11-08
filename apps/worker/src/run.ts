@@ -140,11 +140,7 @@ async function runAgent(
  * The build cache's outcome from prepare's state file, saving the cache first after a miss when the
  * agent ran; undefined without deps.buildCache or a state.
  */
-async function settleBuildCache(
-  spec: TaskSpec,
-  deps: RunDeps,
-  ran: boolean,
-): Promise<Finished['build_cache']> {
+async function settleBuildCache(spec: TaskSpec, deps: RunDeps, ran: boolean): Promise<Finished['build_cache']> {
   const cache = deps.buildCache;
   if (!cache) return undefined;
   const state = await readBuildCacheState(cache.state);
