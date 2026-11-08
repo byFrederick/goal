@@ -35,6 +35,12 @@ Two things can change this path. A [gate](/docs/concepts/gates-and-human-touches
 
 The station's output must pass the contract named by its `output` field and the commands in its `checks` before the item moves on.
 
+A command check runs in the run's workspace with `CI=true` and `GOAL_BASE_BRANCH`, the branch the item's pull request goes into. For a [part](/docs/concepts/assemblies-and-parts/) that builds on its assembly's [integration branch](/docs/concepts/integration-branches/), it is that branch. It is empty when the pull request goes into the repository's default branch: an item with no assembly, or an assembly's landing. That pull request gets CI, which [wait for CI](#wait-for-ci) already waits on, so a check can skip what CI repeats:
+
+```sh
+if [ -n "$GOAL_BASE_BRANCH" ]; then task check:changed; else echo "CI checks this branch"; fi
+```
+
 ## Merge stations take turns
 
 An agent station with `action: merge` claims at most one item per merge target at a time, so the pull requests that land on one branch do not race each other's CI. The other items with that target wait in the queue until the item holding the turn is done, sent back or blocked. An item held for CI after its push (see [wait for CI](#wait-for-ci)) keeps the turn while CI runs, so no other item merges into the same target in between. Items with other targets still take the free slots. [Integration branches](/docs/concepts/integration-branches/#one-merge-per-target-at-a-time) explains which branch is an item's target.
