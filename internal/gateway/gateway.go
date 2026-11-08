@@ -39,6 +39,31 @@
 // no knowledge; a draft request's bundle gets the section and no snapshot. The first bundle served
 // to a run with a pin appends domain.EventKnowledgePinned, once, as for rules.
 //
+// # Build cache
+//
+// A station run on a repository restores and saves the per-repository cache of Go's module and
+// build caches and the pnpm store (ADR 0045, buildcache.go). Its bundle's build_cache.enabled is
+// false when the line's runtime.buildCache is false or the run has no repository. The cache is the
+// workspace repository's: the gateway derives its repository key (the hex SHA-256 of
+// domain.RepositoryKey of its clone URL) from the task claims, so the box never names it. Its
+// object lives at orgs/<org_id>/build-cache/<repository_key>/<key>.tar.zst, and every route is
+// scoped to the token's organization. ServeBuildCache serves, for a key of 64 lowercase hex
+// characters (else 400):
+//
+//   - GET /run/build-cache/<key>: 404 without a ready cache, else {url}: a URL signed for
+//     Config.KnowledgeURLTTL when it is set, else /run/build-cache/<key>/archive, which streams
+//     the object.
+//   - POST /run/build-cache/<key>: reserves the key; 409 when another box holds it or it is ready,
+//     else {url, method: "PUT"}: a signed upload URL when KnowledgeURLTTL is set, else PUT
+//     /run/build-cache/<key>/archive, which streams the body to the bucket and answers 413 past
+//     Config.MaxBuildCacheBytes (2 GiB).
+//   - POST /run/build-cache/<key>/done with {size_bytes}: 409 when the object is missing or the
+//     reservation was taken over; otherwise it commits the cache, prunes the repository to
+//     domain.BuildCacheKeep and deletes the pruned objects, logging a failed delete without
+//     failing.
+//
+// No URL or token is logged.
+//
 // # Notes
 //
 // ServeRun answers GET /run?notes_after=<event id> (0 or a positive integer, else 400) with the
@@ -190,6 +215,9 @@ type Deps struct {
 	// and without Objects no snapshot is served and no top folder listed.
 	Knowledge Knowledge
 	Objects   Objects
+	// BuildCaches is the index of the organization's build caches, whose archives live in Objects
+	// (buildcache.go); without either, no run's bundle enables the cache and its routes are 404.
+	BuildCaches BuildCaches
 	// Policies cap the tool modes of the run bundle's environment MCP servers.
 	Policies Policies
 	// Questions takes the questions agents ask with question__ask, which every run is served.
@@ -244,6 +272,10 @@ type Config struct {
 	// (ADR 0038 decision 7). Zero keeps KnowledgePath<source>, served by ServeKnowledge, for local
 	// boxes that cannot reach the bucket.
 	KnowledgeURLTTL time.Duration
+	// MaxBuildCacheBytes caps one build cache archive a box uploads through the gateway (PUT
+	// BuildCachePath<key>/archive, default 2 GiB); MaxRequestBytes does not apply to it.
+	// KnowledgeURLTTL also signs the build cache's download and upload URLs.
+	MaxBuildCacheBytes int64
 }
 
 const (
@@ -263,8 +295,9 @@ type Gateway struct {
 	events    Events
 	clock     ports.Clock
 	log       *slog.Logger
-	knowledge Knowledge // nil without Deps.Knowledge
-	objects   Objects   // nil without Deps.Objects
+	knowledge Knowledge   // nil without Deps.Knowledge
+	objects   Objects     // nil without Deps.Objects
+	caches    BuildCaches // nil without Deps.BuildCaches
 	questions Questions
 	approvals ToolApprovals
 	// draftRequests and drafts are nil without Deps.DraftRequests and Deps.Drafts.
@@ -293,10 +326,11 @@ func New(d Deps, cfg Config) (*Gateway, error) {
 	}
 
 	cfg.MaxRequestBytes = cmp.Or(cfg.MaxRequestBytes, defaultMaxRequestBytes)
+	cfg.MaxBuildCacheBytes = cmp.Or(cfg.MaxBuildCacheBytes, defaultMaxBuildCacheBytes)
 
 	g := &Gateway{
 		defs: d.Definitions, items: d.Items, rules: d.StandingRules, policies: d.Policies, events: d.Events, clock: d.Clock, log: d.Logger,
-		knowledge: d.Knowledge, objects: d.Objects, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah,
+		knowledge: d.Knowledge, objects: d.Objects, caches: d.BuildCaches, questions: d.Questions, approvals: d.ToolApprovals, draftRequests: d.DraftRequests, drafts: d.Drafts, jonah: d.Jonah,
 		watches: d.Watches, tries: d.Tries, proposed: d.Proposed, grades: d.Grades, checks: d.Checks, cfg: cfg,
 	}
 	if g.log == nil {
