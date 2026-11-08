@@ -29,7 +29,7 @@ afterEach(() => {
 
 beforeEach(() => {
   Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn(async () => {}) }, configurable: true });
-  api.listWebhookDeliveries.mockResolvedValue({ deliveries: [], next_after: null });
+  api.listWebhookDeliveries.mockResolvedValue({ deliveries: [], unnamed_days: [], next_after: null });
 });
 
 const hook = webhook({
@@ -242,7 +242,7 @@ describe('a webhook page: the delivery log', () => {
   ];
 
   it('shows each receipt and, under it, what each factory made of the delivery', async () => {
-    api.listWebhookDeliveries.mockResolvedValue({ deliveries: rows, next_after: null });
+    api.listWebhookDeliveries.mockResolvedValue({ deliveries: rows, unnamed_days: [], next_after: null });
     renderWebhooks({ at, list: [hook] });
 
     const log = await screen.findByRole('region', { name: 'Deliveries' });
@@ -260,8 +260,8 @@ describe('a webhook page: the delivery log', () => {
 
   it('pages with next_after', async () => {
     api.listWebhookDeliveries
-      .mockResolvedValueOnce({ deliveries: [rows[2] as WebhookDelivery], next_after: 'cursor-1' })
-      .mockResolvedValueOnce({ deliveries: [rows[1] as WebhookDelivery], next_after: null });
+      .mockResolvedValueOnce({ deliveries: [rows[2] as WebhookDelivery], unnamed_days: [], next_after: 'cursor-1' })
+      .mockResolvedValueOnce({ deliveries: [rows[1] as WebhookDelivery], unnamed_days: [], next_after: null });
     renderWebhooks({ at, list: [hook] });
     const user = userEvent.setup();
 
@@ -278,7 +278,11 @@ describe('a webhook page: the delivery log', () => {
   });
 
   it('opens a delivery’s headers and body for webhook:manage', async () => {
-    api.listWebhookDeliveries.mockResolvedValue({ deliveries: [rows[2] as WebhookDelivery], next_after: null });
+    api.listWebhookDeliveries.mockResolvedValue({
+      deliveries: [rows[2] as WebhookDelivery],
+      unnamed_days: [],
+      next_after: null,
+    });
     api.getWebhookDelivery.mockResolvedValue({
       ...(rows[2] as WebhookDelivery),
       headers: { 'x-github-event': 'push' },
@@ -297,7 +301,7 @@ describe('a webhook page: the delivery log', () => {
   });
 
   it('offers no way to open a body without webhook:manage', async () => {
-    api.listWebhookDeliveries.mockResolvedValue({ deliveries: rows, next_after: null });
+    api.listWebhookDeliveries.mockResolvedValue({ deliveries: rows, unnamed_days: [], next_after: null });
     renderWebhooks({ at, list: [hook], can: ['webhook:read'] });
 
     const log = await screen.findByRole('region', { name: 'Deliveries' });
