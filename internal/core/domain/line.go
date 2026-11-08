@@ -313,7 +313,8 @@ type Station struct {
 }
 
 // CIWait is a station's waitFor: ci, with every default filled in (ADR 0044 decision 7). A wait
-// ends when no check appeared within Grace after the run ended, or when Max has passed; after
+// ends when no check appeared within Grace of the commit's first poll (or of the wait's start,
+// when earlier), or when Max has passed since the wait's start; after
 // Rounds CI rounds in one visit to the station, the item blocks for a person.
 type CIWait struct {
 	Grace, Max time.Duration

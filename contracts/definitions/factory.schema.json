@@ -580,7 +580,7 @@
                   "description": "Wait for CI, with any of the defaults changed. max must be above grace.",
                   "additionalProperties": false,
                   "properties": {
-                    "grace": { "type": "string", "pattern": "^[1-9][0-9]*(s|m|h)$", "default": "5m", "description": "How long after the run ended a first check may take to appear, such as 5m; a commit with no check by then gets no CI, and the wait ends." },
+                    "grace": { "type": "string", "pattern": "^[1-9][0-9]*(s|m|h)$", "default": "5m", "description": "How long a first check may take to appear, such as 5m. It counts from goald's first poll of the commit, or from the wait's start when that is earlier; a commit with no check by then gets no CI, and the wait ends." },
                     "max": { "type": "string", "pattern": "^[1-9][0-9]*(s|m|h)$", "default": "60m", "description": "The longest goald waits for CI on one commit, such as 60m; CI not finished by then counts as failed, and the station runs again." },
                     "rounds": { "type": "integer", "minimum": 1, "default": 3, "description": "How many CI rounds one visit to the station gets; after that many, the item blocks for a person, naming the failing checks." }
                   }
