@@ -5,7 +5,8 @@
 //   - any destination whose resolved addresses are all public, over CONNECT or as plain-http
 //     forward requests;
 //   - goald's gateway, served as a reverse proxy at exactly its paths (GatewayPaths: the MCP
-//     gateway, the run's bundle and its tool approvals), so a box reaches those and nothing else of goald.
+//     gateway, the run's bundle and its tool approvals, and the folders of its knowledge snapshots
+//     and build caches), so a box reaches those and nothing else of goald.
 //
 // Every destination but the gateway is resolved by the proxy itself and dialed only at the
 // addresses it vetted, all of which must be public (Public): a name that resolves, or rebinds, to
@@ -38,8 +39,8 @@ var ErrNotPublic = errors.New("destination is not a public address")
 const DialTimeout = 10 * time.Second
 
 // gatewayPaths are goald's paths a box reaches through the proxy, exactly: the MCP gateway, the
-// run's bundle and its tool approvals, and under KnowledgePrefix its knowledge snapshots. Any
-// other path, an encoded one included, is 404.
+// run's bundle and its tool approvals, under KnowledgePrefix its knowledge snapshots and under
+// BuildCachePrefix its build caches. Any other path, an encoded one included, is 404.
 var gatewayPaths = []string{"/mcp", "/run", "/run/tool-approval"}
 
 // GatewayPaths are the paths the proxy forwards to goald's gateway (goald's api.GatewayPath,
@@ -51,14 +52,27 @@ func GatewayPaths() []string { return slices.Clone(gatewayPaths) }
 // which cmd/goald's test holds it to).
 const KnowledgePrefix = "/run/knowledge/"
 
+// BuildCachePrefix is the gateway's folder of a run's build caches: the proxy forwards
+// BuildCachePrefix<key>, <key>/archive and <key>/done and nothing else under it (goald's
+// api.BuildCachePath, which cmd/goald's test holds it to). The gateway checks the key.
+const BuildCachePrefix = "/run/build-cache/"
+
 // gatewayPath reports whether path is one the proxy forwards to the gateway.
 func gatewayPath(path string) bool {
 	if source, ok := strings.CutPrefix(path, KnowledgePrefix); ok {
-		return source != "" && !strings.Contains(source, "/") && source != "." && source != ".."
+		return segment(source)
+	}
+
+	if rest, ok := strings.CutPrefix(path, BuildCachePrefix); ok {
+		key, sub, nested := strings.Cut(rest, "/")
+		return segment(key) && (!nested || sub == "archive" || sub == "done")
 	}
 
 	return slices.Contains(gatewayPaths, path)
 }
+
+// segment reports whether s is one path segment other than . and ..
+func segment(s string) bool { return s != "" && !strings.Contains(s, "/") && s != "." && s != ".." }
 
 // Config is the proxy's setup.
 type Config struct {

@@ -1283,6 +1283,12 @@ type ObjectStore interface {
 	// bearer credential: never log it. A ttl at or below zero is domain.ErrInvalid.
 	PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error)
 
+	// PresignPut returns a SigV4 query-signed URL that anyone holding it can PUT the object at key
+	// with, valid for ttl, so a cloud box uploads a build cache archive to the bucket itself,
+	// bigger than a request through the control Worker can carry. It makes no network call. The
+	// URL is a bearer credential: never log it. A ttl at or below zero is domain.ErrInvalid.
+	PresignPut(ctx context.Context, key string, ttl time.Duration) (string, error)
+
 	// Put stores body at key, replacing what was there, and returns it.
 	Put(ctx context.Context, key string, body []byte) (ObjectInfo, error)
 

@@ -246,6 +246,30 @@ func (e BridgeStepComponent) Valid() bool {
 	}
 }
 
+// Defines values for BuildCache.
+const (
+	BuildCacheError BuildCache = "error"
+	BuildCacheHit   BuildCache = "hit"
+	BuildCacheMiss  BuildCache = "miss"
+	BuildCacheOff   BuildCache = "off"
+)
+
+// Valid indicates whether the value is a known member of the BuildCache enum.
+func (e BuildCache) Valid() bool {
+	switch e {
+	case BuildCacheError:
+		return true
+	case BuildCacheHit:
+		return true
+	case BuildCacheMiss:
+		return true
+	case BuildCacheOff:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CICheckResult.
 const (
 	CICheckResultFailed  CICheckResult = "failed"
@@ -3288,6 +3312,9 @@ type BridgeStep struct {
 
 // BridgeStepComponent The kind of time. waiting is time queued or ready at the station; ci is time held at the station waiting for CI on the item's commits, and is not counted in waiting.
 type BridgeStepComponent string
+
+// BuildCache What happened to a run's build cache: hit restored a matching cache; miss found none, and the box saved one; off is a factory that turned the cache off; error is a restore that failed, so the run went on cold
+type BuildCache string
 
 // BuilderCapabilities What this install enforces; the editor shows the controls for what it does not read-only
 type BuilderCapabilities struct {
@@ -6486,7 +6513,10 @@ type OrgRun struct {
 
 	// BoxSize The box size the run ran in; null for a run from before box sizes were recorded
 	BoxSize *SandboxSize `json:"box_size"`
-	CostUsd float64      `json:"cost_usd"`
+
+	// BuildCache What happened to the run's build cache (Go's module and build caches and the pnpm store) while its box prepared; null when the run had no Go or pnpm repository, or for a run from before it was recorded
+	BuildCache *BuildCache `json:"build_cache"`
+	CostUsd    float64     `json:"cost_usd"`
 
 	// CpuSeconds The CPU time the run's box used, in seconds; null while the run is running, when the box could not read it or for a run from before it was recorded
 	CpuSeconds *float64 `json:"cpu_seconds"`
@@ -7109,7 +7139,10 @@ type Run struct {
 
 	// BoxSize The box size the run ran in; null for a run from before box sizes were recorded
 	BoxSize *SandboxSize `json:"box_size"`
-	CostUsd float64      `json:"cost_usd"`
+
+	// BuildCache What happened to the run's build cache (Go's module and build caches and the pnpm store) while its box prepared; null when the run had no Go or pnpm repository, or for a run from before it was recorded
+	BuildCache *BuildCache `json:"build_cache"`
+	CostUsd    float64     `json:"cost_usd"`
 
 	// CpuSeconds The CPU time the run's box used, in seconds; null while the run is running, when the box could not read it or for a run from before it was recorded
 	CpuSeconds *float64 `json:"cpu_seconds"`

@@ -6806,7 +6806,14 @@ export interface components {
             peak_memory_source?: components["schemas"]["MemorySource"] | null;
             /** @description The box size the run ran in; null for a run from before box sizes were recorded */
             box_size: components["schemas"]["SandboxSize"] | null;
+            /** @description What happened to the run's build cache (Go's module and build caches and the pnpm store) while its box prepared; null when the run had no Go or pnpm repository, or for a run from before it was recorded */
+            build_cache: components["schemas"]["BuildCache"] | null;
         };
+        /**
+         * @description What happened to a run's build cache: hit restored a matching cache; miss found none, and the box saved one; off is a factory that turned the cache off; error is a restore that failed, so the run went on cold
+         * @enum {string}
+         */
+        BuildCache: "hit" | "miss" | "off" | "error";
         /**
          * @description How a run's peak memory was measured: cgroup is the box's own cgroup, machine the whole machine's used memory, read when the box's cgroup has no memory figures
          * @enum {string}
