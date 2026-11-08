@@ -41,7 +41,7 @@ export function getKnowledgeSource(org: string, source: string, signal?: AbortSi
   );
 }
 
-/** 400 for a broken rule or connection-cannot-sync; 404 connection-not-found; 409 knowledge-source-name-taken. */
+/** 400 for a broken rule; 404 secret-not-found; 409 knowledge-source-name-taken. */
 export function createKnowledgeSource(org: string, source: NewKnowledgeSource): Promise<KnowledgeSource> {
   return unwrap(goal.POST(orgPath('/knowledge/sources'), { params: { path: { org } }, body: source }));
 }

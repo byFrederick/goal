@@ -46,7 +46,7 @@ const removedKeys: [string, string, string][] = [
     'runtime.image',
     "every run starts from the platform's agent image and installs the repository's tools and runtime.tools",
   ],
-  ['auth', 'runtime.auth', 'set runtime.modelConnection to an organization connection with model access'],
+  ['auth', 'runtime.auth', 'set runtime.modelKey to the {{secret}} that holds the model key'],
   ['secrets', 'spec.secrets', 'a run gets its secrets from the connections it uses'],
   [
     'knowledge_base',

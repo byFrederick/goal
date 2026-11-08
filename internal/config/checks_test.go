@@ -533,8 +533,19 @@ func TestCheck_RemovedFormsAreFixed(t *testing.T) {
 
 	tests := []struct {
 		name, doc, code string
+		message         string // a part of the problem's message, when set
 		want            domain.ProblemFix
 	}{
+		{
+			name: "runtime auth", doc: edited(runtimeModel, runtimeModel+"    auth: anthropic-api-key\n"), code: codeFieldRemoved,
+			message: "set runtime.modelKey to the {{secret}} that holds the model key",
+			want:    remove("Remove runtime.auth", "/auth"),
+		},
+		{
+			name: "secrets", doc: edited(specAgents, "  secrets: { provider: env }\n"+specAgents), code: codeFieldRemoved,
+			message: "the organization's secrets hold its credentials",
+			want:    remove("Remove secrets", "/secrets"),
+		},
 		{
 			name: "runtime image", doc: edited(runtimeModel, runtimeModel+"    image: ghcr.io/acme/agent:1.0.0\n"), code: codeFieldRemoved,
 			want: remove("Remove runtime.image", "/image"),
@@ -572,6 +583,10 @@ func TestCheck_RemovedFormsAreFixed(t *testing.T) {
 			i := indexOf(problems, tt.code)
 			if i < 0 {
 				t.Fatalf("no %s problem in %+v", tt.code, problems)
+			}
+
+			if !strings.Contains(problems[i].Message, tt.message) {
+				t.Errorf("message = %q, want it to contain %q", problems[i].Message, tt.message)
 			}
 
 			if got := problems[i].Fixes; !reflect.DeepEqual(got, []domain.ProblemFix{tt.want}) {
