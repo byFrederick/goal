@@ -13,9 +13,13 @@ LIMIT sqlc.arg(max_events)::bigint;
 
 -- name: AskEvents :many
 -- The events of some items whose kind is one of domain.AskKinds, by item in append order, on
--- item_events_item_idx: what the open question and tool approval of each are read from.
+-- item_events_asks_idx: what the open question and tool approval of each are read from. The
+-- kinds are the index's own, written out so the planner can use it; the AskEvents conformance
+-- case appends every kind of domain.AskKinds, so a kind missing here fails it.
 SELECT * FROM item_events
-WHERE item_id = ANY (sqlc.arg(item_ids)::uuid[]) AND kind = ANY (sqlc.arg(kinds)::text[])
+WHERE item_id = ANY (sqlc.arg(item_ids)::uuid[])
+  AND kind IN ('question_asked', 'question_answered', 'tool_approval_requested', 'tool_approval_granted',
+               'tool_approval_denied', 'moved', 'paused', 'rejected', 'cancelled')
 ORDER BY item_id, id;
 
 -- name: ItemNotes :many

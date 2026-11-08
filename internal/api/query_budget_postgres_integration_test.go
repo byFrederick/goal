@@ -201,40 +201,8 @@ func (b *budgetSeed) seedItems(t *testing.T, openItems int, now time.Time) {
 		b.parts += partsEach
 	}
 
-	// One in twenty open items waits on a person with an open question, as many with an open tool
-	// approval, each after a run with a long history.
-	askers := max(openItems/20, 1)
-	questions, approvals := 0, 0
-
-	for i := range openItems - assemblies {
-		station, state := budgetInbox, domain.StateQueued
-
-		switch {
-		case i%4 == 0:
-			station, state = budgetReview, domain.StateWaitingHuman
-		case i%10 == 1:
-			station, state = build.ID, domain.StateBlocked
-		}
-
-		it := file(fmt.Sprintf("open %d", i), station, state, at.Add(-time.Duration(i)*time.Minute))
-
-		if state != domain.StateWaitingHuman {
-			continue
-		}
-
-		switch {
-		case questions < askers:
-			b.ask(t, it, domain.Event{Kind: domain.EventQuestionAsked, Data: map[string]any{
-				domain.KeyQuestion: "which way?", domain.KeyChoices: []any{"left", "right"}, domain.KeyAgent: "builder",
-			}}, at)
-			questions++
-		case approvals < askers:
-			b.ask(t, it, domain.Event{Kind: domain.EventToolApprovalRequested, Data: map[string]any{
-				domain.KeyConnection: "github", domain.KeyTool: "merge", domain.KeyAgent: "builder",
-			}}, at)
-			approvals++
-		}
-	}
+	waiting := b.seedOpen(t, openItems-assemblies, build.ID, at, file)
+	b.askers(t, waiting, max(openItems/20, 1), at)
 
 	for i := range 4 * openItems {
 		doneAt := now.Add(-time.Duration(i%(14*24)) * time.Hour).Add(-time.Minute)
@@ -250,6 +218,52 @@ func (b *budgetSeed) seedItems(t *testing.T, openItems int, now time.Time) {
 	}
 
 	b.open = openItems
+}
+
+// seedOpen files n open items: a quarter waits for a person at review, a tenth is blocked at
+// build and the others are queued at inbox. It returns the waiting ones.
+func (b *budgetSeed) seedOpen(t *testing.T, n int, build string, at time.Time, file func(string, string, domain.ItemState, time.Time) domain.Item) []domain.Item {
+	t.Helper()
+
+	var waiting []domain.Item
+
+	for i := range n {
+		station, state := budgetInbox, domain.StateQueued
+
+		switch {
+		case i%4 == 0:
+			station, state = budgetReview, domain.StateWaitingHuman
+		case i%10 == 1:
+			station, state = build, domain.StateBlocked
+		}
+
+		it := file(fmt.Sprintf("open %d", i), station, state, at.Add(-time.Duration(i)*time.Minute))
+		if state == domain.StateWaitingHuman {
+			waiting = append(waiting, it)
+		}
+	}
+
+	return waiting
+}
+
+// askers gives n of the waiting items an open question and the next n an open tool approval,
+// each after a run's long history.
+func (b *budgetSeed) askers(t *testing.T, waiting []domain.Item, n int, at time.Time) {
+	t.Helper()
+
+	for i, it := range waiting[:min(2*n, len(waiting))] {
+		if i < n {
+			b.ask(t, it, domain.Event{Kind: domain.EventQuestionAsked, Data: map[string]any{
+				domain.KeyQuestion: "which way?", domain.KeyChoices: []any{"left", "right"}, domain.KeyAgent: factoryBuilder,
+			}}, at)
+
+			continue
+		}
+
+		b.ask(t, it, domain.Event{Kind: domain.EventToolApprovalRequested, Data: map[string]any{
+			domain.KeyConnection: "github", domain.KeyTool: "merge", domain.KeyAgent: factoryBuilder,
+		}}, at)
+	}
 }
 
 // askHistory is how many events a run leaves before its ask in the seed: more than one page of

@@ -1158,14 +1158,7 @@ func (s *Store) AskEvents(ctx context.Context, ids []domain.ItemID) (map[domain.
 		return nil, err
 	}
 
-	kinds := make([]string, 0, len(domain.AskKinds))
-	for _, k := range domain.AskKinds {
-		kinds = append(kinds, string(k))
-	}
-
-	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.ItemEvent, error) {
-		return q.AskEvents(ctx, db.AskEventsParams{ItemIds: uids, Kinds: kinds})
-	})
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.ItemEvent, error) { return q.AskEvents(ctx, uids) })
 	if err != nil {
 		return nil, fmt.Errorf("ask events of %d items: %w", len(ids), err)
 	}

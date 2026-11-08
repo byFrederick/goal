@@ -994,12 +994,13 @@ func testAskEvents(f *fixture) {
 		return domain.Event{FactoryID: f.factory, ItemID: id, At: t1, Kind: kind, Actor: agWorker}
 	}
 
-	if err := f.Store.AppendEvents(f.ctx(t),
-		ev(it.ID, domain.EventToolCall), ev(it.ID, domain.EventQuestionAsked), ev(other.ID, domain.EventQuestionAsked),
-		ev(it.ID, domain.EventNote), ev(it.ID, domain.EventQuestionAnswered), ev(it.ID, domain.EventMoved),
-		ev(quiet.ID, domain.EventToolResult), ev(it.ID, domain.EventToolApprovalRequested), ev(it.ID, domain.EventAgentMessage),
-		ev(it.ID, domain.EventToolApprovalDenied), ev(it.ID, domain.EventPaused),
-	); err != nil {
+	// Every ask kind, each between events of other kinds and of other items.
+	events := []domain.Event{ev(it.ID, domain.EventToolCall), ev(quiet.ID, domain.EventToolResult)}
+	for _, k := range domain.AskKinds {
+		events = append(events, ev(it.ID, k), ev(other.ID, k), ev(it.ID, domain.EventAgentMessage))
+	}
+
+	if err := f.Store.AppendEvents(f.ctx(t), events...); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1011,8 +1012,8 @@ func testAskEvents(f *fixture) {
 		}
 	}
 
-	if len(want) != 6 {
-		t.Fatalf("%d ask events, want 6", len(want))
+	if len(want) != len(domain.AskKinds) {
+		t.Fatalf("%d ask events, want %d", len(want), len(domain.AskKinds))
 	}
 
 	got, err := f.Store.AskEvents(f.ctx(t), []domain.ItemID{it.ID, quiet.ID, missingItem})

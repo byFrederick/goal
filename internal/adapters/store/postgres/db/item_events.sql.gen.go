@@ -14,19 +14,18 @@ import (
 
 const askEvents = `-- name: AskEvents :many
 SELECT id, factory_id, item_id, run_id, at, kind, station, actor, data, org_id FROM item_events
-WHERE item_id = ANY ($1::uuid[]) AND kind = ANY ($2::text[])
+WHERE item_id = ANY ($1::uuid[])
+  AND kind IN ('question_asked', 'question_answered', 'tool_approval_requested', 'tool_approval_granted',
+               'tool_approval_denied', 'moved', 'paused', 'rejected', 'cancelled')
 ORDER BY item_id, id
 `
 
-type AskEventsParams struct {
-	ItemIds []uuid.UUID
-	Kinds   []string
-}
-
 // The events of some items whose kind is one of domain.AskKinds, by item in append order, on
-// item_events_item_idx: what the open question and tool approval of each are read from.
-func (q *Queries) AskEvents(ctx context.Context, arg AskEventsParams) ([]ItemEvent, error) {
-	rows, err := q.db.Query(ctx, askEvents, arg.ItemIds, arg.Kinds)
+// item_events_asks_idx: what the open question and tool approval of each are read from. The
+// kinds are the index's own, written out so the planner can use it; the AskEvents conformance
+// case appends every kind of domain.AskKinds, so a kind missing here fails it.
+func (q *Queries) AskEvents(ctx context.Context, itemIds []uuid.UUID) ([]ItemEvent, error) {
+	rows, err := q.db.Query(ctx, askEvents, itemIds)
 	if err != nil {
 		return nil, err
 	}
