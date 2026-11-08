@@ -315,3 +315,25 @@ test('Cancel on Start creates nothing; a clone starts from the running version',
   await expect(page.getByRole('heading', { level: 1, name: 'sre-copy' })).toBeVisible();
   await expect(page.getByText('A copy of sre v3.', { exact: false })).toBeVisible();
 });
+
+for (const width of [375, 1440]) {
+  test(`a published factory never shows the draft wizard while its detail loads, at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(/\/factories\/sre(\?|$)/, async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.goto('/o/acme/new/basics?factory=sre');
+    await expect(page.locator('#main').getByText('Loading', { exact: true })).toBeAttached();
+    await expect(page.getByText('Delete this draft factory')).toHaveCount(0);
+    await expect(page.getByText('Draft', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Continue to/ })).toHaveCount(0);
+    release();
+    await expect(page.getByText(/ is published$/)).toBeVisible();
+    await expect(page.getByText('Delete this draft factory')).toHaveCount(0);
+  });
+}
