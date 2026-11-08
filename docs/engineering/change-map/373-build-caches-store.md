@@ -1,6 +1,6 @@
 ## When you change
 
-The build cache index: `db/migrations/00143_build_caches.sql` (or a later migration of `build_caches`), `db/queries/build_caches.sql`, the `ports.BuildCaches` port in `internal/core/ports/buildcaches.go` (`FindBuildCache`, `ReserveBuildCache`, `CommitBuildCache`, `PruneBuildCaches`), the domain types in `internal/core/domain/buildcache.go`, `internal/adapters/store/postgres/buildcaches.go` or the fake in `internal/core/ports/porttest/buildcaches.go`
+The build cache index: `db/migrations/00145_build_caches.sql` (or a later migration of `build_caches`), `db/queries/build_caches.sql`, the `ports.BuildCaches` port in `internal/core/ports/buildcaches.go` (`FindBuildCache`, `ReserveBuildCache`, `CommitBuildCache`, `PruneBuildCaches`), the domain types in `internal/core/domain/buildcache.go`, `internal/adapters/store/postgres/buildcaches.go` or the fake in `internal/core/ports/porttest/buildcaches.go`
 
 ## Also change
 
