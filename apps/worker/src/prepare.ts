@@ -12,12 +12,13 @@ import { Bundle, type ClonedRepository, type GitCredential, type Knowledge, path
 
 /**
  * One command prepare runs; the result is its exit code. Its output goes to stderr, never stdout.
- * With signal, the command is ended when it fires; with stderr, its stderr is also passed there.
+ * With signal, the command is ended when it fires; with stderr, its stderr is also passed there;
+ * with env, those variables are added to the command's environment, and to no other command's.
  */
 export type Exec = (
   command: string,
   args: string[],
-  opts?: { cwd?: string; signal?: AbortSignal; stderr?: (chunk: string) => void },
+  opts?: { cwd?: string; env?: Record<string, string>; signal?: AbortSignal; stderr?: (chunk: string) => void },
 ) => Promise<number>;
 
 /** One command whose stdout prepare reads; it throws when the command fails. Its stderr goes to stderr. */
@@ -156,6 +157,7 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
     ]);
   }
 
+  const mise = miseEnv(deps.env, credentials, bundle.repository_logins ?? []);
   const out: Prepared = { type: 'prepared', at: '', seconds: 0, tools: bundle.tools.length };
   if (bundle.definition) {
     const baseline: Record<string, string> = {};
@@ -174,7 +176,7 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
     for (const c of code) {
       const entry: ClonedRepository = { ...c };
       if (c.path === paths.workspace) {
-        const first = await cloneWorkspace(deps, { ...c, base: repo?.base, fresh_base: repo?.fresh_base }, out);
+        const first = await cloneWorkspace(deps, { ...c, base: repo?.base, fresh_base: repo?.fresh_base }, out, mise);
         baseBranch = first.conflictsWith;
         if (first.base_head) entry.base_commit = first.base_head;
         if (first.branch_head) entry.branch_head = first.branch_head;
@@ -185,9 +187,9 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
     }
   } else if (repo?.commit) {
     // A try's repository is read-only: its agent gets no git login (ADR 0039 decision 9).
-    cloned.push(await checkoutCommit(deps, repo, out));
+    cloned.push(await checkoutCommit(deps, repo, out, mise));
   } else if (repo) {
-    const first = await cloneWorkspace(deps, repo, out);
+    const first = await cloneWorkspace(deps, repo, out, mise);
     baseBranch = first.conflictsWith;
     cloned.push({
       url: repo.url,
@@ -222,7 +224,7 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
 
   if (bundle.tools.length > 0) {
     // In the global config, so they are on PATH (mise's shims) wherever the agent works.
-    await must(deps, 'mise', ['use', '--global', '--yes', ...bundle.tools]);
+    await must(deps, 'mise', ['use', '--global', '--yes', ...bundle.tools], undefined, mise);
   }
 
   const done = deps.now();
@@ -242,6 +244,7 @@ async function cloneWorkspace(
   deps: PrepareDeps,
   repo: { url: string; branch: string; base?: string | undefined; fresh_base?: FreshBase | undefined },
   out: Prepared,
+  mise: Record<string, string>,
 ): Promise<{ conflictsWith: string | undefined; base_head?: string; branch_head?: string }> {
   const ws = deps.dirs.workspace;
   // An empty base is the default branch, as an absent one.
@@ -268,7 +271,7 @@ async function cloneWorkspace(
     }
   }
   // The repository's own tools; mise trusts configs under /workspace (MISE_TRUSTED_CONFIG_PATHS).
-  await must(deps, 'mise', ['install', '--yes'], ws);
+  await must(deps, 'mise', ['install', '--yes'], ws, mise);
   out.branch = repo.branch;
   out.branch_existed = existed;
   return {
@@ -512,6 +515,7 @@ async function checkoutCommit(
   deps: PrepareDeps,
   repo: NonNullable<Bundle['repository']>,
   out: Prepared,
+  mise: Record<string, string>,
 ): Promise<ClonedRepository> {
   const ws = deps.dirs.workspace;
   const commit = repo.commit as string;
@@ -533,7 +537,7 @@ async function checkoutCommit(
     }
   }
   await must(deps, 'git', ['update-ref', tryStartRef, 'HEAD'], ws);
-  await must(deps, 'mise', ['install', '--yes'], ws);
+  await must(deps, 'mise', ['install', '--yes'], ws, mise);
   out.branch = repo.branch;
   out.branch_existed = true;
   return {
@@ -620,8 +624,36 @@ function attemptTimeout(env: NodeJS.ProcessEnv): number {
   return n;
 }
 
-async function must(deps: PrepareDeps, command: string, args: string[], cwd?: string): Promise<void> {
-  const code = await deps.exec(command, args, cwd === undefined ? {} : { cwd });
+/**
+ * The environment of every mise process prepare runs: quiet, so a failure's stderr opens with
+ * mise's ERROR lines and not progress frames; and, when the run has a github.com login whose
+ * variable is set, MISE_GITHUB_TOKEN (mise reads it before GITHUB_API_TOKEN and GITHUB_TOKEN), so
+ * its tool downloads are signed in. Only mise gets it: it is passed per call, never put in process.env.
+ */
+function miseEnv(
+  env: NodeJS.ProcessEnv,
+  credentials: GitCredential[],
+  logins: { prefix: string; password_env: string }[],
+): Record<string, string> {
+  const names = [
+    ...credentials.filter((c) => c.host === 'github.com').map((c) => c.password_env),
+    ...logins.filter((l) => new URL(l.prefix).hostname === 'github.com').map((l) => l.password_env),
+  ];
+  const token = names.map((n) => env[n]).find((v) => v);
+  return token ? { MISE_QUIET: '1', MISE_GITHUB_TOKEN: token } : { MISE_QUIET: '1' };
+}
+
+async function must(
+  deps: PrepareDeps,
+  command: string,
+  args: string[],
+  cwd?: string,
+  env?: Record<string, string>,
+): Promise<void> {
+  const code = await deps.exec(command, args, {
+    ...(cwd === undefined ? {} : { cwd }),
+    ...(env === undefined ? {} : { env }),
+  });
   if (code !== 0) throw new Error(`${command} ${args[0]} exited ${code}`);
 }
 
