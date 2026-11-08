@@ -2,6 +2,7 @@ package domain
 
 import (
 	"math"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -295,5 +296,62 @@ func TestStation_WaitsForCI(t *testing.T) {
 	st := Station{Kind: KindAgent, WaitFor: CIWait{Grace: DefaultCIGrace, Max: DefaultCIMax, Rounds: DefaultCIRounds}}
 	if !st.WaitsForCI() {
 		t.Error("a station with waitFor does not wait for CI")
+	}
+}
+
+// Kept slots come first, by lane name, cut off at the station's capacity; the rest are shared
+// and take no lane that keeps slots.
+func TestStation_SlotLanes(t *testing.T) {
+	t.Parallel()
+
+	route := map[string]string{"api": "api-dev", "backend": "api-dev", "web": "web-dev"}
+
+	for _, tt := range []struct {
+		name string
+		st   Station
+		want []SlotLane
+	}{
+		{"no counts", Station{Kind: KindAgent, Route: route, Agents: 2}, []SlotLane{{}, {}}},
+		{
+			"one lane keeps one of three",
+			Station{Kind: KindAgent, Route: route, Agents: 3, RouteAgents: map[string]int{"backend": 1}},
+			[]SlotLane{{Lane: "backend"}, {Exclude: []string{"backend"}}, {Exclude: []string{"backend"}}},
+		},
+		{
+			"lanes in name order",
+			Station{Kind: KindAgent, Route: route, Agents: 5, RouteAgents: map[string]int{"web": 1, "api": 2}},
+			[]SlotLane{{Lane: "api"}, {Lane: "api"}, {Lane: "web"}, {Exclude: []string{"api", "web"}}, {Exclude: []string{"api", "web"}}},
+		},
+		{
+			"cut off at wip",
+			Station{Kind: KindAgent, Route: route, Agents: 4, WIP: 2, RouteAgents: map[string]int{"web": 1, "api": 2}},
+			[]SlotLane{{Lane: "api"}, {Lane: "api"}},
+		},
+	} {
+		if got := tt.st.SlotLanes(); !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("%s: slot lanes = %#v, want %#v", tt.name, got, tt.want)
+		}
+	}
+}
+
+// A kept slot takes only its lane; a shared slot takes every lane it does not exclude, and an
+// item without a lane.
+func TestSlotLane_Takes(t *testing.T) {
+	t.Parallel()
+
+	kept, shared := SlotLane{Lane: "backend"}, SlotLane{Exclude: []string{"backend"}}
+
+	for _, tt := range []struct {
+		slot SlotLane
+		lane string
+		want bool
+	}{
+		{kept, "backend", true}, {kept, "web", false}, {kept, "", false},
+		{shared, "backend", false}, {shared, "web", true}, {shared, "", true},
+		{SlotLane{}, "backend", true},
+	} {
+		if got := tt.slot.Takes(tt.lane); got != tt.want {
+			t.Errorf("%#v takes %q = %v, want %v", tt.slot, tt.lane, got, tt.want)
+		}
 	}
 }

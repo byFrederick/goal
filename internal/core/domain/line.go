@@ -532,6 +532,53 @@ func (s Station) Capacity() int {
 	return n
 }
 
+// SlotLane is which items one of a station's slots takes: a kept slot (Lane set) only items of
+// Lane, a shared slot every item whose lane is not in Exclude, an item without a lane included.
+type SlotLane struct {
+	Lane    string
+	Exclude []string
+}
+
+// Takes reports whether the slot takes an item of lane.
+func (sl SlotLane) Takes(lane string) bool {
+	if sl.Lane != "" {
+		return lane == sl.Lane
+	}
+
+	return !slices.Contains(sl.Exclude, lane)
+}
+
+// SlotLanes lays out the station's Capacity() slots (ADR 0012 decision 9): each lane with a
+// route count keeps that many consecutive slots, the lanes sorted by name and cut off at the
+// capacity, and the slots after them are shared, excluding every lane with a count. Without
+// counts every slot is shared and excludes none.
+func (s Station) SlotLanes() []SlotLane {
+	n := s.Capacity()
+	slots := make([]SlotLane, 0, n)
+	lanes := slices.Sorted(maps.Keys(s.RouteAgents))
+
+	for _, lane := range lanes {
+		for range s.RouteAgents[lane] {
+			if len(slots) == n {
+				return slots
+			}
+
+			slots = append(slots, SlotLane{Lane: lane})
+		}
+	}
+
+	var exclude []string
+	if len(lanes) > 0 {
+		exclude = lanes
+	}
+
+	for len(slots) < n {
+		slots = append(slots, SlotLane{Exclude: exclude})
+	}
+
+	return slots
+}
+
 // AgentFor returns the agent that works an item of the given lane at this station.
 func (s Station) AgentFor(lane string) (string, error) {
 	if s.Agent != "" {
