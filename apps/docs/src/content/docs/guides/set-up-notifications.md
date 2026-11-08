@@ -7,7 +7,7 @@ You end with each person choosing their own channels, and Slack direct messages 
 
 ## Choose your channels
 
-Open your account page and find Notifications. The table has one row per event and one column per channel. The events are:
+Open your account page from the account menu and find Notifications. The table has one row per event and one column per channel. The events are:
 
 - An agent needs your OK for a write.
 - An agent asks you a question.
@@ -15,7 +15,19 @@ Open your account page and find Notifications. The table has one row per event a
 - A budget passes 80%.
 - Daily digest.
 
-The channels are In Goal, Email and Slack. The digest has no In Goal column.
+The channels are In Goal, Email and Slack. The digest has no In Goal column. In Goal is saved, but nothing delivers or reads it yet, so it has no effect.
+
+Until you save a change, these defaults apply:
+
+| Event | In Goal | Email | Slack |
+| --- | --- | --- | --- |
+| An agent needs your OK for a write | on | off | on |
+| An agent asks you a question | on | off | on |
+| A factory pulls the andon | on | on | on |
+| A budget passes 80% | on | on | off |
+| Daily digest | none | on | off |
+
+Email and Slack go to the address in Profile, Email for notifications, on your account page. Slack uses it to find you in the workspace. Blank means your sign-in email. Email is sent only when the install sets `GOAL_SMTP_URL`; see [Environment variables](/docs/reference/environment/).
 
 Each box saves when you change it. Notifications are personal: they follow you into every organization you belong to. With sign-in off there is no person to notify, so the boxes are unavailable.
 
@@ -31,7 +43,7 @@ You need the `org:manage` permission.
 
 1. In Slack, create an app for your workspace and add a bot token with the scopes `users:read.email`, `im:write` and `chat:write`. Goal looks up each person by their email address, opens a direct message with them and posts to it.
 2. Install the app to the workspace and copy the bot token.
-3. In Goal, open Secrets and choose New secret. Name it `slack-bot`, paste the token as the value, and leave it available to all factories. A secret limited to some factories is refused.
+3. In Goal, open Secrets and choose New secret. Name it `slack-bot`, paste the token as the value, and tick "All factories, including new ones". A new secret starts open to no factory. Without the tick, Save answers 400 `secret-not-allowed` and Test shows "Slack could not be reached. Try again."
 4. Open Organization settings, then Notifications. The Slack row preselects `slack-bot` when no secret is saved and a secret of that name exists. Pick another secret if you used a different name.
 5. Press Test. Goal asks Slack about the token and shows the result next to the buttons:
    - `Works with <workspace>`: Slack accepted the token.
