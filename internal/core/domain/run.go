@@ -36,6 +36,21 @@ const (
 	MemoryMachine MemorySource = "machine"
 )
 
+// BuildCache is what happened to a run's build cache, the Go module and build caches and the pnpm
+// store its box restores while it prepares: BuildCacheHit restored a matching cache,
+// BuildCacheMiss found none and the box saved one, BuildCacheOff is a factory that turned it off,
+// and BuildCacheError is a restore that failed, so the run went on cold. Empty is unknown: a run
+// with no Go or pnpm repository, or one from before the cache existed.
+type BuildCache string
+
+// Build cache outcomes.
+const (
+	BuildCacheHit   BuildCache = "hit"
+	BuildCacheMiss  BuildCache = "miss"
+	BuildCacheOff   BuildCache = "off"
+	BuildCacheError BuildCache = "error"
+)
+
 // BoxSize is what one sandbox backend gives a box of Size: its virtual CPUs and memory.
 type BoxSize struct {
 	Size        SandboxSize
@@ -177,6 +192,9 @@ type RunResult struct {
 	CPUSeconds       *float64
 	PeakMemoryBytes  *int64
 	PeakMemorySource MemorySource
+	// BuildCache is what happened to the run's build cache as the worker reported it; empty when
+	// it reported none or a value it does not know.
+	BuildCache BuildCache
 	// Error explains a failed or cancelled run.
 	Error string
 	// Repositories are the repositories the worker reported at the end, each with its PushedHead

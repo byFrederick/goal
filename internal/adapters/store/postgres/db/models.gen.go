@@ -35,6 +35,7 @@ type AgentRun struct {
 	PeakMemoryBytes     *int64
 	BoxSize             *string
 	PeakMemorySource    *string
+	BuildCache          *string
 }
 
 type AndonPull struct {
