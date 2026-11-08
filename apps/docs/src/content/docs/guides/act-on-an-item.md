@@ -142,7 +142,7 @@ Cancel closes the item for good, where it is. Its pull request stays open.
 goal cancel acme-line#3 --reason "Superseded by acme-line#4"
 ```
 
-On the item page, the ⋯ **More actions** menu has **Cancel item**, which does the same. On an assembly's page, **Cancel assembly** cancels the assembly and its open parts (see [the assembly page](#act-on-an-assembly)).
+On the item page, **Cancel item** in the top bar does the same; on a phone it is in the ⋯ **More actions** menu. On an assembly's page, **Cancel assembly** cancels the assembly and its open parts (see [the assembly page](#act-on-an-assembly)).
 
 ## Set the lane
 

@@ -65,7 +65,7 @@ goal start acme-line#14 --in 2d
 goal start acme-line#14 --now
 ```
 
-`--now` clears the time, so the first station releases the item on its next tick. Items it waits for still hold it; Only the API removes a need, with `DELETE /v1/orgs/{org}/items/{item}/needs/{need}`; the CLI and the web app have no control for it. Once the item has left the first station, its start cannot change.
+`--now` clears the time, so the first station releases the item on its next tick. Items it waits for still hold it. Only the API removes a need, with `DELETE /v1/orgs/{org}/items/{item}/needs/{need}`; the CLI and the web app have no control for it. Once the item has left the first station, its start cannot change.
 
 The API takes the same start: `start: {at, in, after}` when you submit an item, `PUT /v1/orgs/{org}/items/{item}/start` to change it and `DELETE` on the same path to start it now.
 
