@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	openapi_types "github.com/oapi-codegen/runtime/types"
+
 	"github.com/byFrederick/goal/internal/api/gen"
 	"github.com/byFrederick/goal/internal/core/domain"
 )
@@ -43,6 +45,18 @@ func (h *harness) deliver(t *testing.T, id string, n domain.NewWebhookDelivery) 
 	}
 
 	return d
+}
+
+// receiveUnnamed accepts a delivery id to endpoint id at at that no enabled trigger names, as POST
+// /hooks/{id} would: only its UTC day's count keeps it.
+func (h *harness) receiveUnnamed(t *testing.T, id, deliveryID string, at time.Time) {
+	t.Helper()
+
+	if _, err := h.intake.Receive(inOrg(t), domain.NewReceipt{
+		WebhookID: domain.WebhookEndpointID(id), ReceivedAt: at, Receipt: domain.ReceiptAccepted, DeliveryID: deliveryID, Event: "push",
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // The factory webhook routes are gone (ADR 0040 decision 24): each answers 404, even for an
@@ -169,6 +183,67 @@ func (h *harness) expectDays(t *testing.T) {
 		w := want[i]
 		if day := time.Date(2026, 10, 17+i, 0, 0, 0, 0, time.UTC); !d.Day.Equal(day) || d.Delivered != w.Delivered || d.Refused != w.Refused {
 			t.Errorf("day %d = %+v; want %s with %d delivered, %d refused", i, d, day.Format(time.DateOnly), w.Delivered, w.Refused)
+		}
+	}
+}
+
+// Every page of the delivery log carries the webhook's counts of deliveries no trigger names over
+// the log's 30 days, by UTC day.
+func TestWebhooks_DeliveriesPageUnnamedDays(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	w := h.createOrgHook(t, `{"name":"ci-hooks","sender":"github"}`)
+
+	for i := range 3 {
+		h.deliver(t, w.Id, domain.NewWebhookDelivery{ReceivedAt: t0.Add(-time.Duration(i) * time.Hour)})
+		h.receiveUnnamed(t, w.Id, fmt.Sprintf("unnamed-%d", i), t0.Add(-time.Duration(i)*time.Minute))
+	}
+
+	h.receiveUnnamed(t, w.Id, "unnamed-old", t0.Add(-domain.DeliveryRetention-24*time.Hour)) // before the log's days
+
+	want := []gen.WebhookUnnamedDay{{Day: openapi_types.Date{Time: time.Date(2026, 10, 23, 0, 0, 0, 0, time.UTC)}, Count: 3}}
+	same := func(got []gen.WebhookUnnamedDay) bool {
+		return slices.EqualFunc(got, want, func(a, b gen.WebhookUnnamedDay) bool { return a.Day.Equal(b.Day.Time) && a.Count == b.Count })
+	}
+
+	deliveries := orgHooksPath + "/" + w.Id + "/deliveries"
+
+	page := decode[gen.WebhookDeliveryPage](t, h.request(t, http.MethodGet, deliveries+"?limit=2", "", nil), http.StatusOK)
+	if page.NextAfter == nil || !same(page.UnnamedDays) {
+		t.Fatalf("first page unnamed_days = %+v, next %v; want %+v and a cursor", page.UnnamedDays, page.NextAfter, want)
+	}
+
+	rest := decode[gen.WebhookDeliveryPage](t, h.request(t, http.MethodGet, deliveries+"?limit=2&after="+url.QueryEscape(*page.NextAfter), "", nil), http.StatusOK)
+	if !same(rest.UnnamedDays) {
+		t.Errorf("next page unnamed_days = %+v; want %+v", rest.UnnamedDays, want)
+	}
+}
+
+// A webhook's 7-day delivered counts include the deliveries no trigger names, on their UTC day,
+// and leave refused as it is.
+func TestWebhooks_ListCountsUnnamedDeliveries(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	w := h.createOrgHook(t, `{"name":"ci-hooks","sender":"github"}`)
+
+	h.deliver(t, w.Id, domain.NewWebhookDelivery{ReceivedAt: t0.Add(-time.Hour), Outcome: domain.DeliveryRefused, Reason: signatureMismatch})
+	h.deliver(t, w.Id, domain.NewWebhookDelivery{ReceivedAt: t0})
+	h.receiveUnnamed(t, w.Id, "unnamed-1", t0.Add(-time.Minute))
+	h.receiveUnnamed(t, w.Id, "unnamed-2", t0.Add(-2*time.Minute))
+	h.receiveUnnamed(t, w.Id, "unnamed-3", t0.Add(-2*24*time.Hour)) // a day with only unnamed ones
+
+	list := decode[gen.WebhookList](t, h.request(t, http.MethodGet, orgHooksPath, "", nil), http.StatusOK)
+	if len(list.Webhooks) != 1 || len(list.Webhooks[0].Days) != 7 {
+		t.Fatalf("list = %+v; want ci-hooks with 7 days", list.Webhooks)
+	}
+
+	want := map[int]gen.WebhookDeliveryDay{4: {Delivered: 1}, 6: {Delivered: 3, Refused: 1}}
+
+	for i, d := range list.Webhooks[0].Days {
+		if w := want[i]; d.Delivered != w.Delivered || d.Refused != w.Refused {
+			t.Errorf("day %d = %+v; want %d delivered, %d refused", i, d, w.Delivered, w.Refused)
 		}
 	}
 }
