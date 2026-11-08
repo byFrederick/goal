@@ -23,18 +23,18 @@ WHERE sc.name = sqlc.arg(name)
 ORDER BY s.name;
 
 -- name: InsertKnowledgeSource :exec
--- org_id comes from its default, goal_org(). A live source never syncs; sync_every_seconds 0 is
--- on demand (a NULL sync_every, 00100), due once now for its first snapshot.
+-- org_id comes from its default, goal_org(). sync_every_seconds 0 is on demand (a NULL
+-- sync_every, 00100); either way the source is due now for its first snapshot.
 INSERT INTO knowledge_sources (id, name, title, kind, secret_id, config, read_when, sync_every, next_sync_at, created_by)
 VALUES (sqlc.arg(id), sqlc.arg(name), sqlc.arg(title), sqlc.arg(kind), sqlc.narg(secret_id), sqlc.arg(config),
         sqlc.arg(read_when),
         CASE WHEN sqlc.arg(sync_every_seconds)::bigint = 0 THEN NULL
              ELSE make_interval(secs => sqlc.arg(sync_every_seconds)::bigint) END,
-        CASE WHEN sqlc.arg(kind)::text = 'live' THEN NULL ELSE now() END, sqlc.arg(created_by));
+        now(), sqlc.arg(created_by));
 
 -- name: UpdateKnowledgeSource :one
 -- sync_every_seconds 0 makes the source on demand, not due until Sync (00100); an interval makes
--- an on-demand source that is not live due at once. A new read-when line makes a source that
+-- an on-demand source due at once. A new read-when line makes a source that
 -- writes snapshots due at once, so its next snapshot carries the line. The CASEs read the row as it was.
 UPDATE knowledge_sources
 SET title = coalesce(sqlc.narg(title)::text, title), config = coalesce(sqlc.narg(config)::jsonb, config),
@@ -46,7 +46,7 @@ SET title = coalesce(sqlc.narg(title)::text, title), config = coalesce(sqlc.narg
                              AND kind IN ('upload', 'repository', 'confluence') THEN now()
                         WHEN sqlc.narg(sync_every_seconds)::bigint IS NULL THEN next_sync_at
                         WHEN sqlc.narg(sync_every_seconds)::bigint = 0 THEN NULL
-                        WHEN kind <> 'live' AND next_sync_at IS NULL THEN now()
+                        WHEN next_sync_at IS NULL THEN now()
                         ELSE next_sync_at END,
     updated_at = now()
 WHERE name = sqlc.arg(name)
@@ -83,10 +83,9 @@ SELECT b::text AS blob FROM unnest(sqlc.arg(blobs)::text[]) b
 WHERE NOT EXISTS (SELECT 1 FROM knowledge_uploads d WHERE d.org_id = goal_org() AND d.blob_sha256 = b)
 ORDER BY b;
 
--- name: SyncKnowledgeSourceNow :one
-UPDATE knowledge_sources SET next_sync_at = CASE WHEN kind = 'live' THEN NULL ELSE now() END
-WHERE name = sqlc.arg(name)
-RETURNING kind;
+-- name: SyncKnowledgeSourceNow :execrows
+UPDATE knowledge_sources SET next_sync_at = now()
+WHERE name = sqlc.arg(name);
 
 -- name: ClaimKnowledgeSource :one
 -- The source due first in any live organization, leased under a new token (00055), in no
@@ -116,7 +115,7 @@ SET status = CASE WHEN sqlc.arg(error)::text = '' THEN 'idle' ELSE 'failed' END,
     next_sync_at = CASE WHEN next_sync_at IS DISTINCT FROM sqlc.arg(due)::timestamptz THEN next_sync_at
                         ELSE sqlc.arg(at)::timestamptz + sync_every END,
     updated_at = now()
-WHERE id = sqlc.arg(id) AND lease_token = sqlc.arg(lease_token)::uuid AND kind <> 'live';
+WHERE id = sqlc.arg(id) AND lease_token = sqlc.arg(lease_token)::uuid;
 
 -- name: NotifyKnowledgeSync :exec
 -- The organization's stream event knowledge on goal_org_events, sent when the claim's or the
