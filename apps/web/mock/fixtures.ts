@@ -2052,6 +2052,7 @@ function build(factory: Factory, factoryIndex: number, seeds: Seed[], now: numbe
           cpu_seconds: status === 'succeeded' ? step.turns * 6.5 : null,
           peak_memory_bytes: status === 'succeeded' ? (256 + step.turns * 24) * 1024 ** 2 : null,
           box_size: status === 'succeeded' ? (step.turns > 15 ? 'medium' : 'small') : null,
+          build_cache: null,
         });
         if (status !== 'running') {
           push('run_finished', agent, { status, error: step.error ?? '', cost_usd: step.cost, turns: step.turns }, run);

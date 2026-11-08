@@ -148,6 +148,36 @@ func TestWorkerFinished_ResultKeepsAKnownMemorySourceWithPeakMemory(t *testing.T
 	}
 }
 
+func TestWorkerFinished_ResultKeepsAKnownBuildCache(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name, fields string
+		want         BuildCacheOutcome
+	}{
+		{"hit", `,"build_cache":"hit"`, BuildCacheHit},
+		{"miss", `,"build_cache":"miss"`, BuildCacheMiss},
+		{"off", `,"build_cache":"off"`, BuildCacheOff},
+		{"error", `,"build_cache":"error"`, BuildCacheError},
+		{"unknown value", `,"build_cache":"warm"`, ""},
+		{"null value", `,"build_cache":null`, ""},
+		{"missing", ``, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, fin, err := DecodeWorkerLine([]byte(`{"type":"finished","at":"2026-11-08T10:00:00Z","status":"succeeded","output":{"a":1}`+tc.fields+`}`), time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got := fin.Result().BuildCache; got != tc.want {
+				t.Errorf("Result's BuildCache = %q; want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestWorkerFinished_DenialsAtTheLinesTime(t *testing.T) {
 	t.Parallel()
 
