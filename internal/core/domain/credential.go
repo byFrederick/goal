@@ -408,16 +408,17 @@ type CredentialImportPreview struct {
 	Connections int
 }
 
-// ParseCredentialImport reads the credentials of an import in format (ADR 0017 decision 9), in the
+// ParseCredentialImport reads the secrets of an import in format (ADR 0017 decision 9), in the
 // order they come:
 //
 //   - env: KEY=value lines; blank lines and # comments are skipped, one pair of surrounding quotes
 //     is stripped, and a key becomes a name lower-cased with each _ turned into - (SENTRY_TOKEN is
 //     sentry-token).
-//   - yaml: a top-level credentials: key, then one indented name: value line per credential, the
-//     value plain, 'single-' or "double-quoted". Comments and a leading --- are allowed; anything
-//     else (block scalars, nested maps, lists, anchors, aliases, tags, flow collections, another
-//     top-level key) is refused. It is a subset of YAML, read without a YAML library.
+//   - yaml: a top-level secrets: key (ADR 0037), or credentials:, its older name, then one
+//     indented name: value line per secret, the value plain, 'single-' or "double-quoted".
+//     Comments and a leading --- are allowed; anything else (block scalars, nested maps, lists,
+//     anchors, aliases, tags, flow collections, another top-level key, both keys) is refused. It
+//     is a subset of YAML, read without a YAML library.
 //
 // Every name must be a credential name (CredentialEnvName), and none may come twice. The error
 // wraps ErrInvalid, names lines and names, and never shows a value.
@@ -508,7 +509,15 @@ func unquoteEnv(v string) (string, error) {
 	return v[1 : len(v)-1], nil
 }
 
-// yamlImport is parseYAMLImport's state: whether credentials: was read, and its entries' indent.
+// yamlImportKey is the top-level key of a YAML import; yamlImportAlias is its older name, which
+// files written before ADR 0037 still use.
+const (
+	yamlImportKey   = "secrets:"
+	yamlImportAlias = "credentials:"
+)
+
+// yamlImport is parseYAMLImport's state: whether its top-level key (secrets: or credentials:) was
+// read, and its entries' indent.
 type yamlImport struct {
 	inside bool
 	indent string
@@ -529,20 +538,20 @@ func parseYAMLImport(lines []string) ([]CredentialImportEntry, error) {
 	}
 
 	if !y.inside {
-		return nil, fmt.Errorf("an import has a top-level credentials: key: %w", ErrInvalid)
+		return nil, fmt.Errorf("an import has a top-level secrets: key (or credentials:, its older name): %w", ErrInvalid)
 	}
 
 	return y.out, nil
 }
 
-// yamlBlank reports whether line is blank, a comment or, before credentials:, a document start.
+// yamlBlank reports whether line is blank, a comment or, before secrets:, a document start.
 func yamlBlank(line string, inside bool) bool {
 	trimmed := strings.TrimSpace(line)
 
 	return trimmed == "" || strings.HasPrefix(trimmed, "#") || (trimmed == "---" && !inside)
 }
 
-// line reads line n, which is not blank: the credentials: key or one of its entries.
+// line reads line n, which is not blank: the secrets: (or credentials:) key or one of its entries.
 func (y *yamlImport) line(n int, line string) error {
 	trimmed := strings.TrimSpace(line)
 	lead := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
@@ -550,14 +559,14 @@ func (y *yamlImport) line(n int, line string) error {
 	switch {
 	case strings.Contains(lead, "\t"):
 		return fmt.Errorf("line %d is indented with a tab: %w", n, ErrInvalid)
-	case lead == "" && (y.inside || stripYAMLComment(trimmed) != "credentials:"):
-		return fmt.Errorf("line %d: an import has one top-level key, credentials:, holding name: value lines: %w", n, ErrInvalid)
+	case lead == "" && (y.inside || !isYAMLImportKey(stripYAMLComment(trimmed))):
+		return fmt.Errorf("line %d: an import has one top-level key, secrets: (or credentials:, its older name), holding name: value lines: %w", n, ErrInvalid)
 	case lead == "":
 		y.inside = true
 
 		return nil
 	case !y.inside:
-		return fmt.Errorf("line %d comes before credentials: %w", n, ErrInvalid)
+		return fmt.Errorf("line %d comes before secrets: %w", n, ErrInvalid)
 	case y.indent == "":
 		y.indent = lead
 	case lead != y.indent:
@@ -572,6 +581,11 @@ func (y *yamlImport) line(n int, line string) error {
 	y.out = append(y.out, e)
 
 	return nil
+}
+
+// isYAMLImportKey reports whether key is the top-level key of a YAML import or its older name.
+func isYAMLImportKey(key string) bool {
+	return key == yamlImportKey || key == yamlImportAlias
 }
 
 // yamlEntry reads the entry name: value on line n.

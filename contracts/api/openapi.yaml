@@ -4219,8 +4219,8 @@ paths:
       summary: Import credentials from a .env or YAML text
       description: >-
         env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is
-        sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked
-        before anything is written: 400 credential-invalid for an unknown format, text that does
+        sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older
+        name, is taken too). Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does
         not parse, a name that is not a credential name or whose env variable is reserved. A dry
         run answers each name as new or existing, with how many connections use it, and stores
         nothing. A real run creates each new name as an api_key with no factories, and replaces
@@ -4383,8 +4383,8 @@ paths:
       summary: Import secrets from a .env or YAML text
       description: >-
         env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is
-        sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked
-        before anything is written: 400 secret-invalid for an unknown format, text that does not
+        sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older
+        name, is taken too). Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not
         parse, an empty import, or a name that is not a secret name or whose env variable is
         reserved. A dry run answers each name as new or existing, with what uses the existing one,
         and stores nothing. A real run creates each new name open to no factory, and replaces
