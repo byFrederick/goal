@@ -86,7 +86,7 @@ waitFor: { ci: { grace: 5m, max: 60m, rounds: 3 } }
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `grace` | `5m` | How long after a wait starts a first check may take to appear. A commit with no check by then has no CI, and the wait ends. |
+| `grace` | `5m` | How long after goald first polls a commit a first check may take to appear. A commit with no check by then has no CI, and the wait ends. Every station's wait on the commit shares that first poll: a commit already polled for longer than a station's grace with no check ends that station's wait at its first poll, within 2 minutes. |
 | `max` | `60m` | The longest goald waits on one commit. The wait ends then: before a run, the run starts and the `## CI` section says CI timed out; after a push, the station runs again. |
 | `rounds` | `3` | How many CI rounds after a push one visit to the station gets. The push after the last round blocks the item for a person, naming the failing checks. |
 

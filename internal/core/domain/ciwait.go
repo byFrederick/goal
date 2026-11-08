@@ -75,7 +75,10 @@ type CIPoll struct {
 	// Checks is the last CommitChecks read, as JSON; nil until a poll reads any.
 	Checks           json.RawMessage
 	FirstCheckSeenAt time.Time
-	LastError        string
+	// FirstPolledAt is when a poll of the commit first read its checks; zero until one does. Every
+	// wait on the commit counts its grace from it (ADR 0044 decision 7).
+	FirstPolledAt time.Time
+	LastError     string
 	// LeaseOwner and LeaseUntil are the lease LeaseDueCIPolls took; empty and zero when none.
 	LeaseOwner string
 	LeaseUntil time.Time
@@ -91,7 +94,9 @@ type CIPollResult struct {
 	Error string
 	// FirstCheckSeenAt is set once: a poll that already has one keeps it, and zero sets none.
 	FirstCheckSeenAt time.Time
-	NextPollAt       time.Time
+	// FirstPolledAt is set once, like FirstCheckSeenAt.
+	FirstPolledAt time.Time
+	NextPollAt    time.Time
 	// Interval is between CIPollMinInterval and CIPollMaxInterval.
 	Interval time.Duration
 }
