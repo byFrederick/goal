@@ -373,6 +373,11 @@ type Store interface {
 	// ErrNotFound.
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
 
+	// AskEvents returns, by item, the events of the given items whose kind is one of
+	// domain.AskKinds, in append order, in one read: what domain.OpenQuestion and
+	// domain.OpenToolApproval need. An item with none of them, or unknown, is not in the map.
+	AskEvents(ctx context.Context, ids []domain.ItemID) (map[domain.ItemID][]domain.Event, error)
+
 	// FactoryActivity returns up to limit of the factory's latest events whose kind is one of
 	// domain.ActivityKinds, newest first (by at, then id), each with its item's number and title.
 	FactoryActivity(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ActivityEvent, error)
