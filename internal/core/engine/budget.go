@@ -258,8 +258,15 @@ func releaseEvent(it domain.Item, cause error, at time.Time) domain.Event {
 	case errors.Is(cause, errBudgetStop):
 		return event(it, domain.EventAgentCancelled, at, domain.ActorEngine, map[string]any{keyReason: reasonBudget})
 	case errors.Is(cause, errUnloaded):
-		return event(it, domain.EventReleased, at, domain.ActorEngine, map[string]any{keyReason: "unloaded"})
+		return event(it, domain.EventReleased, at, domain.ActorEngine, map[string]any{keyReason: reasonUnloaded})
 	}
 
-	return event(it, domain.EventReleased, at, domain.ActorEngine, map[string]any{keyReason: "shutdown"})
+	return event(it, domain.EventReleased, at, domain.ActorEngine, map[string]any{keyReason: reasonShutdown})
 }
+
+// The reasons of a release whose claim ended under it (releaseEvent): goald shut down, or the
+// item's factory was unloaded.
+const (
+	reasonShutdown = "shutdown"
+	reasonUnloaded = "unloaded"
+)

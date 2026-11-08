@@ -154,30 +154,13 @@ func (e *Engine) runTask(ctx context.Context, t runTask) (domain.RunResult, erro
 // runInBox opens the run's sandbox when it has none, runs the agent there, records its result
 // and, when it succeeded, runs what the caller runs after it (runTask.then).
 func (e *Engine) runInBox(ctx context.Context, t runTask, runID domain.RunID) (domain.RunResult, error) {
-	token, err := e.gatewayToken(ctx, t.RunRequest, runID)
-
-	var (
-		env   runEnv
-		scrub scrubber
-	)
-
-	if err == nil {
-		env, err = e.runEnv(ctx, t.RunRequest, runID)
-		scrub = newScrubber(append(env.secrets, token)...)
-	}
-
-	var line *prepared
-
-	if err == nil {
-		prepareEnv := maps.Clone(env.prepare)
-		prepareEnv[envGatewayToken] = token
-		line, err = e.open(ctx, t, runID, prepareEnv, scrub)
-	}
-
+	o, err := e.openRun(ctx, t, runID)
 	if err != nil {
 		e.finishRun(ctx, runID, failure(ctx, err))
 		return domain.RunResult{}, err
 	}
+
+	token, env, scrub, line := o.token, o.env, o.scrub, o.line
 
 	agentEnv := maps.Clone(env.agent)
 	agentEnv[envGatewayToken] = token
@@ -211,6 +194,41 @@ func (e *Engine) runInBox(ctx context.Context, t runTask, runID domain.RunID) (d
 	}
 
 	return res, t.then(ctx, runID, res, scrub)
+}
+
+// openedRun is what openRun signed, resolved and opened for a run.
+type openedRun struct {
+	token string
+	env   runEnv
+	scrub scrubber
+	// line is prepare's line; nil when the run's box was already open.
+	line *prepared
+}
+
+// openRun signs the run's task token, resolves its environment and opens its sandbox with them
+// when it has none (open): what runInBox does before the agent starts, and a resumed run before
+// its checks run again (resume).
+func (e *Engine) openRun(ctx context.Context, t runTask, runID domain.RunID) (openedRun, error) {
+	token, err := e.gatewayToken(ctx, t.RunRequest, runID)
+	if err != nil {
+		return openedRun{}, err
+	}
+
+	env, err := e.runEnv(ctx, t.RunRequest, runID)
+	if err != nil {
+		return openedRun{}, err
+	}
+
+	o := openedRun{token: token, env: env, scrub: newScrubber(append(env.secrets, token)...)}
+
+	prepareEnv := maps.Clone(env.prepare)
+	prepareEnv[envGatewayToken] = token
+
+	if o.line, err = e.open(ctx, t, runID, prepareEnv, o.scrub); err != nil {
+		return openedRun{}, err
+	}
+
+	return o, nil
 }
 
 // agent runs `goal-agent run` in the run's sandbox with env, relays the events it reports and
