@@ -114,10 +114,10 @@ const usage = `usage:
                                                   runs and versions, after typing its name (--yes: no
                                                   prompt); a factory never published needs no archive
   goal factory ask <factory> "<text>" [--agent A] [--wait]
-                                                  ask goald to change the factory's draft (a draft
-                                                  request, about agent A with --agent); it never
-                                                  publishes. --wait waits until it is done or failed
-                                                  and prints what it changed
+                                                  not built yet: goald refuses every draft request
+                                                  (501 not-built) and queues nothing, so the command
+                                                  fails and --wait never waits. Change the draft with
+                                                  goal factory pull and goal factory push
   goal org list                                   the organizations (* the one commands act in)
   goal org use <slug>                             act in this organization from now on (config file)
   goal org create <slug> --name N [--mark M]      create an organization (platform admins only)
