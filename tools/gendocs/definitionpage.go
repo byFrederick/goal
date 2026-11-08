@@ -200,7 +200,8 @@ func literalType(n *node) string {
 }
 
 // variantTypes names the types of a schema without a type of its own: those of its oneOf, anyOf
-// or if's then and else, joined by or.
+// or if's then and else, joined by or. A then without a type of its own has the type its if tests
+// for, as in {if: {type: string}, then: {minLength: 1}, else: {type: object}}.
 func (s definitionSchema) variantTypes(n *node, depth int) (string, error) {
 	var branches []*node
 
@@ -224,6 +225,13 @@ func (s definitionSchema) variantTypes(n *node, depth int) (string, error) {
 		name, err := s.typeOf(b, depth+1)
 		if err != nil {
 			return "", err
+		}
+
+		if name == "any" && b == n.get("then") && n.get("if").get("type") != nil {
+			name, err = s.typeOf(n.get("if"), depth+1)
+			if err != nil {
+				return "", err
+			}
 		}
 
 		if name != "any" && !slices.Contains(names, name) {
@@ -376,6 +384,15 @@ func variants(n *node) []*node {
 
 // condition says in words when an if of the form {properties: {k: {const: v}}} holds, or is empty.
 func condition(ifSchema *node) string {
+	if clause := conditionClause(ifSchema); clause != "" {
+		return "only when " + clause
+	}
+
+	return ""
+}
+
+// conditionClause is "`k` is `v`" for an if of the form {properties: {k: {const: v}}}, or empty.
+func conditionClause(ifSchema *node) string {
 	props := ifSchema.get("properties")
 	if props == nil || len(props.keys) != 1 || props.fields[props.keys[0]].get("const") == nil {
 		return ""
@@ -383,7 +400,256 @@ func condition(ifSchema *node) string {
 
 	key := props.keys[0]
 
-	return "only when `" + key + "` is `" + props.fields[key].get("const").json() + "`"
+	return "`" + key + "` is `" + props.fields[key].get("const").json() + "`"
+}
+
+// typeTest reports whether an if only tests the value's type, as {type: string} does: its then
+// and else are then the value's variants, not conditions on an object.
+func typeTest(ifSchema *node) bool {
+	return ifSchema != nil && len(ifSchema.keys) == 1 && ifSchema.get("type") != nil
+}
+
+// A ruleScope is when the rules found under it apply: when holds the conditions of the ifs around
+// them, and derivable is false under an if the generator cannot put in words, where only a rule
+// with its own description can be rendered.
+type ruleScope struct {
+	when      string
+	derivable bool
+}
+
+// within is the scope of the then (or, holds false, the else) of if.
+func (r ruleScope) within(ifSchema *node, holds bool) ruleScope {
+	if typeTest(ifSchema) {
+		return r
+	}
+
+	clause := conditionClause(ifSchema)
+	if !holds || clause == "" {
+		return ruleScope{when: r.when}
+	}
+
+	if r.when != "" {
+		clause = r.when + " and " + clause
+	}
+
+	return ruleScope{when: clause, derivable: r.derivable}
+}
+
+// constrainsOnly reports whether schema n only constrains the object it applies to: it names no
+// type or values of its own and adds no field, save fields it pins to a const or forbids.
+func constrainsOnly(n *node) bool {
+	if n == nil || !n.object {
+		return false
+	}
+
+	for _, k := range []string{"type", "$ref", "const", "enum", "items", "additionalProperties"} {
+		if n.get(k) != nil {
+			return false
+		}
+	}
+
+	if props := n.get("properties"); props != nil {
+		for _, k := range props.keys {
+			p := props.fields[k]
+			if p.scalar == false || (len(p.keys) == 1 && p.get("const") != nil) {
+				continue
+			}
+
+			return false
+		}
+	}
+
+	for _, k := range []string{"then", "else", "not"} {
+		if v := n.get(k); v != nil && !constrainsOnly(v) {
+			return false
+		}
+	}
+
+	for _, k := range []string{"allOf", "oneOf", "anyOf"} {
+		if v := n.get(k); v != nil && !allConstrainOnly(v) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// allConstrainOnly reports whether a oneOf or anyOf is a rule on its object rather than a choice of
+// the value's shapes: every branch only constrains.
+func allConstrainOnly(branches *node) bool {
+	if len(branches.items) == 0 {
+		return false
+	}
+
+	for _, b := range branches.items {
+		if !constrainsOnly(b) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// rules lists, in schema order, the rules schema n states on its object in allOf entries and
+// oneOf or anyOf branches that only constrain, along the same paths fields takes. path names where
+// n is in the schema, for errors. Entries and branches that add fields are not rules; the rules
+// inside them are.
+func (s definitionSchema) rules(n *node, scope ruleScope, path string, seen []string) ([]string, error) {
+	n, refs, err := s.resolve(n)
+	if err != nil || n == nil {
+		return nil, err
+	}
+
+	for _, r := range refs {
+		if slices.Contains(seen, r) {
+			return nil, nil
+		}
+	}
+
+	seen = append(slices.Clone(seen), refs...)
+
+	var out []string
+
+	add := func(rs []string, err error) error {
+		for _, r := range rs {
+			if !slices.Contains(out, r) {
+				out = append(out, r)
+			}
+		}
+
+		return err
+	}
+
+	if all := n.get("allOf"); all != nil {
+		for i, e := range all.items {
+			at := fmt.Sprintf("%sallOf[%d]", path, i)
+
+			if constrainsOnly(e) {
+				r, err := ruleText(e, scope, at)
+				if err := add([]string{r}, err); err != nil {
+					return nil, err
+				}
+
+				continue
+			}
+
+			if err := add(s.rules(e, scope, at+".", seen)); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	for _, key := range []string{"oneOf", "anyOf"} {
+		branches := n.get(key)
+		if branches == nil {
+			continue
+		}
+
+		if allConstrainOnly(branches) {
+			r, err := ruleText(&node{object: true, keys: []string{key}, fields: map[string]*node{key: branches}}, scope, path+key)
+			if err := add([]string{r}, err); err != nil {
+				return nil, err
+			}
+
+			continue
+		}
+
+		for i, b := range branches.items {
+			if err := add(s.rules(b, scope, fmt.Sprintf("%s%s[%d].", path, key, i), seen)); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	nested := []struct {
+		key   string
+		scope ruleScope
+	}{
+		{"then", scope.within(n.get("if"), true)}, {"else", scope.within(n.get("if"), false)},
+		{"items", scope}, {"additionalProperties", scope},
+	}
+
+	for _, v := range nested {
+		if sub := n.get(v.key); sub != nil && sub.object {
+			if err := add(s.rules(sub, v.scope, path+v.key+".", seen)); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return out, nil
+}
+
+// ruleText is a rule in words: its description, else what the generator derives from an if
+// {properties: {k: {const: v}}} with a then, and a oneOf or anyOf of branches that each require one
+// field. Any other rule needs a description.
+func ruleText(e *node, scope ruleScope, path string) (string, error) {
+	if d := e.str("description"); d != "" {
+		return escapeProse(strings.Join(strings.Fields(d), " ")), nil
+	}
+
+	underivable := fmt.Errorf("%s: %w: a rule with no description and a shape the generator cannot put in words; "+
+		"give it a description", path, errSchema)
+
+	if !scope.derivable {
+		return "", underivable
+	}
+
+	when, body := scope.when, e
+
+	if e.get("if") != nil {
+		clause := conditionClause(e.get("if"))
+		if clause == "" || len(e.keys) != 2 || e.get("then") == nil {
+			return "", underivable
+		}
+
+		if when != "" {
+			clause = when + " and " + clause
+		}
+
+		when, body = clause, e.get("then")
+	}
+
+	text := choiceText(body)
+	if text == "" {
+		return "", underivable
+	}
+
+	if when != "" {
+		return "When " + when + ", " + text + ".", nil
+	}
+
+	return strings.ToUpper(text[:1]) + text[1:] + ".", nil
+}
+
+// choiceText is "exactly one of `a` or `b` is set" for {oneOf: [{required: [a]}, {required: [b]}]},
+// "at least one of…" for the same anyOf, or empty for any other schema.
+func choiceText(n *node) string {
+	if len(n.keys) != 1 {
+		return ""
+	}
+
+	quantity := map[string]string{"oneOf": "exactly one", "anyOf": "at least one"}[n.keys[0]]
+	if quantity == "" {
+		return ""
+	}
+
+	var names []string
+
+	for _, b := range n.fields[n.keys[0]].items {
+		required := stringList(b.get("required"))
+		if len(b.keys) != 1 || len(required) != 1 {
+			return ""
+		}
+
+		names = append(names, "`"+required[0]+"`")
+	}
+
+	if len(names) < 2 {
+		return ""
+	}
+
+	return quantity + " of " + strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1] + " is set"
 }
 
 func stringList(n *node) []string {
@@ -415,6 +681,10 @@ func (s definitionSchema) summary(f field) (string, error) {
 		return "", err
 	}
 
+	if b := bounds(f.schema, resolved); b != "" {
+		text += ", " + b
+	}
+
 	if f.required {
 		text += ", required"
 	}
@@ -434,7 +704,74 @@ func (s definitionSchema) summary(f field) (string, error) {
 		text += " " + escapeProse(strings.Join(strings.Fields(desc), " "))
 	}
 
+	// An array's elements may say what each is, such as the shorthand a string element stands for.
+	if desc := resolved.get("items").str("description"); desc != "" {
+		text += " " + escapeProse(strings.Join(strings.Fields(desc), " "))
+	}
+
 	return text, nil
+}
+
+// bounds says in words the bounds of a number, a string's length or an array's size: "1 to 20",
+// "at least 1", "more than 0", "at most 40 characters", "at least 2 items". It is empty without any.
+func bounds(referring, resolved *node) string {
+	limit := func(key string) string {
+		if v := firstOf(referring, resolved, key); v != nil {
+			return v.json()
+		}
+
+		return ""
+	}
+
+	groups := []struct{ min, max, unit string }{
+		{"minimum", "maximum", ""}, {"minLength", "maxLength", "character"}, {"minItems", "maxItems", "item"},
+	}
+
+	for _, g := range groups {
+		lo, hi, above := limit(g.min), limit(g.max), false
+		if g.unit == "" && lo == "" {
+			lo, above = limit("exclusiveMinimum"), true
+		}
+
+		if text := rangeText(lo, hi, above); text != "" {
+			return text + unitOf(g.unit, lo, hi)
+		}
+	}
+
+	return ""
+}
+
+// rangeText is a range from lo (above it, when above holds) to hi, either of which may be empty.
+func rangeText(lo, hi string, above bool) string {
+	switch {
+	case lo != "" && hi != "" && above:
+		return "more than " + lo + " and at most " + hi
+	case lo != "" && hi == lo:
+		return lo
+	case lo != "" && hi != "":
+		return lo + " to " + hi
+	case lo != "" && above:
+		return "more than " + lo
+	case lo != "":
+		return "at least " + lo
+	case hi != "":
+		return "at most " + hi
+	}
+
+	return ""
+}
+
+// unitOf is " characters" or " items" after a range, singular when its one number is 1.
+func unitOf(unit, lo, hi string) string {
+	if unit == "" {
+		return ""
+	}
+
+	if (lo == "1" || lo == "") && (hi == "1" || hi == "") {
+		return " " + unit
+	}
+
+	return " " + unit + "s"
 }
 
 // firstOf is key of the referring schema, else of the schema it resolves to.
@@ -462,6 +799,19 @@ func (s definitionSchema) writeFields(b *strings.Builder, n *node, depth int, se
 
 		if err := s.writeFields(b, f.schema, depth+1, seen); err != nil {
 			return fmt.Errorf("%s: %w", f.name, err)
+		}
+	}
+
+	rules, err := s.rules(n, ruleScope{derivable: true}, "", seen)
+	if err != nil {
+		return err
+	}
+
+	if len(rules) > 0 {
+		b.WriteString(strings.Repeat("  ", depth) + "- Rules:\n")
+
+		for _, r := range rules {
+			b.WriteString(strings.Repeat("  ", depth+1) + "- " + r + "\n")
 		}
 	}
 
