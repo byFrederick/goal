@@ -15,7 +15,7 @@ An agent is one entry of the `agents` list in the factory definition. Its schema
 | --- | --- |
 | `name` | The role's name, a slug. Events, tool approvals and standing rules name the agent by this name. |
 | `prompt` | The agent's instructions, sent to the model at the start of every run. |
-| `model` | The Claude model the agent uses. When it is left out, the factory's `runtime.model` applies. |
+| `model` | The Claude model the agent uses. When it is left out, the factory's `runtime.model` applies. The [organization policy](/docs/concepts/organization-policy/) lists the models an agent may use. |
 | `maxTurns`, `perItemUsd` | Limits for this agent. They override the factory's `runtime.budget` values. |
 | `skills` | The names of the definition's skills this agent may load. See [skills and rules](../skills-and-rules/). |
 | `environment` | The environment file the agent's box gets, `environments/<name>.yaml`. `default` when omitted. See [access and secrets](../access-and-secrets/). |
