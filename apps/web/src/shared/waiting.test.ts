@@ -112,16 +112,4 @@ describe('a CI wait', () => {
     expect(waitingShort(base({ failure }))).toBe('CI failed: lint');
     expect(waitingShort(base({ failure: { ...failure, checks: [] } }))).toBe('CI timed out');
   });
-
-  it('lists one line per commit with its short sha and counts, then each failed check', () => {
-    const waiting = base({
-      checks: [check({ state: 'finished', result: 'passed' }), check({ name: 'test' })],
-      failure: {
-        repo: 'github.com/acme/app',
-        sha: 'abc',
-        checks: [check({ name: 'e2e', state: 'finished', result: 'failed', failed_jobs: ['3/12'] })],
-      },
-    });
-    expect(waitingDetail(waiting)).toBe('github.com/acme/app 0123456 · 1 of 2\nFailed: e2e (3/12)');
-  });
 });

@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { ApiError } from '../../api/client';
 import { deleteFactory } from '../../api/definitions';
 import { draftQuery, factoriesQuery, factoryQuery, keys, templatesQuery } from '../../api/queries';
+import { factoryTitle } from '../../shared/factory';
 import { useOrg } from '../../shared/org';
 import { reasons } from '../../shared/permissions';
 import { Button } from '../../ui/button';
@@ -89,7 +90,7 @@ export function WizardEditor({
 
   if (detail.data?.current) {
     return (
-      <EmptyState title={`${detail.data.name} is published`}>
+      <EmptyState title={`${factoryTitle(detail.data)} is published`}>
         Its setup is done: v{detail.data.current.number} runs. Change it in its{' '}
         <Link
           to="/o/$org/f/$factory/definition"

@@ -6,15 +6,12 @@ import type { KnowledgeSource, KnowledgeSourceKind } from '../api/types';
 
 type Meta = { label: string; icon: LucideIcon };
 
-const metas: Record<Exclude<KnowledgeSourceKind, 'live'>, Meta> = {
+export const sourceKinds = {
   upload: { label: 'Upload', icon: Upload },
   repository: { label: 'Repository', icon: FolderGit2 },
   confluence: { label: 'Confluence', icon: BookOpen },
   synced: { label: 'Synced', icon: RefreshCw },
-};
-
-/** Typed with the contract's kinds; the cast goes when the contract drops `live`. */
-export const sourceKinds = metas as Record<KnowledgeSourceKind, Meta>;
+} satisfies Record<KnowledgeSourceKind, Meta>;
 
 /** gitdocs's include when a source names none. */
 export const defaultInclude = '**/*.md';

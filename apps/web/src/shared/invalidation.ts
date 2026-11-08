@@ -96,8 +96,8 @@ function isDefinitionEvent(data: unknown): data is DefinitionEvent {
  *   factory (its draft chip) and the factory list; nothing when this tab saved that revision of
  *   that draft itself (the event is its echo), and the versions too once the version is published;
  * - `current`, the version that runs moved or the factory was paused or resumed: the factory and
- *   the list, its versions, draft (based on, running), comparisons, board, overviews, the
- *   connections, the knowledge sources (what uses each), Jonah's reads;
+ *   the list, its versions, draft (based on, running), comparisons, board, Jonah's reads,
+ *   overviews, the intake and its triggers, the knowledge sources (what uses each);
  * - `factory`, a factory created or deleted: the factory and the list, attention and overviews.
  */
 export function definitionInvalidations(org: string, data: unknown): QueryKey[] {
