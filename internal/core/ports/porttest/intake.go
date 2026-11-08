@@ -519,6 +519,21 @@ func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, si
 		}
 	}
 
+	for k, n := range in.d.counts {
+		e, ok := in.d.endpoints[k.webhook]
+		if k.org != org || !ok || !reaches(e.e, factory) || k.day.Before(utcDay(since)) {
+			continue
+		}
+
+		c, ok := counts[key{k.webhook, k.day}]
+		if !ok {
+			c = &domain.DeliveryDay{EndpointID: k.webhook, Day: k.day}
+			counts[key{k.webhook, k.day}] = c
+		}
+
+		c.Delivered += n
+	}
+
 	out := make([]domain.DeliveryDay, 0, len(counts))
 	for _, c := range counts {
 		out = append(out, *c)
