@@ -744,9 +744,11 @@ func TestBundle_GrantedCallsOfTheRun(t *testing.T) {
 
 	if err := h.store.AppendEvents(ctx,
 		ev(domain.EventRunStarted, "run-0", nil),
+		ev(domain.EventAgentStarted, "run-0", nil),
 		asked("run-0", toolComment, `{"body":"early"}`),
 		ev(domain.EventToolApprovalGranted, "", map[string]any{domain.KeyAlwaysAllow: false}),
 		ev(domain.EventRunStarted, "run-1", nil),
+		ev(domain.EventAgentStarted, "run-1", nil),
 		asked("run-1", toolComment, `{ "issue": 7, "body": "Done" }`),
 		ev(domain.EventToolApprovalGranted, "", map[string]any{domain.KeyAlwaysAllow: false}),
 		asked("run-1", "close_issue", `{"issue":7}`),

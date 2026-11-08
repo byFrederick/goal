@@ -422,3 +422,75 @@ func TestAnswer_TheNextRunCarriesTheAnswer(t *testing.T) {
 		t.Errorf("third feedback %q; want no answers: they reached the run before", third)
 	}
 }
+
+// failBeforeTheAgent has the item's next run fail in prepare, so its agent never starts and the
+// item is blocked, then has a person retry it.
+func (h *harness) failBeforeTheAgent(t *testing.T, id domain.ItemID) {
+	t.Helper()
+
+	h.worker.FailPrepare(1, "goal-agent prepare: download timed out")
+	h.step(t)
+
+	if got := h.item(t, id); got.State != domain.StateBlocked {
+		t.Fatalf("item is %s, want blocked by the failed prepare (events %v)", got.State, h.kinds(id))
+	}
+
+	h.worker.FailPrepare(0, "")
+
+	if _, err := h.e.Retry(inOrg(t), id, human); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// An answer and a note given before a run that failed before its agent started reach the run
+// after it, which is retried in a new claim (software#917).
+func TestAnswer_SurvivesARunThatFailedBeforeItsAgent(t *testing.T) {
+	t.Parallel()
+
+	var h *harness
+
+	h = newHarness(t, controlLine(), func(ctx context.Context, run porttest.ExecCall, _ io.Writer) domain.RunResult {
+		ctx = domain.WithOrg(ctx, testOrg)
+
+		runs, err := h.store.Runs(ctx, run.Sandbox.ItemID, 10)
+		if err != nil || len(runs) != 1 {
+			return ok(`{}`)
+		}
+
+		if _, err := h.e.Ask(ctx, run.Sandbox.ItemID, runs[0].ID, agWorker, "Remove waitingDetail?", nil); err != nil {
+			t.Error(err)
+		}
+
+		<-ctx.Done()
+
+		return domain.RunResult{Status: domain.RunCancelled, Error: ctx.Err().Error()}
+	})
+	it := h.at(t, h.submit(t, domain.NewItem{}), stWork, domain.StateQueued)
+
+	h.step(t) // run 1 asks
+
+	if _, err := h.e.Note(inOrg(t), it.ID, human, "Keep it small."); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.e.Answer(inOrg(t), it.ID, human, "Yes, remove it.", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	h.failBeforeTheAgent(t, it.ID) // run 2
+	h.step(t)                      // run 3
+
+	if n := len(h.runs(t, testOrg, it.ID)); n != 3 || len(h.worker.Runs()) != 2 {
+		t.Fatalf("%d runs, %d agents; want 3 runs, the second without an agent (events %v)", n, len(h.worker.Runs()), h.kinds(it.ID))
+	}
+
+	next := h.feedback(1)
+	for _, s := range []string{
+		answersHeading, "- Question from " + agWorker + ": Remove waitingDetail?\n  Answer from Local user: Yes, remove it.",
+		notesHeading, "Keep it small.",
+	} {
+		if strings.Count(next, s) != 1 {
+			t.Errorf("run 3's feedback %q; want %q once", next, s)
+		}
+	}
+}

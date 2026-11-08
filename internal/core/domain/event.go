@@ -215,3 +215,23 @@ type ActivityEvent struct {
 	Number int64
 	Title  string
 }
+
+// SinceLastBrief returns the index in events[:to] just past the run_started event of the latest
+// run whose agent started (an agent_started event with that run's id), or 0 when no run's agent
+// started. That run's agent read its brief, so what people said before it was delivered; a run
+// that failed or was cut before its agent started read nothing, and what people said before it
+// counts for the next run.
+func SinceLastBrief(events []Event, to int) int {
+	read := map[RunID]bool{}
+
+	for i := to - 1; i >= 0; i-- {
+		switch e := events[i]; {
+		case e.Kind == EventAgentStarted:
+			read[e.RunID] = true
+		case e.Kind == EventRunStarted && read[e.RunID]:
+			return i + 1
+		}
+	}
+
+	return 0
+}

@@ -241,8 +241,9 @@ type saidByPeople struct {
 	tools []domain.ToolDecision
 }
 
-// peopleSaid reads what people said since the item's latest run started: their notes, the
-// questions they answered and the tool calls they decided, with the notes other items left.
+// peopleSaid reads what people said since the start of the item's latest run whose agent started
+// (domain.SinceLastBrief): their notes, the questions they answered and the tool calls they
+// decided, with the notes other items left.
 func (e *Engine) peopleSaid(ctx context.Context, id domain.ItemID) (saidByPeople, error) {
 	notes, err := e.withNotes(ctx, id, nil)
 	if err != nil {
