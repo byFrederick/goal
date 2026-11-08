@@ -368,6 +368,32 @@ func TestRunTask_TryRunsChecksInItsBox(t *testing.T) {
 	}
 }
 
+// A try's checks get its base as GOAL_BASE_BRANCH, and an empty value, still set, when it has none.
+func TestRunTask_TryChecksGetItsBase(t *testing.T) {
+	t.Parallel()
+
+	for _, base := range []string{"", integrationBranch} {
+		h := newHarness(t, connLine(), porttest.Succeed(`{}`))
+		h.store.AddFactory(testOrg, factoryID)
+
+		req := tryRequest()
+		req.Base, req.Checks = base, []string{makeTest}
+
+		if _, err := h.e.RunTask(t.Context(), req); err != nil {
+			t.Fatalf("RunTask: %v", err)
+		}
+
+		checks := h.worker.Checks()
+		if len(checks) != 1 {
+			t.Fatalf("%d checks, want 1", len(checks))
+		}
+
+		if got, ok := checks[0].Env["GOAL_BASE_BRANCH"]; !ok || got != base {
+			t.Errorf("try with base %q: check GOAL_BASE_BRANCH = %q (set %t)", base, got, ok)
+		}
+	}
+}
+
 // expectTryChecks fails the test unless the checks run are commands, in order, each in the
 // workspace of the agent's box with CI=true, no credential and a timeout.
 func (h *harness) expectTryChecks(t *testing.T, commands ...string) {
