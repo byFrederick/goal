@@ -669,11 +669,11 @@ func TestToolApproval_SurvivesARunThatFailedBeforeItsAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h.failBeforeTheAgent(t, it.ID) // run 2
-	h.step(t)                      // run 3
+	h.failBeforeTheAgent(t, it.ID) // runs 2 to 4: each attempt is a run
+	h.step(t)                      // run 5
 
-	if n := len(h.runs(t, testOrg, it.ID)); n != 3 || len(h.worker.Runs()) != 2 {
-		t.Fatalf("%d runs, %d agents; want 3 runs, the second without an agent (events %v)", n, len(h.worker.Runs()), h.kinds(it.ID))
+	if n := len(h.runs(t, testOrg, it.ID)); n != 5 || len(h.worker.Runs()) != 2 {
+		t.Fatalf("%d runs, %d agents; want 5 runs, the three failed attempts without an agent (events %v)", n, len(h.worker.Runs()), h.kinds(it.ID))
 	}
 
 	h.expectGranted(t, it.ID)

@@ -29,6 +29,8 @@ type Worker struct {
 	mu            sync.Mutex
 	prepareCode   int
 	prepareStderr string
+	// prepareFails is how many more prepares fail as scripted; negative is every one.
+	prepareFails  int
 	branchExisted bool
 	prepared      []domain.WorkerRepository
 	exits         map[string][]int
@@ -49,7 +51,16 @@ func (w *Worker) FailPrepare(code int, stderr string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	w.prepareCode, w.prepareStderr = code, stderr
+	w.prepareCode, w.prepareStderr, w.prepareFails = code, stderr, -1
+}
+
+// FailPrepareTimes makes the next n prepares exit with code, writing stderr, and the ones after
+// them prepare.
+func (w *Worker) FailPrepareTimes(n, code int, stderr string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.prepareCode, w.prepareStderr, w.prepareFails = code, stderr, n
 }
 
 // BranchExisted makes prepare report that the item's branch already existed on the remote.
@@ -117,6 +128,14 @@ func (w *Worker) prepare(c ExecCall, stdout, stderr io.Writer) int {
 	w.mu.Lock()
 	w.prepares = append(w.prepares, c)
 	code, why, existed, rows := w.prepareCode, w.prepareStderr, w.branchExisted, w.prepared
+
+	switch {
+	case w.prepareFails == 0:
+		code = 0
+	case w.prepareFails > 0:
+		w.prepareFails--
+	}
+
 	w.mu.Unlock()
 
 	w.changes.signal()

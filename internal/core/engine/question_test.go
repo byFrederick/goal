@@ -423,13 +423,13 @@ func TestAnswer_TheNextRunCarriesTheAnswer(t *testing.T) {
 	}
 }
 
-// failBeforeTheAgent has the item's next run fail in prepare, so its agent never starts and the
-// item is blocked, then has a person retry it.
+// failBeforeTheAgent has the item's next run fail in prepare on every attempt, so its agent never starts and the
+// item is blocked once the retries are spent, then has a person retry it.
 func (h *harness) failBeforeTheAgent(t *testing.T, id domain.ItemID) {
 	t.Helper()
 
 	h.worker.FailPrepare(1, "goal-agent prepare: download timed out")
-	h.step(t)
+	h.stepThroughBackoff(t)
 
 	if got := h.item(t, id); got.State != domain.StateBlocked {
 		t.Fatalf("item is %s, want blocked by the failed prepare (events %v)", got.State, h.kinds(id))
@@ -477,11 +477,11 @@ func TestAnswer_SurvivesARunThatFailedBeforeItsAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h.failBeforeTheAgent(t, it.ID) // run 2
-	h.step(t)                      // run 3
+	h.failBeforeTheAgent(t, it.ID) // runs 2 to 4: each attempt is a run
+	h.step(t)                      // run 5
 
-	if n := len(h.runs(t, testOrg, it.ID)); n != 3 || len(h.worker.Runs()) != 2 {
-		t.Fatalf("%d runs, %d agents; want 3 runs, the second without an agent (events %v)", n, len(h.worker.Runs()), h.kinds(it.ID))
+	if n := len(h.runs(t, testOrg, it.ID)); n != 5 || len(h.worker.Runs()) != 2 {
+		t.Fatalf("%d runs, %d agents; want 5 runs, the three failed attempts without an agent (events %v)", n, len(h.worker.Runs()), h.kinds(it.ID))
 	}
 
 	next := h.feedback(1)
@@ -490,7 +490,7 @@ func TestAnswer_SurvivesARunThatFailedBeforeItsAgent(t *testing.T) {
 		notesHeading, "Keep it small.",
 	} {
 		if strings.Count(next, s) != 1 {
-			t.Errorf("run 3's feedback %q; want %q once", next, s)
+			t.Errorf("run 5's feedback %q; want %q once", next, s)
 		}
 	}
 }

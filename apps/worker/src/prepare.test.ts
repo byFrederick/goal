@@ -121,7 +121,9 @@ async function origin(
 /** Runs git for real (isolated), records every command and fakes mise with exit code `mise`. */
 function recorder(mise = 0) {
   const calls: { command: string; args: string[]; cwd?: string }[] = [];
+  const envs: { command: string; args: string[]; env?: Record<string, string> }[] = [];
   const exec: Exec = (command, args, opts = {}) => {
+    envs.push({ command, args, ...(opts.env ? { env: opts.env } : {}) });
     calls.push(opts.cwd === undefined ? { command, args } : { command, args, cwd: opts.cwd });
     if (command !== 'git') return Promise.resolve(mise);
     return new Promise((resolve) => {
@@ -129,7 +131,7 @@ function recorder(mise = 0) {
       child.once('close', (code) => resolve(code ?? 1));
     });
   };
-  return { exec, calls };
+  return { exec, calls, envs };
 }
 
 /**
@@ -845,6 +847,96 @@ describe('prepare', () => {
       { command: 'mise', args: ['use', '--global', '--yes', ...tools] },
     ]);
     expect(prepared.tools).toBe(2);
+  });
+
+  describe('mise', () => {
+    const tools = ['go@1.26.10', 'task@3.46.1'];
+    const miseCalls = (envs: { command: string; env?: Record<string, string> }[]) =>
+      envs.filter((c) => c.command === 'mise');
+
+    it("signs every mise command in to github.com with the run's token, for a login or a git credential", async () => {
+      let n = 0;
+      for (const body of [
+        {
+          repository_logins: [
+            { prefix: 'https://github.com/acme/', username: 'x', password_env: 'LOGIN_TOKEN', write: true },
+          ],
+        },
+        { git_credentials: [{ host: 'github.com', username: 'x', password_env: 'LOGIN_TOKEN' }] },
+      ]) {
+        const url = await origin(undefined, { name: `origin${n++}` });
+        const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch: 'goal/9-x' }, tools, ...body });
+        const { exec, envs } = recorder();
+
+        await prepare(depsWith(fake, exec, { LOGIN_TOKEN: 'test-token-gh' }));
+
+        const mise = miseCalls(envs);
+        expect(mise.map((c) => c.command)).toHaveLength(2);
+        for (const c of mise) expect(c.env?.MISE_GITHUB_TOKEN).toBe('test-token-gh');
+        await rm(dirs.workspace, { recursive: true, force: true });
+      }
+    });
+
+    it('runs mise without a GitHub token when the run has no github.com login or its variable is unset', async () => {
+      const gitlab = { host: 'gitlab.com', username: 'x', password_env: 'LOGIN_TOKEN' };
+      const unset = { host: 'github.com', username: 'x', password_env: 'NOT_SET' };
+      const lookalike = {
+        prefix: 'https://github.com.example.com/acme/',
+        username: 'x',
+        password_env: 'LOGIN_TOKEN',
+        write: true,
+      };
+      for (const body of [
+        {},
+        { git_credentials: [gitlab] },
+        { git_credentials: [unset] },
+        { repository_logins: [lookalike] },
+      ]) {
+        const { fake } = gatewayServing({ spec, files: {}, tools, ...body });
+        const { exec, envs } = recorder();
+
+        await prepare(depsWith(fake, exec, { LOGIN_TOKEN: 'test-token-gl' }));
+
+        const mise = miseCalls(envs);
+        expect(mise).toHaveLength(1);
+        for (const name of ['MISE_GITHUB_TOKEN', 'GITHUB_API_TOKEN', 'GITHUB_TOKEN']) {
+          expect(mise[0]?.env ?? {}).not.toHaveProperty(name);
+        }
+      }
+    });
+
+    it("keeps the token out of every other command, the agent's spec and prepare's process.env", async () => {
+      const url = await origin();
+      const login = { prefix: 'https://github.com/acme/', username: 'x', password_env: 'LOGIN_TOKEN', write: true };
+      const { fake } = gatewayServing({
+        spec,
+        files: {},
+        repository: { url, branch: 'goal/9-x' },
+        tools,
+        repository_logins: [login],
+      });
+      const { exec, envs } = recorder();
+      const deps = depsWith(fake, exec, { LOGIN_TOKEN: 'test-token-gh' });
+
+      await prepare(deps);
+
+      for (const c of envs.filter((c) => c.command !== 'mise')) expect(c.env).toBeUndefined();
+      expect(process.env.MISE_GITHUB_TOKEN).toBeUndefined();
+      expect(deps.env.MISE_GITHUB_TOKEN).toBeUndefined();
+      expect(await readFile(join(dirs.goal, 'spec.json'), 'utf8')).not.toContain('test-token-gh');
+    });
+
+    it('runs mise quiet, and a failed install names the command', async () => {
+      const url = await origin();
+      const { fake } = gatewayServing({ spec, files: {}, repository: { url, branch: 'goal/9-x' }, tools });
+      const { exec, envs } = recorder(1);
+
+      await expect(prepare(depsWith(fake, exec))).rejects.toThrow('mise install exited 1');
+
+      const mise = miseCalls(envs);
+      expect(mise.length).toBeGreaterThan(0);
+      for (const c of mise) expect(c.env?.MISE_QUIET).toBe('1');
+    });
   });
 
   it('installs runtime.tools without a repository too', async () => {
