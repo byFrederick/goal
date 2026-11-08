@@ -1,9 +1,12 @@
 package storetest
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -156,5 +159,44 @@ func testConcurrentClaimsCapped(f *fixture) {
 
 	if n := len(f.leases(t, stWork)) + len(f.leasesOf(t, other)); n != orgCap {
 		t.Errorf("the org holds %d leases; want %d", n, orgCap)
+	}
+}
+
+// FactoryLeases returns every lease of the factory, by station then slot, the same leases Leases
+// returns station by station; never another factory's.
+func testFactoryLeases(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+	other := f.newFactory(t)
+
+	if ls, err := f.Store.FactoryLeases(ctx, f.factory); err != nil || len(ls) != 0 {
+		t.Fatalf("FactoryLeases with none held = %+v, %v; want none", ls, err)
+	}
+
+	for i := range 2 {
+		f.create(t, domain.NewItem{CreatedAt: t0.Add(time.Duration(i) * time.Second)})
+	}
+
+	f.create(t, domain.NewItem{Station: stNext})
+	f.create(t, domain.NewItem{FactoryID: other})
+
+	f.claim(t, work, 1, t1)
+	f.claim(t, work, 0, t1)
+	f.claim(t, domain.Station{ID: stNext, Kind: domain.KindAgent, Agent: agWorker}, 0, t1)
+
+	if err := f.claimIn(ctx, other, 0); err != nil {
+		t.Fatalf("claim in the other factory: %v", err)
+	}
+
+	got, err := f.Store.FactoryLeases(ctx, f.factory)
+	if err != nil {
+		t.Fatalf("FactoryLeases: %v", err)
+	}
+
+	want := append(f.leases(t, stNext), f.leases(t, stWork)...)
+	slices.SortStableFunc(want, func(a, b domain.Lease) int { return cmp.Or(cmp.Compare(a.Station, b.Station), cmp.Compare(a.Slot, b.Slot)) })
+
+	if len(want) != 3 || !reflect.DeepEqual(got, want) {
+		t.Errorf("FactoryLeases =\n  %+v\nwant the leases at %s then %s\n  %+v", got, stNext, stWork, want)
 	}
 }

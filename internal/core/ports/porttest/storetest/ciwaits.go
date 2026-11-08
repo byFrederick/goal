@@ -3,6 +3,7 @@ package storetest
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -24,6 +25,7 @@ var ciWaitsTests = []struct {
 	{"CIWaits_OpenOnPoll", testCIWaitsOpenOnPoll},
 	{"CIWaits_ClaimSkipsOpenWait", testCIWaitsClaimSkipsOpenWait},
 	{"CIWaits_AtStation", testCIWaitsAtStation},
+	{"CIWaitsOf_EachKeyAsCIWaits", testCIWaitsOfEachKey},
 	{"CIWaits_FirstPolledAtSetOnce", testCIWaitsFirstPolledAtSetOnce},
 }
 
@@ -493,6 +495,68 @@ func testCIWaitsAtStation(f *fixture) {
 
 	if ws, err := f.Store.CIWaits(ctx, it.ID, "nowhere"); err != nil || len(ws) != 0 {
 		t.Errorf("CIWaits at a station with none = %+v, %v; want none", ws, err)
+	}
+}
+
+// CIWaitsOf reads, for each key, what CIWaits reads for its item and station, in one call; a key
+// with no waits, an unknown item and no keys at all give no entry.
+func testCIWaitsOfEachKey(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+
+	it, other := f.create(t, domain.NewItem{}), f.create(t, domain.NewItem{})
+
+	first := f.openCIWait(t, ciWait(it.ID, ciSHA))
+
+	if n, err := f.Store.EndCIWaits(ctx, []domain.CIWaitID{first.ID}, domain.CIUnreadable, t1); err != nil || n != 1 {
+		t.Fatalf("EndCIWaits = %d, %v; want 1, nil", n, err)
+	}
+
+	next := ciWait(it.ID, ciNewSHA)
+	next.StartedAt = t1.Add(time.Minute)
+	f.openCIWait(t, next)
+
+	atWork := ciWait(it.ID, ciSHA)
+	atWork.Station = stWork
+	f.openCIWait(t, atWork)
+	f.openCIWait(t, ciWait(other.ID, ciSHA))
+	f.recordEveryCIPoll(t, t1.Add(time.Minute), domain.CIPollResult{
+		Checks: json.RawMessage(ciChecks), Error: ciUnreadableError, NextPollAt: t1.Add(time.Hour), Interval: domain.CIPollMinInterval,
+	})
+
+	keys := []domain.CIWaitKey{
+		{Item: it.ID, Station: ciStation}, {Item: it.ID, Station: stWork}, {Item: other.ID, Station: ciStation},
+		{Item: other.ID, Station: stWork}, {Item: missingItem, Station: ciStation},
+	}
+
+	got, err := f.Store.CIWaitsOf(ctx, keys)
+	if err != nil {
+		t.Fatalf("CIWaitsOf = %v", err)
+	}
+
+	want := map[domain.CIWaitKey][]domain.CIWaitRecord{}
+
+	for _, k := range keys {
+		ws, err := f.Store.CIWaits(ctx, k.Item, k.Station)
+		if err != nil {
+			t.Fatalf("CIWaits(%s, %s) = %v", k.Item, k.Station, err)
+		}
+
+		if len(ws) > 0 {
+			want[k] = ws
+		}
+	}
+
+	if len(want) != 3 || len(want[keys[0]]) != 2 {
+		t.Fatalf("CIWaits found %d keys with waits; want 3, the first with 2", len(want))
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("CIWaitsOf =\n  %+v\nwant what CIWaits reads per key\n  %+v", got, want)
+	}
+
+	if none, err := f.Store.CIWaitsOf(ctx, nil); err != nil || len(none) != 0 {
+		t.Errorf("CIWaitsOf of no keys = %+v, %v; want none", none, err)
 	}
 }
 

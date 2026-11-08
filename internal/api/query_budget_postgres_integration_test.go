@@ -43,7 +43,7 @@ const (
 	budgetDone   = "done"
 )
 
-// budgetDefinition is inbox → build (agents) → review (human) → done.
+// budgetDefinition is inbox → build (agents, waiting for CI) → review (human) → done.
 const budgetDefinition = `apiVersion: goal/v1
 kind: Factory
 metadata: { id: ` + string(budgetFactory) + `, name: budget, title: Budget }
@@ -55,7 +55,7 @@ spec:
     workTypes: [feature, fix]
     stations:
       - { id: inbox, kind: queue }
-      - { id: build, kind: agent, agent: builder, agents: 20, wip: 20 }
+      - { id: build, kind: agent, agent: builder, agents: 20, wip: 20, waitFor: ci }
       - { id: review, kind: human }
       - { id: done, kind: done }
 `
@@ -77,8 +77,10 @@ type budgetSeed struct {
 
 // seedProductionSize gives a fresh database one organization with one factory holding openItems
 // open items, as production has them at its size: one in twenty is an assembly, each with
-// openItems/5 parts (10 assemblies of 40 parts at 200 open items); a quarter of the rest waits
-// for a person at review, a tenth is blocked at build and the others are queued at inbox. It
+// openItems/5 parts (10 assemblies of 40 parts at 200 open items), an integration branch and its
+// last part waiting for the turn of its first; a quarter of the rest waits for a person at
+// review, a quarter is at build, where one in twenty open items is in progress and half of the
+// others wait for CI, a tenth is blocked at build and the others are queued at inbox. It
 // also has four done items per open one, finished over the last fourteen days, so this window and
 // the one before have lead times. The items are written through the store, as the engine writes
 // them. It serves the API over that database under GOAL_AUTH=none, with an open draft of the
@@ -186,14 +188,25 @@ func (b *budgetSeed) seedItems(t *testing.T, openItems int, now time.Time) {
 			}
 		}
 
-		if _, _, err := b.store.Assemble(ctx, ports.Assembly{
+		_, planned, err := b.store.Assemble(ctx, ports.Assembly{
 			Transition: ports.Transition{
 				ItemID: p.it.ID, From: p.it.Position(), To: domain.Position{Station: build.ID, State: domain.StateAssembly},
 				Lease: &p.l, Outcome: domain.LeaseAdvanced, At: at,
 			},
 			Parts: plan, By: domain.LocalUser,
-		}); err != nil {
+		})
+		if err != nil {
 			t.Fatalf("assemble %d: %v", i, err)
+		}
+
+		if _, err := b.store.SetIntegrationBranch(ctx, p.it.ID, fmt.Sprintf("goal/a%d", i), budgetReview, at); err != nil {
+			t.Fatalf("integration branch of %d: %v", i, err)
+		}
+
+		if last := planned.Items[len(planned.Items)-1]; last.ID != planned.Items[0].ID {
+			if _, err := b.store.AddEdge(ctx, domain.NewEdge{Item: last.ID, Needs: planned.Items[0].ID, Kind: domain.EdgeTurn, By: domain.EngineActor, At: at}); err != nil {
+				t.Fatalf("turn of assembly %d: %v", i, err)
+			}
 		}
 
 		b.parts += partsEach
@@ -205,12 +218,16 @@ func (b *budgetSeed) seedItems(t *testing.T, openItems int, now time.Time) {
 		switch {
 		case i%4 == 0:
 			station, state = budgetReview, domain.StateWaitingHuman
+		case i%4 == 2:
+			station = build.ID
 		case i%10 == 1:
 			station, state = build.ID, domain.StateBlocked
 		}
 
 		file(fmt.Sprintf("open %d", i), station, state, at.Add(-time.Duration(i)*time.Minute))
 	}
+
+	b.seedBuild(t, build, max(openItems/20, 1), assemblies, at)
 
 	for i := range 4 * openItems {
 		doneAt := now.Add(-time.Duration(i%(14*24)) * time.Hour).Add(-time.Minute)
@@ -226,6 +243,38 @@ func (b *budgetSeed) seedItems(t *testing.T, openItems int, now time.Time) {
 	}
 
 	b.open = openItems
+}
+
+// seedBuild claims n items at build, on the slots after the from the planning claims took, and
+// opens a CI wait on every other item that is not a part and is still queued there.
+func (b *budgetSeed) seedBuild(t *testing.T, build domain.Station, n, from int, at time.Time) {
+	t.Helper()
+
+	ctx := b.ctx(t)
+
+	for slot := range n {
+		if _, _, err := b.store.ClaimNext(ctx, ports.Claim{FactoryID: budgetFactory, Station: build, Slot: from + slot, Now: at, ExpiresAt: at.Add(24 * time.Hour)}); err != nil {
+			t.Fatalf("claim at build: %v", err)
+		}
+	}
+
+	queued, err := b.store.ListItems(ctx, ports.ItemQuery{FactoryID: budgetFactory, Station: build.ID, States: []domain.ItemState{domain.StateQueued}, Limit: 1000})
+	if err != nil {
+		t.Fatalf("items queued at build: %v", err)
+	}
+
+	for i, it := range queued {
+		if it.ParentID != "" || i%2 == 1 {
+			continue
+		}
+
+		if _, err := b.store.OpenCIWait(ctx, domain.NewCIWait{
+			Item: it.ID, Station: build.ID, Visit: "v1", Repo: "github.com/acme/app", SHA: fmt.Sprintf("%040d", i),
+			Phase: domain.CIPhaseBefore, Round: 1, StartedAt: at,
+		}); err != nil {
+			t.Fatalf("ci wait of %s: %v", it.Title, err)
+		}
+	}
 }
 
 // serve starts the API over the seeded database as goald wires it for these reads; the rest of
@@ -246,7 +295,7 @@ func (b *budgetSeed) serve(t *testing.T) {
 		Engine: struct{ Engine }{}, Items: b.store, Factories: cache, Definitions: authors, Versions: defStore, Orgs: b.store, Audit: b.store,
 		OrgRetention: time.Hour, Authorizer: AllowAll{}, Auth: AuthConfig{Mode: AuthNone}, Access: postgres.NewAccess(b.store),
 		Platform: postgres.NewPlatform(b.store), Feed: NewFeed(porttest.NewItemNotices(), porttest.NewDefinitionNotices(), nil),
-		Builder: struct{ Builder }{}, StandingRules: postgres.NewStandingRules(b.store), Credentials: struct{ ports.Credentials }{},
+		Builder: budgetBuilder{}, StandingRules: postgres.NewStandingRules(b.store), Credentials: struct{ ports.Credentials }{},
 		OrgSecrets: struct{ ports.OrgSecrets }{}, EnvironmentTests: postgres.NewEnvironmentTests(b.store), ToolLister: struct{ ports.ToolLister }{},
 		RepositoryTests: postgres.NewRepositoryTests(b.store), Intake: struct{ ports.Intake }{}, DraftRequests: postgres.NewDraftRequests(b.store),
 		Conversions: postgres.NewFactoryConversions(b.store), ConnectionTransport: http.DefaultTransport,
@@ -263,6 +312,12 @@ func (b *budgetSeed) serve(t *testing.T) {
 	b.srv = httptest.NewServer(h)
 	t.Cleanup(b.srv.Close)
 }
+
+// budgetBuilder answers the board's read of goald's models with none; the board labels each lane's
+// model with its id then.
+type budgetBuilder struct{ Builder }
+
+func (budgetBuilder) Meta(context.Context) domain.BuilderMeta { return domain.BuilderMeta{} }
 
 // budgetAnswer is one read's answer: its status, how many queries its access log line counted and
 // how long it took on the wall clock.
@@ -363,6 +418,7 @@ func budgetReads() []budgetRead {
 		{name: "metrics compare previous", path: f + "/metrics?compare=previous", budget: 31},
 		{name: "draft", path: f + "/draft", budget: 61},
 		{name: "draft model", path: f + "/draft/model", budget: 29},
+		{name: "board", path: f + "/board", budget: 0, growsToday: true},
 	}
 }
 
