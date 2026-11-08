@@ -34,17 +34,21 @@ type Worker struct {
 	branchExisted bool
 	prepared      []domain.WorkerRepository
 	exits         map[string][]int
-	diff          string
-	diffCode      int
-	diffs         []ExecCall
-	prepares      []ExecCall
-	runs          []ExecCall
-	checks        []ExecCall
-	changes       changes
+	// holds counts the next runs of each check command that wait for their ctx to end (HoldCheck).
+	holds    map[string]int
+	diff     string
+	diffCode int
+	diffs    []ExecCall
+	prepares []ExecCall
+	runs     []ExecCall
+	checks   []ExecCall
+	changes  changes
 }
 
 // NewWorker returns a worker whose agent runs play agent.
-func NewWorker(agent AgentFunc) *Worker { return &Worker{agent: agent, exits: map[string][]int{}} }
+func NewWorker(agent AgentFunc) *Worker {
+	return &Worker{agent: agent, exits: map[string][]int{}, holds: map[string]int{}}
+}
 
 // FailPrepare makes every prepare exit with code, writing stderr, instead of preparing.
 func (w *Worker) FailPrepare(code int, stderr string) {
@@ -103,6 +107,15 @@ func (w *Worker) Exit(command string, codes ...int) {
 	w.exits[command] = codes
 }
 
+// HoldCheck makes the next run of a check command wait until its ctx ends, as a check still
+// running when goald shuts down does; the runs after it exit as scripted.
+func (w *Worker) HoldCheck(command string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	w.holds[command]++
+}
+
 // Exec is the worker's ExecFunc.
 func (w *Worker) Exec(ctx context.Context, c ExecCall, stdout, stderr io.Writer) int {
 	switch {
@@ -120,7 +133,7 @@ func (w *Worker) Exec(ctx context.Context, c ExecCall, stdout, stderr io.Writer)
 
 		return code
 	default:
-		return w.check(c, stdout)
+		return w.check(ctx, c, stdout)
 	}
 }
 
@@ -222,12 +235,22 @@ type preparedLine struct {
 	Repositories  []domain.WorkerRepository `json:"repositories"`
 }
 
-func (w *Worker) check(c ExecCall, stdout io.Writer) int {
+func (w *Worker) check(ctx context.Context, c ExecCall, stdout io.Writer) int {
 	w.mu.Lock()
 	w.checks = append(w.checks, c)
 
 	command := c.Argv[len(c.Argv)-1]
 	code := 0
+
+	if w.holds[command] > 0 {
+		w.holds[command]--
+		w.mu.Unlock()
+		w.changes.signal()
+
+		<-ctx.Done()
+
+		return -1
+	}
 
 	if codes := w.exits[command]; len(codes) > 0 {
 		code = codes[0]
@@ -272,6 +295,11 @@ func (w *Worker) Runs() []ExecCall {
 // WaitRuns blocks until at least n agent runs have started.
 func (w *Worker) WaitRuns(ctx context.Context, n int) error {
 	return w.changes.await(ctx, func() bool { return len(w.Runs()) >= n })
+}
+
+// WaitChecks blocks until at least n check commands have started.
+func (w *Worker) WaitChecks(ctx context.Context, n int) error {
+	return w.changes.await(ctx, func() bool { return len(w.Checks()) >= n })
 }
 
 // Checks returns every check command so far, in order.
