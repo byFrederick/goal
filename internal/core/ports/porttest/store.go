@@ -1168,12 +1168,16 @@ func (s *Store) NotesSinceLastRun(ctx context.Context, item domain.ItemID) ([]do
 		return notes, nil
 	}
 
+	var events []domain.Event
+
 	for _, e := range s.events {
-		switch {
-		case e.ItemID != item:
-		case e.Kind == domain.EventRunStarted:
-			notes = notes[:0]
-		case e.Kind == domain.EventNote || e.Kind == domain.EventItemNote:
+		if e.ItemID == item {
+			events = append(events, e)
+		}
+	}
+
+	for _, e := range events[domain.SinceLastBrief(events, len(events)):] {
+		if e.Kind == domain.EventNote || e.Kind == domain.EventItemNote {
 			notes = append(notes, e)
 		}
 	}

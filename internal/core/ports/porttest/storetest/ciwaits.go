@@ -24,6 +24,7 @@ var ciWaitsTests = []struct {
 	{"CIWaits_OpenOnPoll", testCIWaitsOpenOnPoll},
 	{"CIWaits_ClaimSkipsOpenWait", testCIWaitsClaimSkipsOpenWait},
 	{"CIWaits_AtStation", testCIWaitsAtStation},
+	{"CIWaits_FirstPolledAtSetOnce", testCIWaitsFirstPolledAtSetOnce},
 }
 
 // The repository, commits and stations the CI wait cases use.
@@ -118,6 +119,39 @@ func testCIWaitsShareOnePoll(f *fixture) {
 
 	if got := f.leaseCIPolls(t, next.Add(-time.Second), ciOwner); len(got) != 0 {
 		t.Errorf("LeaseDueCIPolls before the next poll = %+v; want none", got)
+	}
+}
+
+// A poll's first poll time is set by the first record that gives one: a later record with a later
+// time, or with none, keeps it.
+func testCIWaitsFirstPolledAtSetOnce(f *fixture) {
+	t := f.t
+
+	it := f.create(t, domain.NewItem{})
+	f.openCIWait(t, ciWait(it.ID, ciSHA))
+
+	key := domain.CIPollKey{Host: ciHost, Repo: ciRepo, SHA: ciSHA}
+
+	if p := f.openCIWaits(t, it.ID)[0].Poll; !p.FirstPolledAt.IsZero() {
+		t.Errorf("first polled at before any poll = %s; want zero", p.FirstPolledAt)
+	}
+
+	first := t1.Add(time.Second)
+
+	for i, at := range []time.Time{first, first.Add(time.Minute), {}} {
+		now := t1.Add(time.Duration(i) * time.Hour)
+		if polls := f.leaseCIPolls(t, now, ciOwner); len(polls) != 1 {
+			t.Fatalf("LeaseDueCIPolls at %s = %+v; want the one poll", now, polls)
+		}
+
+		r := domain.CIPollResult{FirstPolledAt: at, NextPollAt: now.Add(domain.CIPollMinInterval), Interval: domain.CIPollMinInterval}
+		if err := f.Store.RecordCIPoll(f.ctx(t), key, ciOwner, r); err != nil {
+			t.Fatalf("RecordCIPoll = %v", err)
+		}
+
+		if p := f.openCIWaits(t, it.ID)[0].Poll; !p.FirstPolledAt.Equal(first) {
+			t.Errorf("first polled at after record %d = %s; want %s", i+1, p.FirstPolledAt, first)
+		}
 	}
 }
 

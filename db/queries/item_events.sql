@@ -26,12 +26,17 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: NotesSinceLastRun :many
--- An item's notes, a person's and other items' (item_note), after its latest run_started event,
--- both on item_events_item_idx: what the next run's brief carries.
+-- An item's notes, a person's and other items' (item_note), after the run_started event of its
+-- latest run whose agent started (an agent_started event with the same run_id; domain.
+-- SinceLastBrief), on item_events_item_idx: what the next run's brief carries. A run that failed
+-- before its agent started read no brief, so the notes before it stay.
 SELECT n.* FROM item_events n
 WHERE n.item_id = sqlc.arg(item_id) AND n.kind IN ('note', 'item_note')
   AND n.id > coalesce((SELECT max(r.id) FROM item_events r
-                       WHERE r.item_id = sqlc.arg(item_id) AND r.kind = 'run_started'), 0)
+                       WHERE r.item_id = sqlc.arg(item_id) AND r.kind = 'run_started'
+                         AND EXISTS (SELECT 1 FROM item_events a
+                                     WHERE a.item_id = sqlc.arg(item_id) AND a.kind = 'agent_started'
+                                       AND a.run_id = r.run_id AND a.id > r.id)), 0)
 ORDER BY n.id;
 
 -- name: MergedItems :many
