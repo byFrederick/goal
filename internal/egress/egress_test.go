@@ -322,6 +322,9 @@ func TestProxy_ServesTheGatewayAtItsPathsOnly(t *testing.T) {
 		{http.MethodGet, "/run?part=bundle"},
 		{http.MethodPost, "/run/tool-approval"},
 		{http.MethodGet, "/run/knowledge/handbook"},
+		{http.MethodPost, "/run/build-cache/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"},
+		{http.MethodPut, "/run/build-cache/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/archive"},
+		{http.MethodPost, "/run/build-cache/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/done"},
 	} {
 		if status := call(req.method, req.path); status != http.StatusOK {
 			t.Errorf("%s %s = %d, want 200", req.method, req.path, status)
@@ -331,6 +334,7 @@ func TestProxy_ServesTheGatewayAtItsPathsOnly(t *testing.T) {
 	for _, path := range []string{
 		"/v1/me", "/api/auth/email-otp/send-verification-otp", "/mcp/", "/run/x", "/run/tool-approval/", "/run/tool-approval/x", "/run/%74ool-approval", "/%6Dcp", "/%72un", "/",
 		"/run/knowledge", "/run/knowledge/", "/run/knowledge/a/b", "/run/knowledge/%2e%2e", "/run/knowledge/../mcp",
+		"/run/build-cache", "/run/build-cache/", "/run/build-cache/k/x", "/run/build-cache/k/done/x", "/run/build-cache/../mcp", "/run/build-cache/%2e%2e",
 	} {
 		if status := call(http.MethodPost, path); status != http.StatusNotFound {
 			t.Errorf("POST %s = %d, want 404", path, status)
@@ -345,7 +349,10 @@ func TestProxy_ServesTheGatewayAtItsPathsOnly(t *testing.T) {
 	if want := []string{
 		"GET " + host + "/run/knowledge/handbook auth=Bearer task-token",
 		"GET " + host + "/run?part=bundle auth=Bearer task-token", "POST " + host + "/mcp auth=Bearer task-token",
+		"POST " + host + "/run/build-cache/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef auth=Bearer task-token",
+		"POST " + host + "/run/build-cache/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/done auth=Bearer task-token",
 		"POST " + host + "/run/tool-approval auth=Bearer task-token",
+		"PUT " + host + "/run/build-cache/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/archive auth=Bearer task-token",
 	}; !slices.Equal(got, want) {
 		t.Errorf("gateway saw %v; want %v", got, want)
 	}
