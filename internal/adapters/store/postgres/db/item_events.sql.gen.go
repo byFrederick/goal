@@ -12,6 +12,50 @@ import (
 	"github.com/google/uuid"
 )
 
+const askEvents = `-- name: AskEvents :many
+SELECT id, factory_id, item_id, run_id, at, kind, station, actor, data, org_id FROM item_events
+WHERE item_id = ANY ($1::uuid[]) AND kind = ANY ($2::text[])
+ORDER BY item_id, id
+`
+
+type AskEventsParams struct {
+	ItemIds []uuid.UUID
+	Kinds   []string
+}
+
+// The events of some items whose kind is one of domain.AskKinds, by item in append order, on
+// item_events_item_idx: what the open question and tool approval of each are read from.
+func (q *Queries) AskEvents(ctx context.Context, arg AskEventsParams) ([]ItemEvent, error) {
+	rows, err := q.db.Query(ctx, askEvents, arg.ItemIds, arg.Kinds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ItemEvent
+	for rows.Next() {
+		var i ItemEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.FactoryID,
+			&i.ItemID,
+			&i.RunID,
+			&i.At,
+			&i.Kind,
+			&i.Station,
+			&i.Actor,
+			&i.Data,
+			&i.OrgID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const factoryActivity = `-- name: FactoryActivity :many
 SELECT e.id, e.factory_id, e.item_id, e.run_id, e.at, e.kind, e.station, e.actor, e.data, e.org_id, w.number, w.title
 FROM item_events e

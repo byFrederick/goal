@@ -104,6 +104,7 @@ type Items interface {
 	ItemRepositories(ctx context.Context, item domain.ItemID) ([]domain.ItemRepository, error)
 	ItemsRepositories(ctx context.Context, items []domain.ItemID) (map[domain.ItemID][]domain.ItemRepository, error)
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
+	AskEvents(ctx context.Context, ids []domain.ItemID) (map[domain.ItemID][]domain.Event, error)
 	FactoryActivity(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ActivityEvent, error)
 	Runs(ctx context.Context, item domain.ItemID, limit int) ([]domain.Run, error)
 	Run(ctx context.Context, id domain.RunID) (domain.Run, error)

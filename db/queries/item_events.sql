@@ -11,6 +11,13 @@ WHERE item_id = $1 AND id > sqlc.arg(after)::bigint
 ORDER BY id
 LIMIT sqlc.arg(max_events)::bigint;
 
+-- name: AskEvents :many
+-- The events of some items whose kind is one of domain.AskKinds, by item in append order, on
+-- item_events_item_idx: what the open question and tool approval of each are read from.
+SELECT * FROM item_events
+WHERE item_id = ANY (sqlc.arg(item_ids)::uuid[]) AND kind = ANY (sqlc.arg(kinds)::text[])
+ORDER BY item_id, id;
+
 -- name: ItemNotes :many
 -- The notes other items' agents and triggers' checks left on an item (item_note), oldest first,
 -- on item_events_item_idx.

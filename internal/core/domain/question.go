@@ -45,6 +45,13 @@ type Answer struct {
 // withdraws are the person's decisions that withdraw an open question without answering it.
 var withdraws = []EventKind{EventMoved, EventPaused, EventRejected, EventCancelled}
 
+// AskKinds are the only kinds OpenQuestion and OpenToolApproval look at: questions asked and
+// answered, tool approvals requested and decided, and the decisions that withdraw them. Both give
+// the same answer on an item's events of these kinds as on its whole history, so a store reads
+// only these (ports.Store.AskEvents).
+var AskKinds = slices.Concat(
+	[]EventKind{EventQuestionAsked, EventQuestionAnswered, EventToolApprovalRequested}, toolDecisions, withdraws)
+
 // OpenQuestion finds an item's open question in its events, in append order: the latest
 // question_asked with no question_answered, moved, paused, rejected or cancelled after it.
 func OpenQuestion(events []Event) (Question, bool) {

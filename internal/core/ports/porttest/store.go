@@ -1214,6 +1214,31 @@ func (s *Store) ItemEvents(ctx context.Context, id domain.ItemID, after int64, l
 	return out, nil
 }
 
+// AskEvents implements ports.Store.
+func (s *Store) AskEvents(ctx context.Context, ids []domain.ItemID) (map[domain.ItemID][]domain.Event, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := map[domain.ItemID][]domain.Event{}
+
+	for _, e := range s.events {
+		if !slices.Contains(ids, e.ItemID) || !slices.Contains(domain.AskKinds, e.Kind) {
+			continue
+		}
+
+		if _, ok := s.visible(e.ItemID, org); ok {
+			out[e.ItemID] = append(out[e.ItemID], e)
+		}
+	}
+
+	return out, nil
+}
+
 // FactoryActivity implements ports.Store.
 func (s *Store) FactoryActivity(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ActivityEvent, error) {
 	org, err := orgOf(ctx)
