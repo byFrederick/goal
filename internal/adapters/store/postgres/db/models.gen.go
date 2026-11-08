@@ -35,6 +35,7 @@ type AgentRun struct {
 	PeakMemoryBytes     *int64
 	BoxSize             *string
 	PeakMemorySource    *string
+	BuildCache          *string
 }
 
 type AndonPull struct {
@@ -65,6 +66,17 @@ type AuditLog struct {
 	FactoryID  *uuid.UUID
 	Data       []byte
 	RequestID  *string
+}
+
+type BuildCache struct {
+	OrgID         uuid.UUID
+	RepositoryKey string
+	CacheKey      string
+	ObjectKey     string
+	SizeBytes     *int64
+	State         string
+	CreatedAt     time.Time
+	UsedAt        time.Time
 }
 
 type CiPoll struct {

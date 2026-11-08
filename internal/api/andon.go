@@ -74,7 +74,8 @@ func (s *server) GetAndon(ctx context.Context, req gen.GetAndonRequestObject) (g
 }
 
 // gateTallies tallies each gate station of the line, in line order, over its last verdicts after
-// the last clear: the policy's window of them, or domain.DefaultAndonWindow without a policy.
+// the last clear: the policy's window of them, or domain.DefaultAndonWindow without a policy. A
+// policy that omits its window already carries the default (config sets it).
 func (s *server) gateTallies(ctx context.Context, l domain.Line, after time.Time) ([]gen.GateTally, error) {
 	policy, window := l.Flow.Andon, domain.DefaultAndonWindow
 	if policy != nil {

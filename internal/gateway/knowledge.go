@@ -24,11 +24,17 @@ type Knowledge interface {
 	Snapshots(ctx context.Context, source string) ([]domain.KnowledgeSnapshot, error)
 }
 
-// Objects reads a knowledge snapshot's zip from the bucket by range, and signs a URL a cloud box
-// downloads it from; ports.ObjectStore satisfies it.
+// Objects reads a knowledge snapshot's zip or a build cache's archive from the bucket by range,
+// and signs a URL a cloud box downloads it from; it also writes, finds and deletes build cache
+// archives, and signs a URL a cloud box uploads one to (buildcache.go). ports.ObjectStore
+// satisfies it.
 type Objects interface {
 	GetRange(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error)
 	PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error)
+	PresignPut(ctx context.Context, key string, ttl time.Duration) (string, error)
+	PutStream(ctx context.Context, key string, r io.Reader) (ports.ObjectInfo, error)
+	List(ctx context.Context, prefix string) ([]ports.ObjectInfo, error)
+	Delete(ctx context.Context, key string) error
 }
 
 // KnowledgePath is where a run downloads one of its pinned snapshots: GET KnowledgePath<source>.

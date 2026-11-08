@@ -38,6 +38,7 @@ import { Spinner } from '../../ui/spinner';
 import { StatStrip } from '../../ui/stat-strip';
 import { touchLink } from '../../ui/touch-target';
 import { WorkingLine } from '../../ui/working-line';
+import { buildCacheClass, buildCacheLabel } from './build-cache';
 import { type RunsRange, type RunsSearch, rangeWord, runsWindow } from './search';
 
 /** The rows one page asks for: the footer counts what is shown, and paging is not built yet. */
@@ -447,7 +448,8 @@ export function RunsPage() {
                         CPU
                         <InfoTip about="CPU">
                           CPU is the box's CPU time from prepare to the run's end. Peak memory is the most memory the
-                          box used at once. — means the box couldn't measure it.
+                          box used at once. — means the box couldn't measure it. The cache label says whether the box
+                          restored its saved Go and pnpm caches: hit, miss, off or error.
                         </InfoTip>
                       </span>
                     </th>
@@ -507,6 +509,11 @@ export function RunsPage() {
                         <td className="px-3 py-2 text-right tabular-nums">{formatUsdCompact(run.cost_usd)}</td>
                         <td className="hidden px-3 py-2 text-right tabular-nums min-[1440px]:table-cell">
                           {formatCpuSeconds(run.cpu_seconds)}
+                          {run.build_cache ? (
+                            <span className={cn('block text-meta', buildCacheClass(run.build_cache))}>
+                              {buildCacheLabel(run.build_cache)}
+                            </span>
+                          ) : null}
                         </td>
                         <td className="hidden px-3 py-2 text-right tabular-nums min-[1440px]:table-cell">
                           {formatMemory(run.peak_memory_bytes)}

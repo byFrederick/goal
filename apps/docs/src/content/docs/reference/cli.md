@@ -308,7 +308,7 @@ Flags: `--yes`.
 goal factory ask <factory> "<text>" [--agent A] [--wait]
 ```
 
-ask goald to change the factory's draft (a draft request, about agent A with --agent); it never publishes. --wait waits until it is done or failed and prints what it changed
+not built yet: goald refuses every draft request (501 not-built) and queues nothing, so the command fails and --wait never waits. Change the draft with goal factory pull and goal factory push
 
 Flags: `--agent A`, `--wait`.
 
@@ -468,7 +468,7 @@ delete it (refused while something uses it; the error names each use)
 goal secret import <file> [--format env|yaml] [--on-conflict replace|skip] [--dry-run]
 ```
 
-import a .env file or a YAML file's credentials: map (format from the extension by default; new names are open to no factory, a name that exists is skipped unless --on-conflict replace); prints each name as new or exists (--dry-run) or what was done with it
+import a .env file or a YAML file's secrets: map (format from the extension by default; new names are open to no factory, a name that exists is skipped unless --on-conflict replace); prints each name as new or exists (--dry-run) or what was done with it
 
 Flags: `--format env|yaml`, `--on-conflict replace|skip`, `--dry-run`.
 

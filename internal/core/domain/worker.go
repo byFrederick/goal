@@ -53,6 +53,9 @@ type WorkerFinished struct {
 	// MemorySource is how the worker measured PeakMemoryBytes, "cgroup" or "machine"; absent
 	// without it. Result keeps only those two values, and only with PeakMemoryBytes.
 	MemorySource string `json:"memory_source"`
+	// BuildCache is what happened to the box's build cache: hit, miss, off or error; absent when
+	// the run had no Go or pnpm repository. Result keeps only those four values.
+	BuildCache string `json:"build_cache"`
 	// Repositories are the repositories the run fetched or pushed, each with its pushed head and
 	// whether it wrote (ADR 0041 decision 5).
 	Repositories []WorkerRepository `json:"repositories"`
@@ -173,6 +176,16 @@ func (f *WorkerFinished) memorySource() MemorySource {
 	}
 }
 
+// buildCache is the line's build cache outcome when it is a known one; empty otherwise.
+func (f *WorkerFinished) buildCache() BuildCacheOutcome {
+	switch bc := BuildCacheOutcome(f.BuildCache); bc {
+	case BuildCacheHit, BuildCacheMiss, BuildCacheOff, BuildCacheError:
+		return bc
+	default:
+		return ""
+	}
+}
+
 // Result is the run's result as the worker reported it: succeeded only with an output, failed
 // with the worker's reason otherwise, with the repositories it reported. How the process ended
 // (killed, timed out, crashed) is the caller's to apply on top.
@@ -180,7 +193,7 @@ func (f *WorkerFinished) Result() RunResult {
 	res := RunResult{
 		CostUSD: f.CostUSD, Turns: f.Turns, InputTokens: f.InputTokens, OutputTokens: f.OutputTokens, SessionID: f.SessionID,
 		Repositories: RunRepositories(f.Repositories), CPUSeconds: f.CPUSeconds, PeakMemoryBytes: f.PeakMemoryBytes,
-		PeakMemorySource: f.memorySource(),
+		PeakMemorySource: f.memorySource(), BuildCache: f.buildCache(),
 	}
 
 	switch {
