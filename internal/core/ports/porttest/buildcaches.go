@@ -117,23 +117,7 @@ func (s *Store) PruneBuildCaches(ctx context.Context, repositoryKey string, keep
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var ready []domain.BuildCache
-
-	for _, r := range s.buildCaches {
-		if r.org == org && r.row.RepositoryKey == repositoryKey && r.row.State == domain.BuildCacheReady {
-			ready = append(ready, r.row)
-		}
-	}
-
-	// Newest first, ties by cache key descending, as the adapter orders them.
-	slices.SortFunc(ready, func(a, b domain.BuildCache) int {
-		return cmp.Or(b.CreatedAt.Compare(a.CreatedAt), cmp.Compare(b.CacheKey, a.CacheKey))
-	})
-
-	kept := map[string]bool{}
-	for _, c := range ready[:min(keep, len(ready))] {
-		kept[c.CacheKey] = true
-	}
+	kept := s.newestReady(org, repositoryKey, keep)
 
 	deleted := []string{}
 	s.buildCaches = slices.DeleteFunc(s.buildCaches, func(r buildCacheRow) bool {
@@ -148,4 +132,27 @@ func (s *Store) PruneBuildCaches(ctx context.Context, repositoryKey string, keep
 	})
 
 	return deleted, nil
+}
+
+// newestReady is the cache keys of org's newest keep ready caches of repo, newest first and ties
+// by cache key descending, as the adapter orders them. Callers hold s.mu.
+func (s *Store) newestReady(org domain.OrgID, repo string, keep int) map[string]bool {
+	var ready []domain.BuildCache
+
+	for _, r := range s.buildCaches {
+		if r.org == org && r.row.RepositoryKey == repo && r.row.State == domain.BuildCacheReady {
+			ready = append(ready, r.row)
+		}
+	}
+
+	slices.SortFunc(ready, func(a, b domain.BuildCache) int {
+		return cmp.Or(b.CreatedAt.Compare(a.CreatedAt), cmp.Compare(b.CacheKey, a.CacheKey))
+	})
+
+	kept := map[string]bool{}
+	for _, c := range ready[:min(keep, len(ready))] {
+		kept[c.CacheKey] = true
+	}
+
+	return kept
 }
