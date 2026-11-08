@@ -17,3 +17,4 @@ The factory and its flow come first. Read them in this order, or jump to the one
 - [Expedite and priority](/docs/concepts/expedite-and-priority/): which waiting item an agent slot pulls next.
 - [WIP and budget](/docs/concepts/wip-and-budget/): the caps on work in progress and on spending.
 - [Andon](/docs/concepts/andon/): how a person stops the whole line.
+- [Organization policy](/docs/concepts/organization-policy/): the limits every agent in an organization runs under, and where to change them.
