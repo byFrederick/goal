@@ -334,7 +334,7 @@ act in this organization from now on (config file)
 goal org create <slug> --name N [--mark M]
 ```
 
-create an organization (platform admins only)
+create an organization (any signed-in person)
 
 Flags: `--name N`, `--mark M`.
 

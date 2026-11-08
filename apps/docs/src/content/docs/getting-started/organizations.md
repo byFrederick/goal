@@ -16,13 +16,41 @@ Any person signed in with a session can create an organization, and becomes its 
 goal org create acme --name "Acme"
 ```
 
-The slug (`acme`) is what the CLI uses to name the organization. To rename it, cap the agents that run at once, or delete it, use `goal org update` and `goal org delete`. The [CLI reference](/docs/reference/) lists their flags.
-
-The CLI's help text for `goal org create` says platform admins only. That text is out of date. The permission in `contracts/api/permissions.yaml` (`org:create`) lets any signed-in person create one, and the decision is recorded in [ADR 0032](https://github.com/byFrederick/goal/blob/main/docs/adr/0032-self-serve-onboarding.md). These pages follow the permission.
+The slug (`acme`) is what the CLI uses to name the organization. To rename it, cap the agents that run at once, or delete it, use `goal org update` and `goal org delete`. The [CLI reference](/docs/reference/cli/) lists their flags.
 
 ## Roles
 
-An organization's roles are owner, admin and member. The person who creates an organization becomes its owner. To join, a person needs an invitation, which can name the factories and the roles they get. An invitation arrives by email and expires after 72 hours. The person accepts it on the invitation page after they [sign in](/docs/getting-started/sign-in/).
+An organization's roles are owner, admin and member. The person who creates an organization becomes its owner. Owners and admins can invite people. A person joins in one of two ways:
+
+- By invitation. An invitation arrives by email and expires after 72 hours. The person accepts it on the invitation page after they [sign in](/docs/getting-started/sign-in/).
+- By sign-up domain. When an owner turns on **Only emails at a domain** on the Members page, anyone whose verified sign-in email is at that domain joins without an invitation, with the join role the page shows. The domain is the one of the owner's own email, and a public webmail domain is refused.
+
+Each factory also has a role for each person: viewer, approver or editor, and each includes the one before. A member starts with none unless the invitation or the sign-up domain gives one. Owners and admins are editors in every factory.
+
+## Members and roles
+
+The **Members and roles** page lists everyone in the organization with their role, their factory roles and when they were last active. Open it from the organization's sidebar (`/o/<slug>/members`). Every member can read it. Owners and admins change things on it.
+
+- **Invite people.** Choose **Invite**, enter up to 20 email addresses, one per line, and choose the role they join with: member, admin or owner. Only owners can invite an owner. People waiting to join are listed with **Resend** and **Revoke**.
+- **Change an organization role.** In a person's row, pick a new role in the **Role** menu. Only owners change an owner's role or make someone an owner.
+- **Change factory roles.** Open **Factory roles…** from the row's menu and pick None, Viewer, Approver or Editor for each factory.
+- **Remove someone.** Choose **Remove from** and the organization's name in the row's menu. A person can leave from their own row.
+
+The page also shows an **Invite link** card. Its link, join role and reset controls are not available yet, so invite by email. Its **Only emails at a domain** switch works and is described under Roles.
+
+## Organization settings
+
+**Organization settings** (`/o/<slug>/settings`, in the sidebar) holds the organization's own settings. Change the fields and choose **Save changes**; only what changed is sent.
+
+- **Name** is shown in the sidebar and in emails.
+- **Address** is the slug in the URL. Changing it breaks old links.
+- **Slots** cap how many agents run at once. Leave **Slots shared by every factory** blank for no limit, and set **Most slots each factory may use** per factory. The CLI sets the shared cap with `goal org update --max-slots`.
+- **Code hosts** is described below.
+
+Two actions sit in the **Danger zone**, for owners:
+
+- **Transfer ownership** gives the organization to an admin you pick, and you become an admin. If there is no admin, make someone one on the Members page first. Type the organization's name to confirm.
+- **Delete** stops its factories and removes its definitions, items and logs after you type the saved name. Its data is purged after the retention period, which the page shows when it is done.
 
 ## Code hosts
 
