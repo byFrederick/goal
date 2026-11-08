@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ItemWaiting } from '../api/types';
 import { CIWait } from './ci-wait';
+import { WaitLine } from './waiting-for';
 
 afterEach(cleanup);
 
@@ -113,5 +114,34 @@ describe('CIWait', () => {
     fireEvent.pointerDown(button);
     fireEvent.keyDown(button, { key: 'ArrowRight' });
     expect(outer).not.toHaveBeenCalled();
+  });
+});
+
+describe('the card wording', () => {
+  it('reads CI and its count on a card, with the long form as its title, and the long form on the item page', () => {
+    const { unmount } = render(<WaitLine waiting={waiting} status={null} />);
+    expect(screen.getByText('CI · 1 of 2').closest('[title]')?.getAttribute('title')).toBe('Waiting for CI · 1 of 2');
+    unmount();
+    render(<CIWait waiting={waiting} />);
+    expect(screen.getByText('Waiting for CI · 1 of 2')).toBeTruthy();
+  });
+
+  it('keeps CI failed: whole and truncates only the check name', () => {
+    const base = waiting.ci as NonNullable<ItemWaiting['ci']>;
+    const failed: ItemWaiting = {
+      ...waiting,
+      ci: {
+        ...base,
+        failure: {
+          repo,
+          sha: 'fedcba9876543210',
+          checks: [{ repo, name: 'task web:e2e', state: 'finished', result: 'failed', failed_jobs: ['3/12'] }],
+        },
+      },
+    };
+    render(<WaitLine waiting={failed} status={null} />);
+    expect(screen.getByText('CI failed:').className).toContain('flex-none');
+    expect(screen.getByText('task web:e2e').className).toContain('truncate');
+    expect(screen.getByText('CI failed:').parentElement?.getAttribute('title')).toBe('CI failed: task web:e2e (3/12)');
   });
 });

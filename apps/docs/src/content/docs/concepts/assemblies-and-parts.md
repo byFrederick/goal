@@ -42,7 +42,7 @@ Pausing, cancelling and retrying an assembly apply to its parts, each as the sam
 
 An assembly shows how many of its parts are done, how many are in progress, how many wait, and at which stations they are.
 
-The assembly page's Plan lists each part that isn't being worked with what holds it, worded as on its Board card: the parts it needs (`Waits for software#41`), a merge turn (`Waits for software#42 to land`), or CI on its commits (`Waiting for CI · 9 of 14`, with its commits and checks behind an ⓘ). A part that waits for nothing shows its state, or Merged once it is done. `GET …/items/{item}/parts` gives each part this as `waiting`, the same object the item answers, or null.
+The assembly page's Plan lists each part that isn't being worked with what holds it, worded as on its Board card: the parts it needs (`Waits for software#41`), a merge turn (`Waits for software#42 to land`), or CI on its commits (`CI · 9 of 14`, with its commits and checks behind an ⓘ). A part that waits for nothing shows its state, or Merged once it is done. `GET …/items/{item}/parts` gives each part this as `waiting`, the same object the item answers, or null.
 
 ## Related
 
