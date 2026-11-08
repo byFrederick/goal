@@ -19,11 +19,9 @@ import (
 // station whose action is merge.
 var ErrNotMergeStep = errors.New("item is not waiting at a merge station")
 
-// ErrNoCodeHost means a pull request is on a host nothing of the factory's version serves. On
-// connections, none of its connections has a git login for that host and a kind naming one of
-// goald's code hosts. On secrets (ADR 0037 decision 7), the host is not runtime.repository.url's,
-// or the repository names no code host goald has (runtime.repository.forge) or no
-// runtime.repository.token.
+// ErrNoCodeHost means a pull request is on a host nothing of the factory's version serves (ADR
+// 0037 decision 7): the host is not runtime.repository.url's, or the repository names no code host
+// goald has (runtime.repository.forge) or no runtime.repository.token.
 var ErrNoCodeHost = errors.New("no code host serves the pull request's host")
 
 // ErrNoWriteEntry means a pull request is in a repository that only a read entry of
@@ -43,12 +41,10 @@ const MergeSquash = "squash"
 // on by's behalf (spec 4 §4.7). The pull requests are the ones the item's outputs name
 // (domain.Item.PullRequests), in the order they name them, each in its own repository through the
 // code host and token mergeTargets picks for it: the token of the runtime.repositories entry that
-// covers it, else the factory's connection that serves its host, opened for by's merge of the item
-// (connection.used names both), or runtime.repository's token. A host nothing serves is refused
-// (ErrNoCodeHost), and a repository no entry that writes covers (ErrNoWriteEntry), before anything
-// is opened or merged; a pull request whose head is not the item's branch is refused
-// (ErrNotTheItems) before its branch is touched. Merge
-// never forces: each pull request's branch is first brought up to date with its base, and one
+// covers it, else runtime.repository's token, opened for the item's factory (secret.used audits
+// it). A host nothing serves is refused (ErrNoCodeHost), and a repository no entry that writes
+// covers (ErrNoWriteEntry), before anything is opened or merged; a pull request whose head is not
+// the item's branch is refused (ErrNotTheItems) before its branch is touched. Merge never forces: each pull request's branch is first brought up to date with its base, and one
 // that is not open and mergeable then, or whose head moves meanwhile, stops the merge with an
 // error wrapping ports.ErrNotMergeable, and the item does not move. A branch that conflicts with
 // its base sends the item back to be built again instead (conflictRework), unless the line's
@@ -101,8 +97,8 @@ const gateMergeTimeout = 2 * time.Minute
 
 // mergeOnApproval merges the item's pull requests when the gate that approved it, an agent
 // station, has action merge (spec 4 §4.7), and adds the merged events to t. It is Merge's merge
-// with the engine as actor: the connections are opened for the engine's use on the item, so it
-// is no person's touch. The pull requests are those of the item's outputs and of the gate's own
+// with the engine as actor: the tokens are opened for the engine's use on the item, so it is no
+// person's touch. The pull requests are those of the item's outputs and of the gate's own
 // output, which only t holds yet. Unlike a person's merge, it reads a pull request whose
 // mergeability is still being computed again for up to Config.MergeWait, heartbeating the lease.
 // A refusal is returned, so the item blocks at the gate, goes back to be built for a conflict
@@ -144,7 +140,7 @@ func (e *Engine) mergeOnApproval(ctx context.Context, c claimed, l domain.Line, 
 }
 
 // mergeAll merges every pull request the item's outputs name (domain.Item.PullRequests) through
-// the line's code host connections, opened for by's merge of it, and returns one merged event
+// the code hosts and tokens mergeTargets picks for them, and returns one merged event
 // by that actor per pull request. It stops at the first refusal; the ones merged before it stay merged
 // and are skipped when asked again. With a lease (a gate's merge), a pull request whose
 // mergeability is pending is read again while the lease is heartbeated (settled).

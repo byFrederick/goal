@@ -13,7 +13,7 @@ import (
 var ErrCredentialNotAllowed = errors.New("the credential does not allow this factory")
 
 // Credentials are an organization's credentials (ADR 0017), for the organization in ctx: named
-// secrets that connections refer to as {{name}} and agents get as env. A value is sealed with
+// secrets that a factory definition refers to as {{name}} and agents get as env. A value is sealed with
 // MasterKey under domain.CredentialAAD (organization, credential id and key id) and is
 // write-only: only Resolve returns it, and no error holds it. Every change and use is audited in
 // its transaction (credential.created, .updated, .value_replaced, .deleted, .used).
@@ -31,19 +31,21 @@ type Credentials interface {
 	// credential has the new name, ErrNoMasterKey for Replace without a master key.
 	Patch(ctx context.Context, name string, p domain.CredentialPatch, by domain.Actor) (domain.Credential, error)
 	// Delete deletes a credential (credential.deleted). ErrNotFound when there is none;
-	// ErrConflict, deleting nothing, while a connection refers to it (UsedBy names them).
+	// ErrConflict, deleting nothing, while a knowledge source reads with it or the Slack
+	// notification setting names it.
 	Delete(ctx context.Context, name string, by domain.Actor) error
-	// UsedBy is the names of the organization's connections that refer to credential name as
-	// {{name}}, sorted; empty when none does or there is no such credential.
+	// UsedBy was the names of the organization's connections that refer to credential name as
+	// {{name}}. With connections gone (ADR 0037, migration 00135) it is always empty, and the
+	// answers that report it keep their shape.
 	UsedBy(ctx context.Context, name string) ([]string, error)
 	// Resolve opens the named credentials for use's run, audits each as credential.used with the
 	// factory, agent and run, and sets last_used_at. ErrNotFound names the first unknown one, and
 	// ErrCredentialNotAllowed the first whose scope leaves out use.Factory; then nothing is
-	// recorded. The agent list is not checked here: a reference from a connection ignores it, and
-	// the engine checks direct use with Credential.ForAgent.
+	// recorded. The agent list is not checked here: the engine checks direct use with
+	// Credential.ForAgent.
 	Resolve(ctx context.Context, names []string, use domain.CredentialUse) ([]domain.ResolvedCredential, error)
 	// ImportPreview is an import's dry run (ADR 0017 decision 9): for each name, in order, whether
-	// a credential has it and how many connections use that one (UsedBy). It stores nothing. A
-	// name that is not a credential name is domain.ErrInvalid.
+	// a credential has it and how many connections use that one, always none now (UsedBy). It
+	// stores nothing. A name that is not a credential name is domain.ErrInvalid.
 	ImportPreview(ctx context.Context, names []string) ([]domain.CredentialImportPreview, error)
 }

@@ -29,7 +29,7 @@ import (
 
 // settings is goald's configuration, read from the environment (12-factor). Secrets appear here
 // only as references (env:NAME), resolved through the Secrets port. Factories' credentials are the
-// organizations' connections (spec 4), never goald's environment.
+// organizations' secrets (ADR 0037), never goald's environment.
 type settings struct {
 	// MigrateDatabaseURL connects as goal_owner, which owns the schema, to apply migrations at
 	// startup (GOAL_MIGRATE_DATABASE_URL). DatabaseURL connects as goal_app for everything else
@@ -138,9 +138,11 @@ type settings struct {
 	// Ignored are the removed settings that are set: goald warns about each at start, naming
 	// what replaced it.
 	Ignored []removedSetting
-	// AllowPrivateUpstreams lets goald's requests for connections (their tests) reach private,
-	// loopback and link-local addresses too (GOAL_ALLOW_PRIVATE_UPSTREAMS: true or false, default
-	// false): for a laptop's own test servers, and refused when goald listens off loopback.
+	// AllowPrivateUpstreams lets goald's requests to an organization's upstreams (code hosts,
+	// environment tests and the tool lister's MCP servers, the knowledge source readers and Workers
+	// AI) reach private, loopback and link-local addresses too (GOAL_ALLOW_PRIVATE_UPSTREAMS: true
+	// or false, default false): for a laptop's own test servers, and refused when goald listens off
+	// loopback.
 	AllowPrivateUpstreams bool
 	// WorkersAI is the conversion service for PDF and Office files (GOAL_WORKERS_AI_URL, the
 	// account's Workers AI API root; GOAL_WORKERS_AI_KEY, its bearer token). Without
@@ -212,10 +214,9 @@ const (
 
 // removedSettings are the settings of earlier releases goald ignores, warning at start while one
 // is still set (spec 4 §5.13): the egress proxy is compose.yaml's goal-egress service; runs need
-// no host folders; GOAL_AGENT_IMAGE replaces GOAL_DEFAULT_AGENT_IMAGE; and since the cutover to
-// connections (spec 4 §14, step 5) factories sign in with their organization's connections, not
-// with goald's environment: runs get their model from the model connection, and clones and merges
-// use the repository's and the factory's connections.
+// no host folders; GOAL_AGENT_IMAGE replaces GOAL_DEFAULT_AGENT_IMAGE; and factories sign in
+// with their organization's secrets, not with goald's environment (ADR 0037): runs get their
+// model key from runtime.modelKey, and clones and merges use runtime.repository.token.
 var removedSettings = []removedSetting{
 	{"GOAL_AGENT_EGRESS", insteadEgress},
 	{"GOAL_EGRESS_NAME", insteadEgress},
@@ -480,11 +481,13 @@ func cloudflareErrors(s settings) []error {
 	return errs
 }
 
-// allowPrivateEnv lets connection requests reach private addresses (spec 4 §5.9).
+// allowPrivateEnv lets goald's requests to an organization's upstreams reach private addresses
+// (spec 4 §5.9).
 const allowPrivateEnv = "GOAL_ALLOW_PRIVATE_UPSTREAMS"
 
 // upstreamSettings reads GOAL_ALLOW_PRIVATE_UPSTREAMS, refused off loopback: another machine's
-// people could then aim a connection's test at goald's own network.
+// people could then aim an environment test, a code host or a knowledge source at goald's own
+// network.
 func upstreamSettings(s *settings, or func(name, def string) string) []error {
 	allow, err := strconv.ParseBool(or(allowPrivateEnv, "false"))
 	if err != nil {
@@ -492,8 +495,8 @@ func upstreamSettings(s *settings, or func(name, def string) string) []error {
 	}
 
 	if host, _, err := net.SplitHostPort(s.Listen); allow && (err != nil || !isLoopback(host)) {
-		return []error{fmt.Errorf("%s=true lets connection tests reach private addresses, so goald must listen on a loopback address, "+
-			"not GOAL_LISTEN %q", allowPrivateEnv, s.Listen)}
+		return []error{fmt.Errorf("%s=true lets goald's requests to code hosts, tests and knowledge sources reach private addresses, "+
+			"so goald must listen on a loopback address, not GOAL_LISTEN %q", allowPrivateEnv, s.Listen)}
 	}
 
 	s.AllowPrivateUpstreams = allow
