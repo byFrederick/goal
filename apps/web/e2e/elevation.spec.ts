@@ -1,7 +1,8 @@
 // Menus and popovers have a visible edge in both themes: a white ring at 8% on dark, an ink ring at 6% on light.
 import { expect, type Locator, test } from '@playwright/test';
 
-const ring = { light: 'rgba(23, 23, 23, 0.06)', dark: 'rgba(255, 255, 255, 0.08)' } as const;
+// [red, green, blue, alpha] of the 1px ring: ink #171717 at 6% on light, white at 8% on dark.
+const ring = { light: [23, 23, 23, 0.06], dark: [255, 255, 255, 0.08] } as const;
 const repo = 'github.com/acme/app';
 const waiting = {
   kind: 'ci',
@@ -17,8 +18,21 @@ const waiting = {
 };
 
 async function expectRing(panel: Locator, scheme: 'light' | 'dark') {
-  const shadow = await panel.evaluate((el) => getComputedStyle(el).boxShadow);
-  expect(shadow.startsWith(ring[scheme]), shadow).toBe(true);
+  // The browser reports the shadow as a list of layers in color(srgb …) or rgba(…); the ring is the 1px spread one.
+  const channels = await panel.evaluate((el) => {
+    const layer = getComputedStyle(el)
+      .boxShadow.split(/,\s*(?![^(]*\))/)
+      .find((l) => /\s0px 0px 0px 1px$/.test(l));
+    const nums = layer
+      ?.match(/^[^(]+\(([^)]*)\)/)?.[1]
+      ?.match(/[\d.]+/g)
+      ?.map(Number);
+    if (!nums) return null;
+    const scale = layer?.startsWith('color(') ? 255 : 1;
+    return [nums[0] ?? 0, nums[1] ?? 0, nums[2] ?? 0].map((n) => Math.round(n * scale)).concat(nums[3] ?? 1);
+  });
+  expect(channels, 'the 1px ring layer of the box-shadow').not.toBeNull();
+  for (const [i, want] of ring[scheme].entries()) expect(channels?.[i]).toBeCloseTo(want, 2);
 }
 
 test.beforeEach(async ({ request }) => {
