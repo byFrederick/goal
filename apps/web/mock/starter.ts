@@ -101,6 +101,7 @@ export function runStarterCourse({ item: it, runs, emit, now, keyed, agent, vers
     cpu_seconds: 186,
     peak_memory_bytes: 812 * 1024 ** 2,
     box_size: 'medium',
+    build_cache: null,
     definition_version_id: version?.id ?? null,
     definition_version: version?.number ?? null,
   });

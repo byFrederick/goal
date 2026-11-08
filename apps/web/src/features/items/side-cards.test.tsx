@@ -118,6 +118,7 @@ function runOf(station: string, agent: string, cost: number): Run {
     cpu_seconds: null,
     peak_memory_bytes: null,
     box_size: null,
+    build_cache: null,
   };
 }
 

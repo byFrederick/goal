@@ -110,7 +110,7 @@ func (s *server) ListRuns(ctx context.Context, req gen.ListRunsRequestObject) (g
 			Error: run.Error, StartedAt: run.StartedAt, EndedAt: run.EndedAt,
 			DefinitionVersionId: run.DefinitionVersionId, DefinitionVersion: run.DefinitionVersion,
 			CpuSeconds: run.CpuSeconds, PeakMemoryBytes: run.PeakMemoryBytes, PeakMemorySource: run.PeakMemorySource,
-			BoxSize: run.BoxSize,
+			BoxSize: run.BoxSize, BuildCache: run.BuildCache,
 			Factory: factoryHit(f),
 			Item: gen.RunItem{
 				Id: string(r.ItemID), Ref: domain.ItemRef{Factory: f.Metadata.Name, Number: r.ItemNumber}.String(), Title: r.ItemTitle,
@@ -333,6 +333,7 @@ func (v *versionNumbers) runOf(ctx context.Context, r domain.Run) (gen.Run, erro
 		DefinitionVersionId: optional(string(r.DefinitionVersionID)), DefinitionVersion: number,
 		CpuSeconds: r.Result.CPUSeconds, PeakMemoryBytes: r.Result.PeakMemoryBytes,
 		PeakMemorySource: memorySourceOf(r.Result.PeakMemorySource), BoxSize: boxSizeOf(r.BoxSize),
+		BuildCache: buildCacheOf(r.Result.BuildCache),
 	}
 
 	if !r.EndedAt.IsZero() {
@@ -349,6 +350,17 @@ func boxSizeOf(size domain.SandboxSize) *gen.SandboxSize {
 	}
 
 	out := gen.SandboxSize(size)
+
+	return &out
+}
+
+// buildCacheOf is what happened to a run's build cache, nil when unknown.
+func buildCacheOf(bc domain.BuildCache) *gen.BuildCache {
+	if bc == "" {
+		return nil
+	}
+
+	out := gen.BuildCache(bc)
 
 	return &out
 }
