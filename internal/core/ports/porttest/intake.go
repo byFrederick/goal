@@ -490,12 +490,7 @@ func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, si
 	in.d.mu.Lock()
 	defer in.d.mu.Unlock()
 
-	type key struct {
-		endpoint domain.WebhookEndpointID
-		day      time.Time
-	}
-
-	counts := map[key]*domain.DeliveryDay{}
+	counts := deliveryDays{}
 
 	for _, r := range in.d.deliveries {
 		e, ok := in.d.endpoints[r.d.EndpointID]
@@ -503,15 +498,7 @@ func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, si
 			continue
 		}
 
-		at := r.d.ReceivedAt.UTC()
-		k := key{r.d.EndpointID, time.Date(at.Year(), at.Month(), at.Day(), 0, 0, 0, 0, time.UTC)}
-
-		c, ok := counts[k]
-		if !ok {
-			c = &domain.DeliveryDay{EndpointID: k.endpoint, Day: k.day}
-			counts[k] = c
-		}
-
+		c := counts.of(r.d.EndpointID, utcDay(r.d.ReceivedAt))
 		if r.d.Outcome == domain.DeliveryRefused {
 			c.Refused++
 		} else {
@@ -521,29 +508,12 @@ func (in *Intake) DeliveryDays(ctx context.Context, factory domain.FactoryID, si
 
 	for k, n := range in.d.counts {
 		e, ok := in.d.endpoints[k.webhook]
-		if k.org != org || !ok || !reaches(e.e, factory) || k.day.Before(utcDay(since)) {
-			continue
+		if k.org == org && ok && reaches(e.e, factory) && !k.day.Before(utcDay(since)) {
+			counts.of(k.webhook, k.day).Delivered += n
 		}
-
-		c, ok := counts[key{k.webhook, k.day}]
-		if !ok {
-			c = &domain.DeliveryDay{EndpointID: k.webhook, Day: k.day}
-			counts[key{k.webhook, k.day}] = c
-		}
-
-		c.Delivered += n
 	}
 
-	out := make([]domain.DeliveryDay, 0, len(counts))
-	for _, c := range counts {
-		out = append(out, *c)
-	}
-
-	slices.SortFunc(out, func(a, b domain.DeliveryDay) int {
-		return cmp.Or(cmp.Compare(a.EndpointID, b.EndpointID), a.Day.Compare(b.Day))
-	})
-
-	return out, nil
+	return counts.sorted(), nil
 }
 
 // PruneDeliveries implements ports.Intake.
@@ -1518,6 +1488,38 @@ func (in *Intake) endpointLocked(org domain.OrgID, id domain.WebhookEndpointID) 
 	}
 
 	return r, nil
+}
+
+// deliveryDays are DeliveryDays' counts by endpoint and UTC day.
+type deliveryDays map[deliveryDayKey]*domain.DeliveryDay
+
+type deliveryDayKey struct {
+	endpoint domain.WebhookEndpointID
+	day      time.Time
+}
+
+// of is endpoint's count on day, a new one at first.
+func (d deliveryDays) of(endpoint domain.WebhookEndpointID, day time.Time) *domain.DeliveryDay {
+	k := deliveryDayKey{endpoint, day}
+	if d[k] == nil {
+		d[k] = &domain.DeliveryDay{EndpointID: endpoint, Day: day}
+	}
+
+	return d[k]
+}
+
+// sorted are the counts by endpoint, then day.
+func (d deliveryDays) sorted() []domain.DeliveryDay {
+	out := make([]domain.DeliveryDay, 0, len(d))
+	for _, c := range d {
+		out = append(out, *c)
+	}
+
+	slices.SortFunc(out, func(a, b domain.DeliveryDay) int {
+		return cmp.Or(cmp.Compare(a.EndpointID, b.EndpointID), a.Day.Compare(b.Day))
+	})
+
+	return out
 }
 
 // reaches reports whether DeliveryDays of factory counts e's deliveries: those open to it, or

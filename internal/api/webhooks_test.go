@@ -47,8 +47,8 @@ func (h *harness) deliver(t *testing.T, id string, n domain.NewWebhookDelivery) 
 	return d
 }
 
-// receiveUnnamed accepts a delivery id to endpoint id at at that no enabled trigger names, as POST
-// /hooks/{id} would: only its UTC day's count keeps it.
+// receiveUnnamed accepts, at the instant at, a delivery to endpoint id that no enabled trigger
+// names, as POST /hooks/{id} would: only its UTC day's count keeps it.
 func (h *harness) receiveUnnamed(t *testing.T, id, deliveryID string, at time.Time) {
 	t.Helper()
 
