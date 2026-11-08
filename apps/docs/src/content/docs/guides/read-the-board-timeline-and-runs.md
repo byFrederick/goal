@@ -95,7 +95,7 @@ An item that does not exist, or that you cannot see, exits with an error and pri
 
 ## Runs
 
-`/o/<org>/runs` lists the organization's agent runs, newest first, across every factory. It covers one UTC day, picked from the **Today** or **Yesterday** menu, and shows at most 50 rows. **Export CSV** downloads the runs. Each row shows the factory, the item, the station, the agent, the model, when the run started, how long it took, its turns, its cost, its CPU, its peak memory, the size of its box and its **Outcome**: **Finished** or **Stopped**.
+`/o/<org>/runs` lists the organization's agent runs, newest first, across every factory. It covers one UTC day, picked from the **Today** or **Yesterday** menu, and shows at most 50 rows. **Export CSV** downloads the runs. Each row shows the factory, the item, the station, the agent, the model, when the run started, how long it took, its turns, its cost, its CPU, its peak memory, the size of its box and its **Outcome**: **Running**, **Finished**, **Stopped** or **Failed**.
 
 - **CPU** is the box's CPU time from prepare to the end of the run, shown as seconds (`42 s`) or minutes (`3.1 min`).
 - **Peak memory** is the most memory the box used at once, for example `1.2 GB`. It is read from the box's cgroup where it has one, and otherwise from the machine's memory in use, which includes the box's own system processes.

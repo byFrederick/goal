@@ -21,9 +21,9 @@ The Floor also shows **Where work waits** and **Throughput by week**. Throughput
 Open Home at `/o/<org>`. It lists every factory in the organization, one row each, with three figures:
 
 - **Needs you:** how many entries wait on a person.
-- **Sent back**, or **Throughput** when no station has a send-back share: the highest share of items sent back at one station, or items finished a day.
+- **Throughput**: items finished a day, with "of N a day" when the factory has a target. While the factory's andon is pulled, this figure becomes **Sent back**, the highest share of items sent back at one station.
 - **Spend today:** today's spend, and its share of the day's budget when one is set.
 
-**Needs you first** lists what waits on a person across all factories. A tool call is decided in place: **Approve** allows that call only, and **Deny** refuses it without a note. Other entries open the item. **Open all** opens the Needs you page. For acting on items, read [Act on an item](/docs/guides/act-on-an-item/).
+**Needs you first** lists what waits on a person across all factories. A tool call is decided in place: **Approve** allows that call only, and **Deny** refuses it without a note. **Open all** opens the Needs you page. For acting on items, read [Act on an item](/docs/guides/act-on-an-item/).
 
 **Spend this week** shows the week's spend against the factories' budgets. **Archived factories**, under the list, shows archived factories and lets you restore them.
