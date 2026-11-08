@@ -164,6 +164,7 @@
           "description": "The repositories the factory's runs may open, each with its access. Empty or omitted is a factory with no code. runtime.repository is the shorthand for one entry that writes; a definition has one form or the other.",
           "items": { "$ref": "#/$defs/repositoryEntry" }
         },
+        "buildCache": { "type": "boolean", "default": true, "description": "Whether runs restore and save a per-repository cache of Go's module and build caches and the pnpm store. Default true." },
         "runner": { "enum": ["docker", "ecs"], "description": "Removed in phase 4 (field-removed): the platform chooses the sandbox backend." },
         "image": { "type": "string", "description": "Removed in phase 4 (field-removed): set image in an environment file." },
         "auth": { "enum": ["claude-subscription", "anthropic-api-key", "bedrock"], "description": "Removed in phase 4 (field-removed): set modelKey." },

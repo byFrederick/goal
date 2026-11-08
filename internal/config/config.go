@@ -97,6 +97,8 @@ type Runtime struct {
 	// 0041 decision 2).
 	Repositories []RepositoryEntry `json:"repositories,omitempty"`
 	Budget       *Budget           `json:"budget,omitempty"`
+	// BuildCache is whether runs restore and save the per-repository build cache; nil is on.
+	BuildCache *bool `json:"buildCache,omitempty"`
 }
 
 // Repository is the git repository cloned into every run: a URL, the {{secret}} token that clones
