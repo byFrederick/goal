@@ -6,6 +6,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
 import { fileURLToPath } from 'node:url';
+import { archiveFile, restoreBuildCache, stateFile, writeBuildCacheState } from './cache.js';
 import { cpuStartFile, saveCpuStart } from './cgroup.js';
 import { gitWithRetry } from './retry.js';
 import { Bundle, type ClonedRepository, type GitCredential, type Knowledge, paths } from './spec.js';
@@ -50,6 +51,8 @@ export interface PrepareDeps {
    * dirs.goal/cpu-start-usec as it starts, for the run's cpu_seconds. Absent, nothing is saved.
    */
   cgroup?: string;
+  /** How long the build cache's restore may take (src/cache.ts); restoreTimeoutMs when absent. */
+  buildCacheTimeoutMs?: number;
 }
 
 /** Each network git attempt's default time limit, in seconds (GOAL_GIT_ATTEMPT_TIMEOUT). */
@@ -116,6 +119,10 @@ type FreshBase = NonNullable<NonNullable<Bundle['repository']>['fresh_base']>;
  * empty workspace. Any other failure throws.
  * With deps.cgroup, prepare first saves the box's CPU counter beside spec.json (saveCpuStart); a
  * counter that can't be read saves nothing and never fails prepare.
+ * With the bundle's build_cache.enabled, once the workspace's repository is cloned and its tools
+ * installed, prepare restores its build cache (src/cache.ts, restoreBuildCache), bounded by
+ * restoreTimeoutMs, and writes the outcome, key and directories to dirs.goal/build-cache.json for
+ * `goal-agent run`; enabled false writes off and fetches nothing. A restore never fails prepare.
  */
 export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   const started = deps.now();
@@ -171,6 +178,7 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   }
   const repo = bundle.repository;
   let baseBranch: string | undefined;
+  let workspaceCloned = false;
   const cloned: ClonedRepository[] = [];
   if (code) {
     for (const c of code) {
@@ -178,6 +186,7 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
       if (c.path === paths.workspace) {
         const first = await cloneWorkspace(deps, { ...c, base: repo?.base, fresh_base: repo?.fresh_base }, out, mise);
         baseBranch = first.conflictsWith;
+        workspaceCloned = true;
         if (first.base_head) entry.base_commit = first.base_head;
         if (first.branch_head) entry.branch_head = first.branch_head;
       } else {
@@ -191,6 +200,7 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
   } else if (repo) {
     const first = await cloneWorkspace(deps, repo, out, mise);
     baseBranch = first.conflictsWith;
+    workspaceCloned = true;
     cloned.push({
       url: repo.url,
       path: paths.workspace,
@@ -206,6 +216,23 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
       ...(e.base_commit ? { base_commit: e.base_commit } : {}),
       ...(e.branch_head ? { branch_head: e.branch_head } : {}),
     }));
+  }
+  if (workspaceCloned) {
+    const state = await restoreBuildCache(
+      {
+        fetch: deps.fetch,
+        exec: deps.exec,
+        output: deps.output,
+        gateway,
+        token,
+        archive: join(deps.dirs.goal, archiveFile),
+        log: deps.log ?? ((line) => process.stderr.write(`${line}\n`)),
+        workspace: deps.dirs.workspace,
+        ...(deps.buildCacheTimeoutMs === undefined ? {} : { timeoutMs: deps.buildCacheTimeoutMs }),
+      },
+      bundle.build_cache?.enabled === true,
+    );
+    if (state) await writeBuildCacheState(join(deps.dirs.goal, stateFile), state);
   }
   // A try's agent gets no git login (ADR 0039 decision 9): the clone was the logins' only use.
   if (repo?.commit) await dropLogins(deps, credentials);

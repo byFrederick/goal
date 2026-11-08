@@ -332,9 +332,9 @@ func testRunRecords(f *fixture) {
 	f.expectNoRunRecords(t, it.ID, in)
 }
 
-// testRunUsage: a run records the box size it started with, and the CPU seconds, peak memory and
-// peak memory source it finished with; a run whose worker reported no counters reads back with no
-// values, not zero.
+// testRunUsage: a run records the box size it started with, and the CPU seconds, peak memory,
+// peak memory source and build cache outcome it finished with; a run whose worker reported none
+// reads back with no values, not zero.
 func testRunUsage(f *fixture) {
 	t := f.t
 
@@ -345,10 +345,10 @@ func testRunUsage(f *fixture) {
 	counted := f.sizedRun(t, it.ID, t1, domain.SandboxLarge,
 		domain.RunResult{
 			Status: domain.RunSucceeded, Output: json.RawMessage(`{}`), CPUSeconds: &cpu, PeakMemoryBytes: &peak,
-			PeakMemorySource: domain.MemoryMachine,
+			PeakMemorySource: domain.MemoryMachine, BuildCache: domain.BuildCacheMiss,
 		})
 	bare := f.sizedRun(t, it.ID, t2, domain.SandboxSmall, domain.RunResult{Status: domain.RunFailed, Error: "no"})
-	wantCounted, wantBare := runUsage{domain.SandboxLarge, &cpu, &peak, domain.MemoryMachine}, runUsage{size: domain.SandboxSmall}
+	wantCounted, wantBare := runUsage{domain.SandboxLarge, &cpu, &peak, domain.MemoryMachine, domain.BuildCacheMiss}, runUsage{size: domain.SandboxSmall}
 
 	for id, want := range map[domain.RunID]runUsage{counted: wantCounted, bare: wantBare} {
 		got, err := f.Store.Run(f.ctx(t), id)
@@ -408,13 +408,14 @@ type runUsage struct {
 	cpu  *float64
 	peak *int64
 	src  domain.MemorySource
+	bc   domain.BuildCacheOutcome
 }
 
 func (w runUsage) check(t *testing.T, what string, r domain.Run) {
 	t.Helper()
 
-	got := runUsage{r.BoxSize, r.Result.CPUSeconds, r.Result.PeakMemoryBytes, r.Result.PeakMemorySource}
-	if got.size != w.size || !samePtr(got.cpu, w.cpu) || !samePtr(got.peak, w.peak) || got.src != w.src {
+	got := runUsage{r.BoxSize, r.Result.CPUSeconds, r.Result.PeakMemoryBytes, r.Result.PeakMemorySource, r.Result.BuildCache}
+	if got.size != w.size || !samePtr(got.cpu, w.cpu) || !samePtr(got.peak, w.peak) || got.src != w.src || got.bc != w.bc {
 		t.Errorf("%s = %s; want %s", what, got, w)
 	}
 }
@@ -428,8 +429,9 @@ func (w runUsage) String() string {
 		return fmt.Sprint(v)
 	}
 
-	return fmt.Sprintf("box %q, cpu %s, peak %s, source %s", w.size,
-		show(deref(w.cpu), w.cpu != nil), show(deref(w.peak), w.peak != nil), show(w.src, w.src != ""))
+	return fmt.Sprintf("box %q, cpu %s, peak %s, source %s, build cache %s", w.size,
+		show(deref(w.cpu), w.cpu != nil), show(deref(w.peak), w.peak != nil), show(w.src, w.src != ""),
+		show(w.bc, w.bc != ""))
 }
 
 func samePtr[T comparable](a, b *T) bool {

@@ -32,7 +32,7 @@ The folder holds `factory.yaml` at its root, and the files it points to:
 - `skills/` and `rules/` for skills and factory rules,
 - `contracts/` for output contracts.
 
-What each field means is in the [factory definition reference](/docs/reference/). To add an agent, a skill or a rule, follow [Add an agent, skill or rule](../add-an-agent-skill-or-rule/).
+What each field means is in the [factory definition reference](/docs/reference/). For example, runs cache Go's and pnpm's downloads and builds per repository by default; set `runtime.buildCache: false` to turn the cache off. To add an agent, a skill or a rule, follow [Add an agent, skill or rule](../add-an-agent-skill-or-rule/).
 
 ## 3. Validate the folder
 

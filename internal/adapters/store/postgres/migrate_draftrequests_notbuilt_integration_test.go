@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// notBuiltAt is when the seeded requests started and ended, which 00144 must keep for the ended.
+// notBuiltAt is when the seeded requests started and ended, which 00146 must keep for the ended.
 var notBuiltAt = time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
 
 // notBuiltSeeds are a request in each status, inserted as 00143 left the table.
@@ -27,7 +27,7 @@ var notBuiltSeeds = []struct{ status, insert string }{
 		VALUES ($1, $2, $3, 'user:local', 'rename it', 'failed', $4, $4, 'the draft changed')`},
 }
 
-// TestMigrate_FailsOpenDraftRequests checks 00144: every queued or running draft request, in
+// TestMigrate_FailsOpenDraftRequests checks 00146: every queued or running draft request, in
 // every organization, ends failed with its lease cleared and the not-built reason, and a done or
 // failed one keeps its result.
 func TestMigrate_FailsOpenDraftRequests(t *testing.T) {
@@ -44,14 +44,14 @@ func TestMigrate_FailsOpenDraftRequests(t *testing.T) {
 		maps.Copy(seeded, seedDraftRequests(t, owner, org))
 	}
 
-	migrateTo(t, owner, 144)
+	migrateTo(t, owner, 146)
 
 	for id, was := range seeded {
 		wantAfterNotBuilt(t, owner, id, was)
 	}
 }
 
-// wantAfterNotBuilt checks request id, which was in status was before 00144: an open one is now
+// wantAfterNotBuilt checks request id, which was in status was before 00146: an open one is now
 // failed as not built yet with no lease, an ended one is untouched.
 func wantAfterNotBuilt(t *testing.T, owner *pgxpool.Pool, id uuid.UUID, was string) {
 	t.Helper()
@@ -72,7 +72,7 @@ func wantAfterNotBuilt(t *testing.T, owner *pgxpool.Pool, id uuid.UUID, was stri
 	untouched := status == was && finished != nil && finished.Equal(notBuiltAt) && !strings.Contains(errText, "not built yet")
 
 	if open && !failed || !open && !untouched {
-		t.Errorf("%s request after 00144 = %s %q finished %v leased %v; want an open one failed as not built yet, an ended one untouched",
+		t.Errorf("%s request after 00146 = %s %q finished %v leased %v; want an open one failed as not built yet, an ended one untouched",
 			was, status, errText, finished, leased)
 	}
 }
