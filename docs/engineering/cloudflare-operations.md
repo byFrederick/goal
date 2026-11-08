@@ -185,6 +185,26 @@ On `basic`, goald's bursts above 1/4 vCPU (the start, a knowledge sync) are slow
   - `container stopped` lines with `exitCode` 137 or an out-of-memory `reason` (`wrangler tail goal --search "container stopped"`). Either means the size is too small.
 - **To go back,** set `Goald`'s `instance_type` to `standard-1` and `Auth`'s to `basic` in `deploy/cloudflare/wrangler.jsonc` (and in the topology fixture), merge, and deploy that sha (Deploys, above). Back out only the container that misbehaves.
 
+## Slow requests: pool starvation or a slow query
+
+goald's logs tell the two apart: a request that waited for a database connection has a high `db_wait_ms`, and one that ran many or slow queries has a high `duration_ms` with a low `db_wait_ms`. Read them with `wrangler tail goal --search "api request"` and `wrangler tail goal --search "db pool"`.
+
+- **`api request`**, one line per request ([internal/api/accesslog.go](../../internal/api/accesslog.go)), carries two database fields beside `duration_ms`:
+  - `queries`: the round trips the request made to PostgreSQL. Every store call is its own transaction, so one call counts at least three (BEGIN with `set_config`, the query, COMMIT).
+  - `db_wait_ms`: the total time the request waited for a connection from goald's pool, over all its store calls.
+- **`db pool`**, once a minute ([internal/adapters/store/postgres/poolstats.go](../../internal/adapters/store/postgres/poolstats.go)), is pgxpool's `Stat()` for goald's pool. `acquire_count`, `empty_acquire_count` (acquires that found no idle connection and waited), `canceled_acquire_count` (acquires whose request ended while waiting) and `acquire_duration_ms` (the total time acquires took) count from goald's start, so compare two lines. `acquired_conns`, `idle_conns`, `total_conns` and `max_conns` are the connections at that moment; `max_conns` is `goald_pool_max_conns` in `deploy/terraform/locals.tf`.
+
+What each pattern means:
+
+| What the logs show | Cause | What to do |
+| --- | --- | --- |
+| `db_wait_ms` close to `duration_ms`; between `db pool` lines `empty_acquire_count` and `acquire_duration_ms` rise; `acquired_conns` equals `max_conns` and `idle_conns` is 0 | Pool starvation: requests queue for one of too few connections | Find the requests with the most `queries` (each holds a connection per store call), then cut their queries or raise `goald_pool_max_conns` within the database's connection limit |
+| `db_wait_ms` low, `duration_ms` high, `queries` small | A slow query | Run the request's queries with `EXPLAIN ANALYZE` on the database |
+| `db_wait_ms` low, `duration_ms` high, `queries` large | Many round trips: each costs the database's latency | Batch the reads; the query budget test pins the counts ([testing.md](testing.md#the-query-budget)) |
+| `canceled_acquire_count` rises | Requests gave up while waiting for a connection: clients timed out or went away | As for pool starvation |
+
+Queries that run outside a request (the engine, the scheduled jobs) are not in any `api request` line, but they hold connections and show in the `db pool` line.
+
 ## What the first deploy showed
 
 - **Cold start.** The first request after a deploy waits for goald's container: about 47 s on 2026-10-25 (image pull, start, health check); warm, `/v1/health` answers in about 0.23 s. The Worker's cron keeps goald running after that.
