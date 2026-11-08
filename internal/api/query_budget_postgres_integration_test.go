@@ -199,6 +199,11 @@ func (b *budgetSeed) seedItems(t *testing.T, openItems int, now time.Time) {
 		b.parts += partsEach
 	}
 
+	// One in twenty open items waits on a person with an open question, as many with an open tool
+	// approval, each after a run with a long history.
+	askers := max(openItems/20, 1)
+	questions, approvals := 0, 0
+
 	for i := range openItems - assemblies {
 		station, state := budgetInbox, domain.StateQueued
 
@@ -209,7 +214,24 @@ func (b *budgetSeed) seedItems(t *testing.T, openItems int, now time.Time) {
 			station, state = build.ID, domain.StateBlocked
 		}
 
-		file(fmt.Sprintf("open %d", i), station, state, at.Add(-time.Duration(i)*time.Minute))
+		it := file(fmt.Sprintf("open %d", i), station, state, at.Add(-time.Duration(i)*time.Minute))
+
+		if state != domain.StateWaitingHuman {
+			continue
+		}
+
+		switch {
+		case questions < askers:
+			b.ask(t, it, domain.Event{Kind: domain.EventQuestionAsked, Data: map[string]any{
+				domain.KeyQuestion: "which way?", domain.KeyChoices: []any{"left", "right"}, domain.KeyAgent: "builder",
+			}}, at)
+			questions++
+		case approvals < askers:
+			b.ask(t, it, domain.Event{Kind: domain.EventToolApprovalRequested, Data: map[string]any{
+				domain.KeyConnection: "github", domain.KeyTool: "merge", domain.KeyAgent: "builder",
+			}}, at)
+			approvals++
+		}
 	}
 
 	for i := range 4 * openItems {
@@ -226,6 +248,32 @@ func (b *budgetSeed) seedItems(t *testing.T, openItems int, now time.Time) {
 	}
 
 	b.open = openItems
+}
+
+// askHistory is how many events a run leaves before its ask in the seed: more than one page of
+// ItemEvents (maxEventLimit), as an item whose agents ran for a while has.
+const askHistory = maxEventLimit + 200
+
+// ask appends to it a run's long history of tool calls and results, then the ask, as the engine
+// appends them.
+func (b *budgetSeed) ask(t *testing.T, it domain.Item, ask domain.Event, at time.Time) {
+	t.Helper()
+
+	events := make([]domain.Event, 0, askHistory+1)
+	for k := range askHistory {
+		kind := domain.EventToolCall
+		if k%2 == 1 {
+			kind = domain.EventToolResult
+		}
+
+		events = append(events, domain.Event{FactoryID: budgetFactory, ItemID: it.ID, At: at, Kind: kind, Station: "build", Actor: "agent:builder", Data: map[string]any{"i": k}})
+	}
+
+	ask.FactoryID, ask.ItemID, ask.At, ask.Station, ask.Actor = budgetFactory, it.ID, at, budgetReview, "agent:builder"
+
+	if err := b.store.AppendEvents(b.ctx(t), append(events, ask)...); err != nil {
+		t.Fatalf("history of %s: %v", it.Title, err)
+	}
 }
 
 // serve starts the API over the seeded database as goald wires it for these reads; the rest of
@@ -250,7 +298,7 @@ func (b *budgetSeed) serve(t *testing.T) {
 		OrgSecrets: struct{ ports.OrgSecrets }{}, EnvironmentTests: postgres.NewEnvironmentTests(b.store), ToolLister: struct{ ports.ToolLister }{},
 		RepositoryTests: postgres.NewRepositoryTests(b.store), Intake: struct{ ports.Intake }{}, DraftRequests: postgres.NewDraftRequests(b.store),
 		Conversions: postgres.NewFactoryConversions(b.store), ConnectionTransport: http.DefaultTransport,
-		Knowledge: struct{ ports.Knowledge }{}, KnowledgeUploads: struct{ KnowledgeUploads }{}, UploadMaxBytes: 1 << 20,
+		Knowledge: postgres.NewKnowledge(b.store), KnowledgeUploads: struct{ KnowledgeUploads }{}, UploadMaxBytes: 1 << 20,
 		KnowledgeObjects: struct{ KnowledgeObjects }{}, KnowledgeCheck: struct{ KnowledgeCheck }{},
 		OrgPolicies: postgres.NewOrgPolicies(b.store, []string{"claude-fable-5-1"}), BoxSizes: []domain.BoxSize{{Size: domain.SandboxMedium}},
 		NotificationPreferences: postgres.NewNotificationPreferences(b.store), NotificationSettings: postgres.NewNotificationSettings(b.store),
@@ -363,6 +411,7 @@ func budgetReads() []budgetRead {
 		{name: "metrics compare previous", path: f + "/metrics?compare=previous", budget: 31},
 		{name: "draft", path: f + "/draft", budget: 61},
 		{name: "draft model", path: f + "/draft/model", budget: 29},
+		{name: "inbox", path: "/v1/orgs/" + budgetSlug + "/inbox", budget: 0, growsToday: true},
 	}
 }
 
