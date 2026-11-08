@@ -50,6 +50,8 @@ goal webhooks deliveries github-acme --limit 20
 
 The answer also carries `unnamed_days`: the webhook's counts of accepted deliveries no enabled trigger names, which the log does not list, as `{day, count}` per UTC day over the log's 30 days, oldest first. A day without one has no entry, and every page carries the same counts.
 
+The web delivery log shows the same counts as one line under its rows, or under "No deliveries to show yet.": "{n} more deliveries no trigger names in the last 30 days", where n is the sum of `unnamed_days`. The line is hidden when n is 0.
+
 `goal webhooks list --json` also gives each webhook's `pinged_at`, when goald last accepted GitHub's ping, and its `setup_events`: the events its enabled triggers use, the ones to choose in GitHub. `setup_all_events` is true when a trigger names the webhook with no event.
 
 Goald keeps a delivery's headers and body for 30 days when an enabled trigger names it, and its metadata only when refused. Every accepted id stays in the webhook's ledger for a year, so a replay is a duplicate even after its row is gone. A signature header is never stored. A delivery's body and headers can be read only with `webhook:manage`, because an organization webhook carries every repository's events; a factory's Intake shows only its own evaluations.
