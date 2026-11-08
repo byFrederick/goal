@@ -10574,7 +10574,7 @@ type ClientInterface interface {
 
 	// CreateDraftRequestWithBody Ask for a change to the factory's definition (a draft request)
 	//
-	// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+	// Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes every check below is refused with 501 not-built and nothing is queued. Once a runner is wired, goald will run a request in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 501 not-built for every request that passes these checks.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -10583,7 +10583,7 @@ type ClientInterface interface {
 
 	// CreateDraftRequest Ask for a change to the factory's definition (a draft request)
 	//
-	// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+	// Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes every check below is refused with 501 not-built and nothing is queued. Once a runner is wired, goald will run a request in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 501 not-built for every request that passes these checks.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -13331,7 +13331,7 @@ func (c *Client) ListDraftRequests(ctx context.Context, org OrgRef, factory Fact
 
 // CreateDraftRequestWithBody Ask for a change to the factory's definition (a draft request)
 //
-// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+// Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes every check below is refused with 501 not-built and nothing is queued. Once a runner is wired, goald will run a request in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 501 not-built for every request that passes these checks.
 //
 // Takes any type of body and a specified content type.
 //
@@ -13350,7 +13350,7 @@ func (c *Client) CreateDraftRequestWithBody(ctx context.Context, org OrgRef, fac
 
 // CreateDraftRequest Ask for a change to the factory's definition (a draft request)
 //
-// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+// Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes every check below is refused with 501 not-built and nothing is queued. Once a runner is wired, goald will run a request in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 501 not-built for every request that passes these checks.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -27406,7 +27406,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateDraftRequestWithBodyWithResponse Ask for a change to the factory's definition (a draft request)
 	//
-	// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+	// Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes every check below is refused with 501 not-built and nothing is queued. Once a runner is wired, goald will run a request in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 501 not-built for every request that passes these checks.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -27415,7 +27415,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateDraftRequestWithResponse Ask for a change to the factory's definition (a draft request)
 	//
-	// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+	// Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes every check below is refused with 501 not-built and nothing is queued. Once a runner is wired, goald will run a request in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 501 not-built for every request that passes these checks.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -39349,7 +39349,7 @@ func (c *ClientWithResponses) ListDraftRequestsWithResponse(ctx context.Context,
 
 // CreateDraftRequestWithBodyWithResponse Ask for a change to the factory's definition (a draft request)
 //
-// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+// Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes every check below is refused with 501 not-built and nothing is queued. Once a runner is wired, goald will run a request in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 501 not-built for every request that passes these checks.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -39364,7 +39364,7 @@ func (c *ClientWithResponses) CreateDraftRequestWithBodyWithResponse(ctx context
 
 // CreateDraftRequestWithResponse Ask for a change to the factory's definition (a draft request)
 //
-// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+// Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes every check below is refused with 501 not-built and nothing is queued. Once a runner is wired, goald will run a request in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 501 not-built for every request that passes these checks.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
