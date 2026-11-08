@@ -215,7 +215,7 @@ object, required.
     - `release`: one of `"drum-buffer-rope"`, `"push"`.
     - `andon`: object.
       - `reworkRate`: number.
-      - `window`: integer.
+      - `window`: integer. How many of a gate's last verdicts since the last clear of the andon cord the rework-rate warning counts. Defaults to 10.
     - `targets`: object. What the line aims for; flow metrics show each against its target. Omit a target to have none.
       - `throughputPerDay`: number. Items done per day.
       - `leadTimeHours`: number. p85 lead time, created to done, in hours.
