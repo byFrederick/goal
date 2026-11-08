@@ -29,10 +29,12 @@ type stationKey struct {
 }
 
 // stationTurn is what a tick has learned about one agent station: the slots it has seen held
-// (nil until read), and whether it has nothing more to give this tick (no work waits, every
+// (nil until read), the slot lanes with no work for them (keyed by the lane a slot keeps, "" for
+// the shared slots), and whether it has nothing more to give this tick (no work waits, every
 // slot is held, or the store failed).
 type stationTurn struct {
 	taken map[int]bool
+	empty map[string]bool
 	done  bool
 }
 
@@ -178,8 +180,9 @@ func (e *Engine) claimFor(ctx context.Context, o *orgTurn, tick *tickState) (boo
 // open item's that goes first on the line (holdOverlaps), so the claim gate skips them. At a
 // station that takes turns it holds, on every turn, the waiting items whose merge target's turn
 // another item holds (holdTurns): an item that arrived since the last claim in the tick then
-// waits too. When nothing waits, every slot is held or the store fails, the station is done
-// for the tick. A slot cap is returned as ports.ErrOrgFull or ports.ErrFactoryFull, leaving the station
+// waits too. Each slot claims only the lanes it takes (Station.SlotLanes): a slot whose lanes
+// have no work leaves the next free slot its turn. When nothing waits for any free slot, every
+// slot is held or the store fails, the station is done for the tick. A slot cap is returned as ports.ErrOrgFull or ports.ErrFactoryFull, leaving the station
 // as it was: the factory or the organization is what is done.
 func (e *Engine) claimAt(ctx context.Context, l domain.Line, st domain.Station, s *stationTurn) (bool, error) {
 	if s.taken == nil {
@@ -195,6 +198,8 @@ func (e *Engine) claimAt(ctx context.Context, l domain.Line, st domain.Station, 
 		}
 
 		s.taken = make(map[int]bool, len(leases))
+		s.empty = map[string]bool{}
+
 		for _, ls := range leases {
 			s.taken[ls.Slot] = true
 		}
@@ -205,21 +210,24 @@ func (e *Engine) claimAt(ctx context.Context, l domain.Line, st domain.Station, 
 		return false, err
 	}
 
-	for slot := range st.Capacity() {
-		if s.taken[slot] {
+	for slot, lanes := range st.SlotLanes() {
+		if s.taken[slot] || s.empty[lanes.Lane] {
 			continue
 		}
 
 		now := e.clock.Now()
 
 		it, lease, err := e.store.ClaimNext(ctx, ports.Claim{
-			FactoryID: l.FactoryID, Station: st, Slot: slot, Now: now, ExpiresAt: now.Add(e.cfg.LeaseTTL),
+			FactoryID: l.FactoryID, Station: st, Slot: slot, Lanes: lanes, Now: now, ExpiresAt: now.Add(e.cfg.LeaseTTL),
 		})
 
 		switch {
-		case errors.Is(err, ports.ErrNoWork):
-			s.done = true
+		case errors.Is(err, ports.ErrNoWork) && lanes.Lane == "" && len(lanes.Exclude) == 0:
+			s.done = true // a slot that takes every lane found nothing: nothing waits
 			return false, nil
+		case errors.Is(err, ports.ErrNoWork):
+			s.empty[lanes.Lane] = true
+			continue
 		case errors.Is(err, ports.ErrSlotTaken):
 			s.taken[slot] = true
 			continue
@@ -248,7 +256,7 @@ func (e *Engine) claimAt(ctx context.Context, l domain.Line, st domain.Station, 
 		return true, nil
 	}
 
-	s.done = true // every slot is held
+	s.done = true // every slot is held or has no work for its lanes
 
 	return false, nil
 }
