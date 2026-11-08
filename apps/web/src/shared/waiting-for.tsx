@@ -24,7 +24,7 @@ export function WaitLine({
     return (
       <span className={cn('flex min-w-0 items-center gap-2 text-muted', className)}>
         {status ? <StatusIcon status={status} className="text-muted" /> : null}
-        <CIWait waiting={waiting} />
+        <CIWait waiting={waiting} card />
       </span>
     );
   }

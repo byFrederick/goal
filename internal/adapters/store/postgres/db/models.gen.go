@@ -80,6 +80,7 @@ type CiPoll struct {
 	LastError        string
 	LeaseOwner       *string
 	LeaseUntil       *time.Time
+	FirstPolledAt    *time.Time
 }
 
 type CiWait struct {

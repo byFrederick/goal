@@ -6,7 +6,7 @@ import type { KeyboardEvent, PointerEvent } from 'react';
 import type { CICheck, ItemWaiting } from '../api/types';
 import { cn } from '../ui/cn';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
-import { shortSha, waitingShort } from './waiting';
+import { ciCard, shortSha, waitingShort } from './waiting';
 
 /** What a check says about itself: Running, Pending, or what it concluded. */
 export function checkStatus(check: Pick<CICheck, 'state' | 'result'>): string {
@@ -112,13 +112,27 @@ function CIList({ ci }: { ci: NonNullable<ItemWaiting['ci']> }) {
   );
 }
 
-export function CIWait({ waiting, className }: { waiting: ItemWaiting; className?: string }) {
+/** The label: the long form by default, the card wording (CI and its count) when `card` is set. */
+export function CIWait({ waiting, className, card }: { waiting: ItemWaiting; className?: string; card?: boolean }) {
   const ci = waiting.ci;
+  const long = waitingShort(waiting);
+  const { lead, check } = ciCard(ci);
   return (
     <span className={cn('flex min-w-0 items-center gap-1', className)}>
-      <span className="min-w-0 truncate" title={waitingShort(waiting)}>
-        {waitingShort(waiting)}
-      </span>
+      {card ? (
+        <span className="flex min-w-0 gap-1" title={long}>
+          <span className="flex-none whitespace-nowrap">{lead}</span>
+          {check ? (
+            <span className="min-w-0 truncate" title={check}>
+              {check}
+            </span>
+          ) : null}
+        </span>
+      ) : (
+        <span className="min-w-0 truncate" title={long}>
+          {long}
+        </span>
+      )}
       {ci ? (
         <Popover>
           <PopoverTrigger asChild>

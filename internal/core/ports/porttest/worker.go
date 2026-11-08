@@ -153,14 +153,18 @@ func (w *Worker) prepare(c ExecCall, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// run plays the agent and reports its result as the worker does: a finished line and exit 0, or,
-// for a result without a status, no line and exit 1, as a crashed worker.
+// run plays the agent and reports its result as the worker does: a started line, then a finished
+// line and exit 0, or, for a result without a status, no finished line and exit 1, as a crashed
+// worker.
 func (w *Worker) run(ctx context.Context, c ExecCall, stdout, stderr io.Writer) int {
 	w.mu.Lock()
 	w.runs = append(w.runs, c)
 	w.mu.Unlock()
 
 	w.changes.signal()
+
+	// goal-agent's first line, once the agent has read its brief: goald records it as agent_started.
+	writeLine(stdout, startedLine{Type: "started", At: time.Now().UTC().Format(time.RFC3339)})
 
 	res := w.agent(ctx, c, stdout)
 	if ctx.Err() != nil {
@@ -194,6 +198,12 @@ func reportRepositories(fin *domain.WorkerFinished, rows []domain.RunRepository)
 	for _, r := range rows {
 		fin.Repositories = append(fin.Repositories, domain.WorkerRepository{Repo: r.Repo, PushedHead: r.PushedHead, Wrote: r.Wrote})
 	}
+}
+
+// startedLine is the worker's first stdout line, written when the agent starts.
+type startedLine struct {
+	Type string `json:"type"`
+	At   string `json:"at"`
 }
 
 // finishedLine is the worker's last stdout line.

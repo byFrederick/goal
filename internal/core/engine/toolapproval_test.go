@@ -654,3 +654,27 @@ func TestToolApproval_WithdrawnByAPersonsControl(t *testing.T) {
 		})
 	}
 }
+
+// An approved call given before a run that failed before its agent started reaches the run after
+// it, in its brief and its grants, which a retry in a new claim starts.
+func TestToolApproval_SurvivesARunThatFailedBeforeItsAgent(t *testing.T) {
+	t.Parallel()
+
+	h := askingFirstTwice(t)
+	it := h.at(t, h.submit(t, domain.NewItem{}), stWork, domain.StateQueued)
+
+	h.step(t) // run 1 asks first
+
+	if _, err := h.e.DecideToolApproval(inOrg(t), it.ID, human, true, false, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	h.failBeforeTheAgent(t, it.ID) // run 2
+	h.step(t)                      // run 3
+
+	if n := len(h.runs(t, testOrg, it.ID)); n != 3 || len(h.worker.Runs()) != 2 {
+		t.Fatalf("%d runs, %d agents; want 3 runs, the second without an agent (events %v)", n, len(h.worker.Runs()), h.kinds(it.ID))
+	}
+
+	h.expectGranted(t, it.ID)
+}

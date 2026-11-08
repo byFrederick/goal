@@ -33,6 +33,24 @@ function ciShort(ci: ItemWaiting['ci']): string {
   return ci && ci.total > 0 ? `Waiting for CI · ${ci.finished} of ${ci.total}` : 'Waiting for CI';
 }
 
+/**
+ * A CI wait on a narrow surface (a Board card, a Plan row): its lead and, after a failure, the check
+ * that failed, so only the check's name has to truncate. The long form is waitingShort.
+ */
+export function ciCard(ci: ItemWaiting['ci']): { lead: string; check?: string } {
+  if (ci?.failure) {
+    const [check] = ci.failure.checks;
+    return check ? { lead: 'CI failed:', check: check.name } : { lead: 'CI timed out' };
+  }
+  return { lead: ci && ci.total > 0 ? `CI · ${ci.finished} of ${ci.total}` : 'CI · waiting' };
+}
+
+/** The card's CI wording as one string: "CI · 9 of 14", "CI · waiting", "CI failed: task web:e2e". */
+export function waitingCard(waiting: Pick<ItemWaiting, 'ci'>): string {
+  const { lead, check } = ciCard(waiting.ci);
+  return check ? `${lead} ${check}` : lead;
+}
+
 /** Where a turn wait lands: its integration branch, or "the default branch" when it has none. */
 export function turnTarget(waiting: Pick<ItemWaiting, 'target'>): string {
   return waiting.target || 'the default branch';

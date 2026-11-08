@@ -171,7 +171,7 @@ for (const size of [
     await page.goto('/o/acme/f/goal/items/17');
 
     const plan = page.getByRole('region', { name: 'Plan' });
-    const ci = plan.getByText('Waiting for CI · 9 of 14');
+    const ci = plan.getByText('CI · 9 of 14');
     await expect(ci).toBeVisible();
     await expect(plan.getByRole('button', { name: 'About CI' })).toBeVisible();
     await expect(plan.getByText('Waits for goal#19 to land')).toBeVisible();
