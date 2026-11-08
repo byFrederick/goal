@@ -328,7 +328,7 @@ for (const width of [375, 1440]) {
       await route.continue();
     });
     await page.goto('/o/acme/new/basics?factory=sre');
-    await expect(page.getByText('Loading', { exact: true })).toBeAttached();
+    await expect(page.locator('#main').getByText('Loading', { exact: true })).toBeAttached();
     await expect(page.getByText('Delete this draft factory')).toHaveCount(0);
     await expect(page.getByText('Draft', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Continue to/ })).toHaveCount(0);
