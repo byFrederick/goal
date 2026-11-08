@@ -24,6 +24,7 @@ func TestTracer_CountsQueriesAndAcquireWait(t *testing.T) {
 	for _, wait := range []time.Duration{30 * time.Millisecond, 12 * time.Millisecond} {
 		actx := tr.TraceAcquireStart(ctx, nil, pgxpool.TraceAcquireStartData{})
 		now = now.Add(wait)
+
 		tr.TraceAcquireEnd(actx, nil, pgxpool.TraceAcquireEndData{})
 	}
 

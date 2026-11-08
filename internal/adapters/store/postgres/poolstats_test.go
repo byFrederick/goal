@@ -74,6 +74,7 @@ func TestPoolStatsLogger_LogsOnEachTick(t *testing.T) {
 
 	go func() {
 		defer close(done)
+
 		LogPoolStats(ctx, stat, clock, time.Minute, log)
 	}()
 
