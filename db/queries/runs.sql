@@ -15,7 +15,7 @@ SELECT item_id FROM agent_runs WHERE id = $1;
 -- Only a running run finishes; finishing it again matches nothing. cpu_seconds and
 -- peak_memory_bytes are NULL when the worker reported none (00136), peak_memory_source when it
 -- reported no known source with its peak memory (00137), build_cache when it reported no known
--- build cache outcome (00143).
+-- build cache outcome (00144).
 UPDATE agent_runs SET
   status = sqlc.arg(status), session_id = sqlc.narg(session_id), turns = sqlc.arg(turns)::bigint,
   input_tokens = sqlc.arg(input_tokens), output_tokens = sqlc.arg(output_tokens),

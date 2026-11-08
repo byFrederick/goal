@@ -153,7 +153,7 @@ func TestWorkerFinished_ResultKeepsAKnownBuildCache(t *testing.T) {
 
 	for _, tc := range []struct {
 		name, fields string
-		want         BuildCache
+		want         BuildCacheOutcome
 	}{
 		{"hit", `,"build_cache":"hit"`, BuildCacheHit},
 		{"miss", `,"build_cache":"miss"`, BuildCacheMiss},

@@ -233,7 +233,7 @@ type FinishRunRow struct {
 // Only a running run finishes; finishing it again matches nothing. cpu_seconds and
 // peak_memory_bytes are NULL when the worker reported none (00136), peak_memory_source when it
 // reported no known source with its peak memory (00137), build_cache when it reported no known
-// build cache outcome (00143).
+// build cache outcome (00144).
 func (q *Queries) FinishRun(ctx context.Context, arg FinishRunParams) (FinishRunRow, error) {
 	row := q.db.QueryRow(ctx, finishRun,
 		arg.Status,

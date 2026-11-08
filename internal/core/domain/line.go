@@ -226,7 +226,14 @@ type Runtime struct {
 	// included, which an item's repositories are matched against (ADR 0041 decision 2); nil for a
 	// factory with no code.
 	Repositories []RepositoryEntry
+	// BuildCache is runtime.buildCache: whether runs restore and save the per-repository cache of
+	// Go's module and build caches and the pnpm store; nil when the definition omits it.
+	BuildCache *bool
 }
+
+// BuildCacheEnabled reports whether runs use the build cache. An absent runtime.buildCache is
+// on, so versions published before the field existed keep the cache.
+func (r Runtime) BuildCacheEnabled() bool { return r.BuildCache == nil || *r.BuildCache }
 
 // RepositoryEntry is an entry of runtime.repositories: its name, the URL of one repository or of
 // an owner's every repository (an owner pattern ending in /*), the {{secret}} token that opens

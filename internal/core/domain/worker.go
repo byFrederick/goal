@@ -177,8 +177,8 @@ func (f *WorkerFinished) memorySource() MemorySource {
 }
 
 // buildCache is the line's build cache outcome when it is a known one; empty otherwise.
-func (f *WorkerFinished) buildCache() BuildCache {
-	switch bc := BuildCache(f.BuildCache); bc {
+func (f *WorkerFinished) buildCache() BuildCacheOutcome {
+	switch bc := BuildCacheOutcome(f.BuildCache); bc {
 	case BuildCacheHit, BuildCacheMiss, BuildCacheOff, BuildCacheError:
 		return bc
 	default:

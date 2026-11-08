@@ -355,7 +355,7 @@ func boxSizeOf(size domain.SandboxSize) *gen.SandboxSize {
 }
 
 // buildCacheOf is what happened to a run's build cache, nil when unknown.
-func buildCacheOf(bc domain.BuildCache) *gen.BuildCache {
+func buildCacheOf(bc domain.BuildCacheOutcome) *gen.BuildCache {
 	if bc == "" {
 		return nil
 	}

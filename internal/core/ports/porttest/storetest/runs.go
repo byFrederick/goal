@@ -408,7 +408,7 @@ type runUsage struct {
 	cpu  *float64
 	peak *int64
 	src  domain.MemorySource
-	bc   domain.BuildCache
+	bc   domain.BuildCacheOutcome
 }
 
 func (w runUsage) check(t *testing.T, what string, r domain.Run) {
