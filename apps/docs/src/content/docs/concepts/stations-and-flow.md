@@ -68,6 +68,8 @@ When the wait ends, the item's next claim acts on it:
 
 Each push starts a new CI round. Once a visit to the station has had `rounds` rounds, the next push blocks the item for a person, and the reason names the checks that failed in the last round. A move to another station, or a person's retry, starts a new visit and a new count.
 
+When goald shuts down after a run succeeded but before its output was applied, as a deploy during the station's `checks` does, the next claim does not run the agent again. If the item's branch is still at what the run pushed in every repository, goald runs the station's checks again on that head in a new box, then goes on as the run would have: it holds the output for CI as above, or applies it. If a check fails, the station runs again with the failed check's output in its brief, as after any failed check. If the branch moved since the run, nothing is reused and the station runs as usual. This holds at any station, with or without `waitFor`.
+
 A rejection goes back to the gate's `onReject` station at once, without waiting for CI. A run that pushed nothing moves the item on at once, as at a station without the setting.
 
 When the token cannot read the repository's CI, the item blocks for a person. The reason names the repository, the commit, where the token comes from (the `runtime.repositories` entry or `runtime.repository.token`) and the permission it needs, such as read access to Checks and Commit statuses on GitHub or `read_api` on GitLab. Give the token that permission, then retry the item: goald waits for CI again. Hidden CI never counts as passed.
