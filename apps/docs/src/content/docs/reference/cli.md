@@ -308,7 +308,7 @@ Flags: `--yes`.
 goal factory ask <factory> "<text>" [--agent A] [--wait]
 ```
 
-ask goald to change the factory's draft (a draft request, about agent A with --agent); it never publishes. --wait waits until it is done or failed and prints what it changed
+not built yet: goald refuses every draft request (501 not-built) and queues nothing, so the command fails and --wait never waits. Change the draft with goal factory pull and goal factory push
 
 Flags: `--agent A`, `--wait`.
 
