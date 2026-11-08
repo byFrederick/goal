@@ -38,7 +38,7 @@ Rules:
 
 - Go: `oapi-codegen` generates a strict server interface that `internal/adapters/http` implements. Handlers call the engine through ports, as everywhere else.
 - TypeScript: `openapi-typescript` generates types into `packages/contracts`; `openapi-fetch` gives a typed client with no hand-written fetch code.
-- Realtime: `GET /v1/orgs/{org}/stream?factory=` streams one organization's Server-Sent Events: `event: item` (data: the `StreamEvent` schema in `contracts/api/openapi.yaml`, `id:` the event id) and `event: resync` (data `{}`: events may have been missed). There is no replay, so a client re-reads what it shows after a reconnect or a resync. The client turns each event into a TanStack Query cache invalidation, so screens update without polling.
+- Realtime: `GET /v1/orgs/{org}/stream?factory=` streams one organization's Server-Sent Events: `event: item` (data: the `StreamEvent` schema in `contracts/api/openapi.yaml`, `id:` the event id) and `event: resync` (data `{}`: events may have been missed). There is no replay, so a client re-reads what it shows after a reconnect or a resync. The client turns each event into a TanStack Query cache invalidation, so screens update without polling. Invalidations are batched (300 ms; factory overviews 5 s) and skip a factory's board while its card move is in flight. An invalidation never aborts a refetch in flight: a key still fetching is marked stale and caught up by the next batch. A hidden page collects keys and refetches each once when it is shown.
 - Factory, environment and memory files keep their JSON Schemas in `contracts/definitions/`; the same schemas drive Go validation, TS types and the YAML editor's autocompletion.
 
 ## The design revamp
