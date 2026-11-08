@@ -65,7 +65,7 @@ goal start acme-line#14 --in 2d
 goal start acme-line#14 --now
 ```
 
-`--now` clears the time, so the first station releases the item on its next tick. Items it waits for still hold it; remove them with the item's needs. Once the item has left the first station, its start cannot change.
+`--now` clears the time, so the first station releases the item on its next tick. Items it waits for still hold it; Only the API removes a need, with `DELETE /v1/orgs/{org}/items/{item}/needs/{need}`; the CLI and the web app have no control for it. Once the item has left the first station, its start cannot change.
 
 The API takes the same start: `start: {at, in, after}` when you submit an item, `PUT /v1/orgs/{org}/items/{item}/start` to change it and `DELETE` on the same path to start it now.
 
@@ -91,7 +91,7 @@ An item is `<factory>#<number>`, its id, or a bare number when only one factory 
 
 ## Submit from the web app
 
-Open the factory's Board and choose New item. The sidebar's New item does the same from any page, and the keyboard shortcut is `C` (every shortcut is listed in [Navigate and use shortcuts](../navigate-and-shortcuts/)). Choose the factory, fill in the brief and choose Create item. When the factory's running version has `runtime.repositories` entries, New item also has a Repositories field. It starts with the default entry's repository; choose Add to pick another, or to type `owner/name` under an entry that covers all of an owner's repositories, and Remove to drop one. An item takes up to 10. A repository no entry covers is refused on the field. The new item opens on the Board in the station where it entered the line. An item can also wait to start; the CLI and the API set a start, as [Start an item later](#start-an-item-later) shows.
+Open the factory's Board and choose New item. The sidebar's New item does the same from any page, and the keyboard shortcut is `C` (every shortcut is listed in [Navigate and use shortcuts](../navigate-and-shortcuts/)). Choose the factory, fill in the brief and choose Create item. When the factory's running version has `runtime.repositories` entries, New item also has a Repositories field. It starts with the default entry's repository; choose Add to pick another, or to type `owner/name` under an entry that covers all of an owner's repositories, and Remove to drop one. An item takes up to 10. A repository no entry covers is refused on the field. Create item opens the new item's page with the toast "Created <ref>. It waits at <station>." An item can also wait to start; the Start control below sets it, as [Start an item later](#start-an-item-later) shows.
 
 Agents can leave work for later too; see [Let agents leave follow-ups](../follow-ups/).
 
