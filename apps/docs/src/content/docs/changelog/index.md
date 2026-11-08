@@ -7,6 +7,7 @@ This page lists the changes a person using Goal would notice, newest first, grou
 
 ## Week of 2026-11-02
 
+- Menus, popovers, dialogs and toasts have a visible edge again in the dark theme: their ring is white at 8%, as the design system says, instead of black on a near-black page.
 - The assembly page's Plan says what each waiting part waits for, as its Board card does: the parts it needs, a merge turn, or CI with its finished and total checks and an ⓘ for its commits and checks. Each part from `GET …/items/{item}/parts` carries `waiting`, the same object `GET …/items/{item}` answers, or null ([#849](https://github.com/byFrederick/goal/pull/849)).
 - The New key and New token dialogs now call the `connection:read` scope "See standing rules" instead of "See connections", because it only lists standing rules. The scope id is unchanged, so existing keys and tokens keep working.
 - **Factory webhook endpoints and items' `source` are gone from the database.** Migration 00138 drops the old endpoints' sealed secrets, kind and factory, and items' `source`; every webhook now belongs to the organization, with a sender and a secret, and its name is unique there. A database must first run ADR 0040's release; on one that did not, migration 00138 refuses to run, changes nothing, and goald does not start until that release has run once ([#873](https://github.com/byFrederick/goal/pull/873)).

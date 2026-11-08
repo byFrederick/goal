@@ -23,6 +23,8 @@
   --color-current: currentColor;
   /* The tint of the popover and dialog shadow: ink in light, black in dark (see the dark overrides). */
   --color-shadow: #171717;
+  /* The ring of that shadow. A token, so the dark blocks can swap it: Tailwind compiles --shadow-pop's light value into the utility. */
+  --color-shadow-ring: color-mix(in srgb, var(--color-shadow) 6%, transparent);
 
   /* Surfaces */
   --color-shell: #ffffff;
@@ -112,8 +114,7 @@
 
   /* Borders, not shadows, except the one shadow of a popover, menu, dialog or toast (MASTER.md, Shape). */
   --shadow-pop:
-    0 0 0 1px color-mix(in srgb, var(--color-shadow) 6%, transparent),
-    0 10px 28px -10px color-mix(in srgb, var(--color-shadow) 18%, transparent);
+    0 0 0 1px var(--color-shadow-ring), 0 10px 28px -10px color-mix(in srgb, var(--color-shadow) 18%, transparent);
   /* The selected segment of a segmented control lifts off its track: a hairline shadow and its rule. */
   --shadow-raised: 0 1px 2px color-mix(in srgb, var(--color-shadow) 12%, transparent), 0 0 0 1px var(--color-rule);
 
@@ -423,9 +424,7 @@
   --color-ok-ink: #7edba4;
   --color-shadow: #000000;
   /* On dark the ring is white at 8%, not ink (MASTER.md, Shape, elevation). */
-  --shadow-pop:
-    0 0 0 1px color-mix(in srgb, #ffffff 8%, transparent),
-    0 10px 28px -10px color-mix(in srgb, var(--color-shadow) 18%, transparent);
+  --color-shadow-ring: color-mix(in srgb, #ffffff 8%, transparent);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -469,9 +468,7 @@
     --color-ok-tint: #11291b;
     --color-ok-ink: #7edba4;
     --color-shadow: #000000;
-    --shadow-pop:
-      0 0 0 1px color-mix(in srgb, #ffffff 8%, transparent),
-      0 10px 28px -10px color-mix(in srgb, var(--color-shadow) 18%, transparent);
+    --color-shadow-ring: color-mix(in srgb, #ffffff 8%, transparent);
   }
 }
 
