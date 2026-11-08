@@ -60,17 +60,12 @@ func OpenQuestion(events []Event) (Question, bool) {
 	return Question{}, false
 }
 
-// AnswersSinceLastRun returns the questions answered after the item's latest run_started event,
-// each with its answer, in the order they were answered: what the next run's brief carries.
+// AnswersSinceLastRun returns the questions answered after the run_started event of the item's
+// latest run whose agent started (SinceLastBrief), each with its answer, in the order they were
+// answered: what the next run's brief carries. An answer given before a run that failed before
+// its agent started is kept.
 func AnswersSinceLastRun(events []Event) []Answer {
-	since := 0
-
-	for i, e := range slices.Backward(events) {
-		if e.Kind == EventRunStarted {
-			since = i + 1
-			break
-		}
-	}
+	since := SinceLastBrief(events, len(events))
 
 	var (
 		answers []Answer

@@ -86,39 +86,25 @@ func OpenToolApproval(events []Event) (ToolApproval, bool) {
 	return ToolApproval{}, false
 }
 
-// ToolDecisionsSinceLastRun returns the tool approvals decided after the item's latest
-// run_started event, each with its decision, in the order they were decided: what the next
-// run's brief carries.
+// ToolDecisionsSinceLastRun returns the tool approvals decided after the run_started event of
+// the item's latest run whose agent started (SinceLastBrief), each with its decision, in the
+// order they were decided: what the next run's brief carries.
 func ToolDecisionsSinceLastRun(events []Event) []ToolDecision {
-	since := 0
-
-	for i, e := range slices.Backward(events) {
-		if e.Kind == EventRunStarted {
-			since = i + 1
-			break
-		}
-	}
-
-	return toolDecisionsIn(events, since, len(events))
+	return toolDecisionsIn(events, SinceLastBrief(events, len(events)), len(events))
 }
 
-// GrantedCalls returns the calls granted to run: those approved after the item's run before it
-// started and before run started, the run a grant goes to (ADR 0031 decision 5). A grant the run
-// does not use ends with it, so a later run gets none; a run with no run_started event gets none.
+// GrantedCalls returns the calls granted to run: those approved after the run_started event of
+// the latest earlier run whose agent started (SinceLastBrief) and before run started, the run a
+// grant goes to (ADR 0031 decision 5). A grant ends with the first run whose agent starts, so a
+// later run gets none; a run that failed before its agent started does not use it up. A run with
+// no run_started event gets none.
 func GrantedCalls(events []Event, run RunID) []GrantedCall {
 	start := slices.IndexFunc(events, func(e Event) bool { return e.Kind == EventRunStarted && e.RunID == run })
 	if start < 0 {
 		return nil
 	}
 
-	since := 0
-
-	for i, e := range slices.Backward(events[:start]) {
-		if e.Kind == EventRunStarted {
-			since = i + 1
-			break
-		}
-	}
+	since := SinceLastBrief(events, start)
 
 	var calls []GrantedCall
 
