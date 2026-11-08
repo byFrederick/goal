@@ -7,6 +7,7 @@ This page lists the changes a person using Goal would notice, newest first, grou
 
 ## Week of 2026-11-02
 
+- Menus, popovers, dialogs and toasts have a visible edge again in the dark theme: their ring is white at 8%, as the design system says, instead of black on a near-black page.
 - An answer, a note, or a tool call a person approved or denied is no longer lost when the next run fails before its agent starts, for example when preparing its box times out. The run after it, such as the one a person starts with Retry, now carries it in its brief, and an approved call is still granted to it. Before, the agent could ask the same question again ([#896](https://github.com/byFrederick/goal/pull/896)).
 - The assembly page's Plan says what each waiting part waits for, as its Board card does: the parts it needs, a merge turn, or CI with its finished and total checks and an ⓘ for its commits and checks. Each part from `GET …/items/{item}/parts` carries `waiting`, the same object `GET …/items/{item}` answers, or null ([#849](https://github.com/byFrederick/goal/pull/849)).
 - The New key and New token dialogs now call the `connection:read` scope "See standing rules" instead of "See connections", because it only lists standing rules. The scope id is unchanged, so existing keys and tokens keep working.
