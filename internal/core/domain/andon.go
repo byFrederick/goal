@@ -19,7 +19,7 @@ const (
 )
 
 // DefaultAndonWindow is how many of a gate's last verdicts its tally counts when the line has no
-// andon policy.
+// andon policy, or a policy that omits its window.
 const DefaultAndonWindow = 10
 
 // maxReasonLabel is how much of a rejection reason names it in a tally.

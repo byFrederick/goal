@@ -67,6 +67,7 @@ func suiteCases() []suiteCase {
 		{"ClaimNext_NoWork", testClaimNoWork},
 		{"ClaimNext_SlotTaken", testClaimSlotTaken},
 		{"ClaimNext_SkipsItemsWithOpenNeeds", testClaimSkipsOpenNeeds},
+		{"ClaimNext_KeepsSlotsForALane", testClaimKeepsSlotsForALane},
 		{"Edges_AddListRemove", testEdgesAddListRemove},
 		{"Edges_CycleRefused", testEdgesCycleRefused},
 		{"Edges_OtherFactoryRefused", testEdgesOtherFactoryRefused},
@@ -208,9 +209,11 @@ const (
 	// laneBackend routes to agBackend at a routed station.
 	laneBackend = "backend"
 	agBackend   = "backend-engineer"
-	ttl         = time.Minute
-	model       = "model-a"
-	typeTask    = "task"
+	// laneFrontend shares the slots that laneBackend does not keep.
+	laneFrontend = "frontend"
+	ttl          = time.Minute
+	model        = "model-a"
+	typeTask     = "task"
 )
 
 var (

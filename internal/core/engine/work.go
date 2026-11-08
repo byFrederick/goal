@@ -683,7 +683,7 @@ func (e *Engine) runChecks(ctx context.Context, c claimed, runID domain.RunID, b
 	for _, cmd := range c.station.Checks {
 		started := e.clock.Now()
 
-		code, output, err := e.runCheck(ctx, runID, b, cmd, scrub)
+		code, output, err := e.runCheck(ctx, runID, b, cmd, c.base, scrub)
 		if err != nil {
 			return err
 		}
@@ -706,11 +706,11 @@ func (e *Engine) runChecks(ctx context.Context, c claimed, runID domain.RunID, b
 }
 
 // tryChecks runs a try's checks (ADR 0039 decision 10) as runChecks runs a station's, in the
-// try's box, and returns the first that fails; nil when they all pass. A try works no item, so
+// try's box with the try's base, and returns the first that fails; nil when they all pass. A try works no item, so
 // no check event is written. A check that cannot be run is an error.
 func (e *Engine) tryChecks(ctx context.Context, t runTask, runID domain.RunID, scrub scrubber) (*domain.FailedCheck, error) {
 	for _, cmd := range t.Checks {
-		code, output, err := e.runCheck(ctx, runID, t.box, cmd, scrub)
+		code, output, err := e.runCheck(ctx, runID, t.box, cmd, t.Base, scrub)
 		if err != nil {
 			return nil, err
 		}
@@ -723,16 +723,17 @@ func (e *Engine) tryChecks(ctx context.Context, t runTask, runID domain.RunID, s
 	return nil, nil
 }
 
-// runCheck runs one command check in b, in its workspace, with CI=true and no credential, under
-// the check timeout: its exit code (exitTimedOut when it ran out of time) and the end of what it
+// runCheck runs one command check in b, in its workspace, with CI=true, GOAL_BASE_BRANCH set to
+// base (the branch the work's pull request goes into, empty for the default branch) and no
+// credential, under the check timeout: its exit code (exitTimedOut when it ran out of time) and the end of what it
 // printed, scrubbed of the run's secrets. The exit code is the runtime's: nothing the agent left
 // in the sandbox can report a pass. An error when the command could not be run.
-func (e *Engine) runCheck(ctx context.Context, runID domain.RunID, b *box, cmd string, scrub scrubber) (int, string, error) {
+func (e *Engine) runCheck(ctx context.Context, runID domain.RunID, b *box, cmd, base string, scrub scrubber) (int, string, error) {
 	started := e.clock.Now()
 	out := &tail{max: maxCheckOutput}
 
 	st, err := execLines(ctx, b.sandbox, ports.Exec{
-		Argv: []string{"sh", "-c", cmd}, Env: map[string]string{"CI": "true"}, Dir: workspaceDir, Timeout: e.cfg.CheckTimeout,
+		Argv: []string{"sh", "-c", cmd}, Env: map[string]string{"CI": "true", "GOAL_BASE_BRANCH": base}, Dir: workspaceDir, Timeout: e.cfg.CheckTimeout,
 	}, out.add)
 	if err != nil {
 		return 0, "", fmt.Errorf("run check %q: %w", cmd, scrub.err(err))

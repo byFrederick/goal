@@ -137,6 +137,10 @@ func TestChecks_RunInTheSandboxWithoutCredentials(t *testing.T) {
 		t.Errorf("check = %q in %q with env %v; want sh -c in /workspace of the run's sandbox, CI=true", c.Argv, c.Dir, keys(c.Env))
 	}
 
+	if base, ok := c.Env["GOAL_BASE_BRANCH"]; !ok || base != "" {
+		t.Errorf("check GOAL_BASE_BRANCH = %q (set %t); want set and empty for an item on the default branch", base, ok)
+	}
+
 	for _, name := range []string{domain.EnvAnthropicAPIKey, "GOAL_GATEWAY_TOKEN", domain.RepositoryTokenEnv} {
 		if _, ok := c.Env[name]; ok {
 			t.Errorf("the check got %s", name)
@@ -145,6 +149,53 @@ func TestChecks_RunInTheSandboxWithoutCredentials(t *testing.T) {
 
 	if c.Timeout <= 0 {
 		t.Error("the check has no timeout")
+	}
+}
+
+// A part that builds on its assembly's integration branch runs its checks with that branch as
+// GOAL_BASE_BRANCH, next to CI=true, so a check can tell its pull request gets no CI.
+func TestChecks_PartGetsItsIntegrationBase(t *testing.T) {
+	t.Parallel()
+
+	line := integrationLine(domain.IntegrationModeBranch, 1)
+	line.Stations[1].Checks = []string{makeTest}
+	h := newHarness(t, line, porttest.Succeed(`{}`))
+	root, _ := h.assembly(t, 1)
+
+	if _, err := h.store.SetIntegrationBranch(inOrg(t), root.ID, integrationBranch, stMerge, h.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	h.step(t)
+
+	checks := h.worker.Checks()
+	if len(checks) != 1 {
+		t.Fatalf("%d checks, want 1", len(checks))
+	}
+
+	if env := checks[0].Env; env["GOAL_BASE_BRANCH"] != integrationBranch || env["CI"] != "true" {
+		t.Errorf("check GOAL_BASE_BRANCH %q CI %q; want %q and true", env["GOAL_BASE_BRANCH"], env["CI"], integrationBranch)
+	}
+}
+
+// An assembly's landing goes into the default branch, so its checks get an empty
+// GOAL_BASE_BRANCH, set but empty.
+func TestChecks_LandingGetsAnEmptyBase(t *testing.T) {
+	t.Parallel()
+
+	line := landingLine()
+	line.Stations[2].Checks = []string{makeTest}
+	h := newHarness(t, line, byAgent(map[string]string{agReviewer: approveEmpty}))
+	h.landing(t)
+	h.step(t)
+
+	checks := h.worker.Checks()
+	if len(checks) != 1 {
+		t.Fatalf("%d checks, want 1", len(checks))
+	}
+
+	if base, ok := checks[0].Env["GOAL_BASE_BRANCH"]; !ok || base != "" {
+		t.Errorf("check GOAL_BASE_BRANCH = %q (set %t); want set and empty for a landing", base, ok)
 	}
 }
 

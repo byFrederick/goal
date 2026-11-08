@@ -884,8 +884,11 @@ type Claim struct {
 	FactoryID domain.FactoryID
 	// Station is the full station spec; the lease's agent is Station.AgentFor(item.Lane), or ""
 	// when the item's lane has no route (the engine then blocks the item).
-	Station   domain.Station
-	Slot      int
+	Station domain.Station
+	Slot    int
+	// Lanes is which items the slot takes, Station.SlotLanes()[Slot]: a kept slot only its lane, a
+	// shared slot no lane that keeps slots. The zero value takes every item.
+	Lanes     domain.SlotLane
 	Now       time.Time
 	ExpiresAt time.Time
 }

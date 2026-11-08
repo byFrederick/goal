@@ -66,7 +66,7 @@ export function NeedsYouPage() {
   // Always allow is the one choice an Approval carries. It names the entry it is checked for, so a
   // checked box never carries over to another entry.
   const [alwaysAllowFor, setAlwaysAllowFor] = useState<string | undefined>(undefined);
-  const canManageConnections = useOrgHolds('connection:manage');
+  const canManageStandingRules = useOrgHolds('standing_rule:manage');
 
   const entries = inbox.data?.entries ?? [];
   const visible = visibleEntries(entries, search);
@@ -80,7 +80,7 @@ export function NeedsYouPage() {
   const heldGone = held !== undefined && !visible.some((e) => e.id === held.id);
   const selected = heldGone ? held : (visible.find((e) => e.id === search.entry) ?? visible[0]);
   const current = decidable(selected);
-  const allowAlways = current !== undefined && alwaysAllowOffered(current, canManageConnections);
+  const allowAlways = current !== undefined && alwaysAllowOffered(current, canManageStandingRules);
   const alwaysAllow = current !== undefined && alwaysAllowFor === current.id;
   const setAlwaysAllow = (checked: boolean) => setAlwaysAllowFor(checked && current ? current.id : undefined);
   const approvalCurrent = current !== undefined && typeOf(current) === 'approval';

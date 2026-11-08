@@ -199,6 +199,9 @@ func flowPolicy(fl Flow) domain.FlowPolicy {
 
 	if a := fl.Andon; a != nil {
 		p.Andon = &domain.AndonPolicy{ReworkRate: a.ReworkRate, Window: a.Window}
+		if p.Andon.Window == 0 {
+			p.Andon.Window = domain.DefaultAndonWindow
+		}
 	}
 
 	if t := fl.Targets; t != nil {

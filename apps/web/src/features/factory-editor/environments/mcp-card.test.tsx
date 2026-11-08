@@ -124,7 +124,7 @@ describe('the standing rules of an MCP server', () => {
     expect(await screen.findByText(/old_tool/, { selector: 'span.font-mono' })).toBeTruthy();
   });
 
-  it('hide Revoke without connection:manage', async () => {
+  it('hide Revoke without standing_rule:manage', async () => {
     holds.manage = false;
     renderCard([rule({})]);
     await screen.findByText(/Always allowed for architect/);

@@ -14,6 +14,28 @@ import (
 // defaultIntegration is board.flow.assemblies.integration when a definition leaves it out.
 var defaultIntegration = domain.IntegrationPolicy{Mode: domain.IntegrationModeTrunk, Refresh: domain.RefreshOnLand}
 
+// An andon block without window counts the default window of verdicts; an explicit one stays.
+func TestLine_AndonWindowDefaultsToTen(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		block string
+		want  domain.AndonPolicy
+	}{
+		{"{ reworkRate: 0.5 }", domain.AndonPolicy{ReworkRate: 0.5, Window: domain.DefaultAndonWindow}},
+		{"{ reworkRate: 0.5, window: 5 }", domain.AndonPolicy{ReworkRate: 0.5, Window: 5}},
+	} {
+		f, err := Load(checkTree(baseFactory+"    flow:\n      andon: "+tc.block+"\n", nil))
+		if err != nil {
+			t.Fatalf("andon %s: %v", tc.block, err)
+		}
+
+		if got := f.Line().Flow.Andon; got == nil || *got != tc.want {
+			t.Errorf("andon %s = %+v, want %+v", tc.block, got, tc.want)
+		}
+	}
+}
+
 // The line carries the flow policy and targets the engine and the flow metrics read.
 func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 	t.Parallel()

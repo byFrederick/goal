@@ -193,7 +193,7 @@ object, required.
     - `wip`: integer. Max items in progress at this station.
     - `buffer`: integer. Items kept ready in front of the station (use at the constraint).
     - `output`: string. Name of a contract the station's result must satisfy.
-    - `checks`: array of object.
+    - `checks`: array of object. Checks the station's output must pass before the item moves on. A command check runs in the run's workspace with CI=true and GOAL\_BASE\_BRANCH, the branch the item's pull request goes into; GOAL\_BASE\_BRANCH is empty when that is the repository's default branch.
       - `kind`: one of `"schema"`, `"evidence-links"`, `"command"`, required.
       - `min`: integer.
       - `run`: string.
@@ -216,7 +216,7 @@ object, required.
     - `release`: one of `"drum-buffer-rope"`, `"push"`.
     - `andon`: object.
       - `reworkRate`: number.
-      - `window`: integer.
+      - `window`: integer. How many of a gate's last verdicts since the last clear of the andon cord the rework-rate warning counts. Defaults to 10.
     - `targets`: object. What the line aims for; flow metrics show each against its target. Omit a target to have none.
       - `throughputPerDay`: number. Items done per day.
       - `leadTimeHours`: number. p85 lead time, created to done, in hours.

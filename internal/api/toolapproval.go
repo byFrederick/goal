@@ -30,8 +30,8 @@ func (s *server) DecideToolApproval(ctx context.Context, req gen.DecideToolAppro
 
 	// Before the engine: a refused Always allow creates no rule and records no decision.
 	if alwaysAllow {
-		forbidden := fmt.Errorf("%w: always allow needs %s", errForbidden, permConnectionManage)
-		if err := refusal(s.ask(ctx, permConnectionManage, ""), forbidden); err != nil {
+		forbidden := fmt.Errorf("%w: always allow needs %s", errForbidden, permStandingRuleManage)
+		if err := refusal(s.ask(ctx, permStandingRuleManage, ""), forbidden); err != nil {
 			return nil, fmt.Errorf("always allow: %w", err)
 		}
 	}

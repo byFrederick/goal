@@ -543,6 +543,7 @@
         "output": { "type": "string", "description": "Name of a contract the station's result must satisfy." },
         "checks": {
           "type": "array",
+          "description": "Checks the station's output must pass before the item moves on. A command check runs in the run's workspace with CI=true and GOAL_BASE_BRANCH, the branch the item's pull request goes into; GOAL_BASE_BRANCH is empty when that is the repository's default branch.",
           "items": {
             "description": "A check, or its shorthand: \"schema\", \"evidence-links\" or a command line (\"go test ./...\").",
             "if": { "type": "string" },
@@ -666,7 +667,11 @@
               "additionalProperties": false,
               "properties": {
                 "reworkRate": { "type": "number", "minimum": 0, "maximum": 1 },
-                "window": { "type": "integer", "minimum": 1 }
+                "window": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "How many of a gate's last verdicts since the last clear of the andon cord the rework-rate warning counts. Defaults to 10."
+                }
               }
             },
             "targets": {

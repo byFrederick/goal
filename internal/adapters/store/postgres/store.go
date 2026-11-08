@@ -235,7 +235,9 @@ func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, doma
 			return slotTaken
 		}
 
-		next, err := q.LockNextWaitingItem(ctx, db.LockNextWaitingItemParams{FactoryID: factory, Station: c.Station.ID, Now: c.Now})
+		next, err := q.LockNextWaitingItem(ctx, db.LockNextWaitingItemParams{
+			FactoryID: factory, Station: c.Station.ID, Now: c.Now, Lane: optional(c.Lanes.Lane), ExcludeLanes: c.Lanes.Exclude,
+		})
 		if notFound(err) {
 			return fmt.Errorf("station %s: %w", c.Station.ID, ports.ErrNoWork)
 		}

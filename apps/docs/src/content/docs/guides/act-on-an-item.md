@@ -26,7 +26,7 @@ At a station that waits for a person, approve the item to let it move on:
 goal approve acme-line#3
 ```
 
-An agent can also wait for permission to use a tool. Approving it lets that call go through. `--always-allow` does the same and lets that agent role make that call without asking from now on; the CLI needs the permission to manage secrets and access for it (`connection:manage` in the API today). Deny the call with a note, which the item's next run reads:
+An agent can also wait for permission to use a tool. Approving it lets that call go through. `--always-allow` does the same and lets that agent role make that call without asking from now on; the CLI needs the permission to manage secrets and access for it (`standing_rule:manage`). Deny the call with a note, which the item's next run reads:
 
 ```sh
 goal deny acme-line#3 --note "Use the staging server"

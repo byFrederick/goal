@@ -43,7 +43,7 @@ describe('what a personal token can do', () => {
       [
         'access:read',
         'andon:manage',
-        'connection:read',
+        'standing_rule:read',
         'secret:read',
         'factory:read',
         'intake:read',
@@ -100,8 +100,8 @@ describe('the New token form', () => {
   });
 });
 
-describe('connection:read label', () => {
+describe('standing_rule:read label', () => {
   it('is called See standing rules', () => {
-    expect(scope('connection:read').label).toBe('See standing rules');
+    expect(scope('standing_rule:read').label).toBe('See standing rules');
   });
 });

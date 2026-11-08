@@ -3721,11 +3721,11 @@ paths:
         records tool_approval_granted and grants that one call, with exactly its input, to the
         item's next run; with always_allow it also creates the standing rule that lets the
         agent role call the tool of the connection without asking (audited as
-        standing_rule.created), which also needs connection:manage in the organization and so a
+        standing_rule.created), which also needs standing_rule:manage in the organization and so a
         sign-in from the last 10 minutes. deny records tool_approval_denied with the note, which
         the next run's brief carries. Either way the item goes back to its station's arrival
         state, rework_count unchanged. 400 for always_allow with deny, a note with approve, or a
-        note that is not 1 to 2000 characters; 403 for always_allow without connection:manage
+        note that is not 1 to 2000 characters; 403 for always_allow without standing_rule:manage
         (reauth-required for a session signed in longer ago), the item unchanged; 409
         no-open-tool-approval when the item has none (none was asked, it was decided, or a move,
         pause, rejection or cancel withdrew it), always-allow-not-offered when always_allow is set
@@ -4116,7 +4116,7 @@ paths:
       - $ref: "#/components/parameters/OrgRef"
     get:
       operationId: listStandingRules
-      x-goal-scope: connection:read
+      x-goal-scope: standing_rule:read
       tags: [connections]
       summary: The organization's standing rules
       description: >-
@@ -4145,7 +4145,7 @@ paths:
         schema: { type: string }
     delete:
       operationId: revokeStandingRule
-      x-goal-scope: connection:manage
+      x-goal-scope: standing_rule:manage
       tags: [connections]
       summary: Revoke a standing rule
       description: >-
@@ -6213,7 +6213,7 @@ components:
           default: false
           description: >-
             With approve only: also let the agent role call this tool of this connection without
-            asking from now on (a standing rule); needs connection:manage
+            asking from now on (a standing rule); needs standing_rule:manage
         note:
           type: string
           minLength: 1
