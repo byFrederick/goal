@@ -255,7 +255,47 @@ describe('a webhook page: the delivery log', () => {
     expect(within(log).getByText('Duplicate')).toBeTruthy();
     expect(within(log).getByText('Refused')).toBeTruthy();
     expect(within(log).getByText('signature did not match')).toBeTruthy();
-    expect(within(log).getByText('2 more that no trigger names, counted only.')).toBeTruthy();
+    expect(unnamedLine(log)?.textContent).toContain('2 more deliveries no trigger names in the last 30 days');
+  });
+
+  const unnamedLine = (log: HTMLElement) =>
+    within(log).queryAllByText(
+      (_, el) => el?.tagName === 'P' && /no trigger names in the last 30 days/.test(el.textContent ?? ''),
+    )[0];
+
+  it('adds the first page’s unnamed days to the line', async () => {
+    api.listWebhookDeliveries.mockResolvedValue({
+      deliveries: [],
+      unnamed_days: [
+        { day: '2026-11-02', count: 5 },
+        { day: '2026-11-03', count: 7 },
+      ],
+      next_after: null,
+    });
+    renderWebhooks({ at, list: [hook] });
+    const log = await screen.findByRole('region', { name: 'Deliveries' });
+    await within(log).findByText('No deliveries to show yet.');
+    expect(unnamedLine(log)?.textContent).toContain('12 more deliveries no trigger names in the last 30 days');
+  });
+
+  it('says delivery for one', async () => {
+    api.listWebhookDeliveries.mockResolvedValue({
+      deliveries: [],
+      unnamed_days: [{ day: '2026-11-03', count: 1 }],
+      next_after: null,
+    });
+    renderWebhooks({ at, list: [hook] });
+    const log = await screen.findByRole('region', { name: 'Deliveries' });
+    await within(log).findByText('No deliveries to show yet.');
+    expect(unnamedLine(log)?.textContent).toContain('1 more delivery no trigger names in the last 30 days');
+  });
+
+  it('shows no line when nothing is unnamed', async () => {
+    api.listWebhookDeliveries.mockResolvedValue({ deliveries: [], unnamed_days: [], next_after: null });
+    renderWebhooks({ at, list: [hook] });
+    const log = await screen.findByRole('region', { name: 'Deliveries' });
+    await within(log).findByText('No deliveries to show yet.');
+    expect(unnamedLine(log)).toBeUndefined();
   });
 
   it('pages with next_after', async () => {
