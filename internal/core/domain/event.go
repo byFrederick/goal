@@ -114,8 +114,9 @@ const (
 	// of the definition's) and, with a repository, branch_existed.
 	EventPrepared EventKind = "prepared"
 	// EventRunRetried is a run whose sandbox was lost (ports.ErrSandboxLost: a redeploy, a box
-	// restart, a network blip) and that the engine runs again in a new one at the same station.
-	// Data reason, attempt (the lost one) and max.
+	// restart, a network blip) or whose prepare failed before the agent started (goal-agent
+	// prepare exited non-zero or printed no prepared line), and that the engine runs again in a
+	// new box at the same station. Data reason, attempt (the failed one) and max.
 	EventRunRetried EventKind = "run_retried"
 	// EventRulesApplied is the factory rules a run ran with (ADR 0014), written by the gateway
 	// once per run when it first serves the run's bundle, and only when a rule applies. Data
