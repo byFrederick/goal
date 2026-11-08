@@ -149,9 +149,10 @@ const (
 	codeSecretPlacement  = "secret-placement"
 	codeReferenceInvalid = "secret-ref-invalid"
 
-	// codeMovedToEnvironment: a key ADR 0037 moved (spec.connections, an agent's connections,
-	// runtime.modelConnection, size, tools and repository.connection, modelAgrees.connection). An
-	// error with a fix that removes it; Load skips it.
+	// codeMovedToEnvironment: a key ADR 0037 moved to environment files and secret references
+	// (spec.connections, an agent's connections, runtime.modelConnection, size, tools and
+	// repository.connection, modelAgrees.connection), which only versions published before it still
+	// have. An error with a fix that removes it; Load skips it.
 	codeMovedToEnvironment = "moved-to-environment"
 )
 
@@ -678,12 +679,12 @@ var removedKeys = []struct {
 }{
 	{at("spec", keyRuntime, "runner"), "the platform chooses where runs start"},
 	{at("spec", keyRuntime, "image"), "every run starts from the platform's agent image and installs the repository's tools and runtime.tools"},
-	{at("spec", keyRuntime, "auth"), "set runtime.modelConnection to an organization connection with model access"},
+	{at("spec", keyRuntime, "auth"), "set runtime.modelKey to the {{secret}} that holds the model key"},
 	{at("spec", "knowledgeBase"), "list the organization's knowledge sources the factory may search in knowledge.sources"},
-	{at("spec", "secrets"), "the organization's connections hold its credentials"},
+	{at("spec", "secrets"), "the organization's secrets hold its credentials"},
 }
 
-// removedForms names each form connections replaced that the definition still has, with a fix
+// removedForms names each form phase 4 removed that the definition still has, with a fix
 // that takes it out (spec 4 §4.4). They are errors, and the factory records each by path and
 // code for its line (domain.Line.Removed): goald refuses to run a version published before the
 // cutover that has one.

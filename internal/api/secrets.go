@@ -22,10 +22,10 @@ import (
 //
 // What uses a secret is the factories whose current published version refers to it as {{name}}
 // (decision 3: its repository token, model key, a trigger's model-agrees key or an environment
-// file), the knowledge sources that read with it, the organization's Slack notification setting
-// (ports.NotificationSettings) and the connections that refer to it, read through
-// ports.Credentials.UsedBy (the same table). The part that lets webhooks refer to secrets adds
-// their uses to secretUses.
+// file), the knowledge sources that read with it and the organization's Slack notification setting
+// (ports.NotificationSettings). ports.Credentials.UsedBy, which named the connections that
+// referred to it, is always empty now that connections are gone (ADR 0037). The part that lets
+// webhooks refer to secrets adds their uses to secretUses.
 
 // Errors of the secret routes, answered with their codes by secretProblem.
 var (
@@ -381,10 +381,10 @@ func (s *server) importSecret(ctx context.Context, e domain.CredentialImportEntr
 	}
 }
 
-// secretUses is what uses secret name, by kind then name: the connections that refer to it as
-// {{name}}, the factories whose current published version does (archived ones left out, as for a
-// connection's users), the knowledge sources that read with it, the Slack notification setting,
-// when it names the secret, and the organization webhooks it signs. It opens no secret.
+// secretUses is what uses secret name, by kind then name: the factories whose current published
+// version refers to it as {{name}} (archived ones left out), the knowledge sources that read with
+// it, the Slack notification setting, when it names the secret, and the organization webhooks it
+// signs. The connections ports.Credentials.UsedBy names are none now. It opens no secret.
 func (s *server) secretUses(ctx context.Context, name string) ([]gen.SecretUse, error) {
 	conns, err := s.credentials.UsedBy(ctx, name)
 	if err != nil {
