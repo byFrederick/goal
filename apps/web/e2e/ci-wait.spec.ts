@@ -87,18 +87,49 @@ async function expectList(page: Page, label: string, failedWait: boolean) {
   await expectAccessible(page);
 }
 
-for (const [name, waiting, label] of [
-  ['running', running, 'Waiting for CI · 9 of 14'],
-  ['failed', failed, 'CI failed: task web:e2e (3/12)'],
+for (const [name, waiting, label, long] of [
+  ['running', running, 'CI · 9 of 14', 'Waiting for CI · 9 of 14'],
+  ['failed', failed, 'CI failed:', 'CI failed: task web:e2e (3/12)'],
 ] as const) {
-  test(`a ${name} CI wait reads ${label} on a Board card, with its ⓘ`, async ({ page }) => {
+  for (const width of [375, 768, 1440]) {
+    test(`a ${name} CI wait keeps ${label} untruncated on a Board card at ${width} px with 7 stations`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      let patched: string | undefined;
+      await page.route(/\/factories\/[^/]+\/board(\?|$)/, async (route) => {
+        const response = await route.fetch();
+        const board = await response.json();
+        // Pad the board to 7 stations so each column is as narrow as production's.
+        while (board.stations.length < 7) {
+          const copy = structuredClone(board.stations[board.stations.length - 1]);
+          copy.id = `${copy.id}-extra${board.stations.length}`;
+          copy.items = [];
+          board.stations.push(copy);
+        }
+        const station = board.stations.find((s: { items: unknown[] }) => s.items.length > 0);
+        Object.assign(station.items[0], { state: 'queued', waiting });
+        patched = station.id;
+        await route.fulfill({ response, json: board });
+      });
+      await page.goto('/o/acme/f/goal/board');
+      await showStation(page, () => patched);
+      const text = page.getByText(label, { exact: true }).filter({ visible: true }).first();
+      await expect(text).toBeVisible();
+      const fits = await text.evaluate((el) => el.scrollWidth <= el.clientWidth);
+      expect(fits).toBe(true);
+      await expect(page.locator(`[title="${long}"]`).filter({ visible: true }).first()).toBeVisible();
+    });
+  }
+
+  test(`a ${name} CI wait has its ⓘ on a Board card`, async ({ page }) => {
     const station = await patchBoard(page, waiting);
     await page.goto('/o/acme/f/goal/board');
     await showStation(page, station);
     await expectList(page, label, name === 'failed');
   });
 
-  test(`a ${name} CI wait reads ${label} on the item page, with its ⓘ`, async ({ page }) => {
+  test(`a ${name} CI wait reads ${long} on the item page, with its ⓘ`, async ({ page }) => {
     // The item page reads /v1/orgs/{org}/items/{ref}; the pattern leaves out /events, /runs and other subpaths.
     await page.route(/\/v1\/orgs\/[^/]+\/(factories\/[^/]+\/)?items\/[^/?]+(\?|$)/, async (route) => {
       const response = await route.fetch();
@@ -107,6 +138,6 @@ for (const [name, waiting, label] of [
       await route.fulfill({ response, json: item });
     });
     await page.goto('/o/acme/f/goal/items/12');
-    await expectList(page, label, name === 'failed');
+    await expectList(page, long, name === 'failed');
   });
 }

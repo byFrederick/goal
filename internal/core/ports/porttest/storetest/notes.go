@@ -38,8 +38,19 @@ func (f *fixture) appendNote(t *testing.T, e domain.Event) domain.Event {
 	return got
 }
 
-// Notes are appended to open items only, with their id, and read back from the item's latest
-// run on: what the next run's brief carries.
+// agentStarted appends run's agent_started event, as goald records the worker's started line.
+func (f *fixture) agentStarted(t *testing.T, item domain.ItemID, run domain.RunID, at time.Time) {
+	t.Helper()
+
+	if err := f.Store.AppendEvents(f.ctx(t), domain.Event{
+		FactoryID: f.factory, ItemID: item, RunID: run, At: at, Kind: domain.EventAgentStarted, Actor: agWorker,
+	}); err != nil {
+		t.Fatalf("append agent_started: %v", err)
+	}
+}
+
+// Notes are appended to open items only, with their id, and read back from the item's latest run
+// whose agent started on: what the next run's brief carries.
 func testNotes(f *fixture) {
 	t := f.t
 
@@ -54,12 +65,17 @@ func testNotes(f *fixture) {
 	sameEvents(t, []domain.Event{got}, []domain.Event{first})
 	sameEvents(t, f.notes(t, it.ID), []domain.Event{first})
 
-	// A run starts: the notes before it were its brief's.
+	// A run starts and fails before its agent starts: its agent read no brief, so the note stays.
 	f.claim(t, work, 0, t1)
 	f.startRun(t, it.ID, t1)
+	sameEvents(t, f.notes(t, it.ID), []domain.Event{first})
+
+	// The next run's agent starts: the notes before that run were its brief's.
+	run := f.startRun(t, it.ID, t1)
+	f.agentStarted(t, it.ID, run, t1)
 
 	if notes := f.notes(t, it.ID); len(notes) != 0 {
-		t.Errorf("notes after a run started = %+v; want none", notes)
+		t.Errorf("notes after a run's agent started = %+v; want none", notes)
 	}
 
 	second := note(it, "Split it.", t1.Add(time.Minute))

@@ -1,10 +1,15 @@
 // Why a queued or ready item waits on another item, in words. The board card gets one short line
-// (waitingShort); waitingDetail is the tooltip of an item, files or turn wait, and the item page lists each
-// need itself. A CI wait shows its detail behind CIWait's ⓘ.
-import type { ItemWaiting } from '../api/types';
+// (waitingShort) and its tooltip the full list (waitingDetail); the item page lists each need itself.
+import type { CICheck, ItemWaiting } from '../api/types';
 
 /** A commit's sha as people read it: its first 7 characters. */
 export const shortSha = (sha: string): string => sha.slice(0, 7);
+
+/** The checks of one repository that have finished, and all of them: the "9 of 14" of a commit. */
+function repoCounts(checks: readonly CICheck[], repo: string): { finished: number; total: number } {
+  const own = checks.filter((c) => c.repo === repo);
+  return { finished: own.filter((c) => c.state === 'finished').length, total: own.length };
+}
 
 /** The card's one line: "Waits for sre#3", or "Waits for sre#3 +2" when three items hold it. */
 export function waitingShort(
@@ -28,6 +33,24 @@ function ciShort(ci: ItemWaiting['ci']): string {
   return ci && ci.total > 0 ? `Waiting for CI · ${ci.finished} of ${ci.total}` : 'Waiting for CI';
 }
 
+/**
+ * A CI wait on a narrow surface (a Board card, a Plan row): its lead and, after a failure, the check
+ * that failed, so only the check's name has to truncate. The long form is waitingShort.
+ */
+export function ciCard(ci: ItemWaiting['ci']): { lead: string; check?: string } {
+  if (ci?.failure) {
+    const [check] = ci.failure.checks;
+    return check ? { lead: 'CI failed:', check: check.name } : { lead: 'CI timed out' };
+  }
+  return { lead: ci && ci.total > 0 ? `CI · ${ci.finished} of ${ci.total}` : 'CI · waiting' };
+}
+
+/** The card's CI wording as one string: "CI · 9 of 14", "CI · waiting", "CI failed: task web:e2e". */
+export function waitingCard(waiting: Pick<ItemWaiting, 'ci'>): string {
+  const { lead, check } = ciCard(waiting.ci);
+  return check ? `${lead} ${check}` : lead;
+}
+
 /** Where a turn wait lands: its integration branch, or "the default branch" when it has none. */
 export function turnTarget(waiting: Pick<ItemWaiting, 'target'>): string {
   return waiting.target || 'the default branch';
@@ -38,6 +61,19 @@ export function turnTarget(waiting: Pick<ItemWaiting, 'target'>): string {
  * wait (the shared files for a files wait). Nothing is cut short here; the tooltip wraps it.
  */
 export function waitingDetail(waiting: ItemWaiting): string {
+  if (waiting.kind === 'ci') {
+    const ci = waiting.ci;
+    if (!ci) return 'Waiting for CI';
+    const lines = ci.commits.map((c) => {
+      const { finished, total } = repoCounts(ci.checks, c.repo);
+      return `${c.repo} ${shortSha(c.sha)} · ${total > 0 ? `${finished} of ${total}` : 'no checks yet'}`;
+    });
+    for (const check of ci.failure?.checks ?? []) {
+      const jobs = check.failed_jobs.length > 0 ? ` (${check.failed_jobs.join(', ')})` : '';
+      lines.push(`Failed: ${check.name}${jobs}`);
+    }
+    return lines.join('\n');
+  }
   if (waiting.kind === 'turn') {
     return `Waiting for ${waiting.items.join(', ')} to land on ${turnTarget(waiting)}`;
   }

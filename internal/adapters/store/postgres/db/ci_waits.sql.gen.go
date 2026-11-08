@@ -44,7 +44,7 @@ func (q *Queries) CIWaitItem(ctx context.Context, id uuid.UUID) (uuid.UUID, erro
 }
 
 const cIWaitsAt = `-- name: CIWaitsAt :many
-SELECT w.id, w.org_id, w.item_id, w.station, w.visit, w.host, w.repo, w.sha, w.pr_url, w.phase, w.round, w.held, w.started_at, w.ended_at, w.outcome, p.org_id, p.host, p.repo, p.sha, p.next_poll_at, p.interval_seconds, p.etag, p.checks, p.first_check_seen_at, p.last_error, p.lease_owner, p.lease_until
+SELECT w.id, w.org_id, w.item_id, w.station, w.visit, w.host, w.repo, w.sha, w.pr_url, w.phase, w.round, w.held, w.started_at, w.ended_at, w.outcome, p.org_id, p.host, p.repo, p.sha, p.next_poll_at, p.interval_seconds, p.etag, p.checks, p.first_check_seen_at, p.last_error, p.lease_owner, p.lease_until, p.first_polled_at
 FROM ci_waits w
 JOIN ci_polls p ON p.org_id = w.org_id AND p.host = w.host AND p.repo = w.repo AND p.sha = w.sha
 WHERE w.item_id = $1 AND w.station = $2
@@ -100,6 +100,7 @@ func (q *Queries) CIWaitsAt(ctx context.Context, arg CIWaitsAtParams) ([]CIWaits
 			&i.CiPoll.LastError,
 			&i.CiPoll.LeaseOwner,
 			&i.CiPoll.LeaseUntil,
+			&i.CiPoll.FirstPolledAt,
 		); err != nil {
 			return nil, err
 		}
@@ -239,7 +240,7 @@ FROM (
   LIMIT $4
   FOR UPDATE SKIP LOCKED) due
 WHERE p.org_id = due.org_id AND p.host = due.host AND p.repo = due.repo AND p.sha = due.sha
-RETURNING p.org_id, p.host, p.repo, p.sha, p.next_poll_at, p.interval_seconds, p.etag, p.checks, p.first_check_seen_at, p.last_error, p.lease_owner, p.lease_until
+RETURNING p.org_id, p.host, p.repo, p.sha, p.next_poll_at, p.interval_seconds, p.etag, p.checks, p.first_check_seen_at, p.last_error, p.lease_owner, p.lease_until, p.first_polled_at
 `
 
 type LeaseDueCIPollsParams struct {
@@ -278,6 +279,7 @@ func (q *Queries) LeaseDueCIPolls(ctx context.Context, arg LeaseDueCIPollsParams
 			&i.LastError,
 			&i.LeaseOwner,
 			&i.LeaseUntil,
+			&i.FirstPolledAt,
 		); err != nil {
 			return nil, err
 		}
@@ -290,7 +292,7 @@ func (q *Queries) LeaseDueCIPolls(ctx context.Context, arg LeaseDueCIPollsParams
 }
 
 const openCIWaits = `-- name: OpenCIWaits :many
-SELECT w.id, w.org_id, w.item_id, w.station, w.visit, w.host, w.repo, w.sha, w.pr_url, w.phase, w.round, w.held, w.started_at, w.ended_at, w.outcome, p.org_id, p.host, p.repo, p.sha, p.next_poll_at, p.interval_seconds, p.etag, p.checks, p.first_check_seen_at, p.last_error, p.lease_owner, p.lease_until
+SELECT w.id, w.org_id, w.item_id, w.station, w.visit, w.host, w.repo, w.sha, w.pr_url, w.phase, w.round, w.held, w.started_at, w.ended_at, w.outcome, p.org_id, p.host, p.repo, p.sha, p.next_poll_at, p.interval_seconds, p.etag, p.checks, p.first_check_seen_at, p.last_error, p.lease_owner, p.lease_until, p.first_polled_at
 FROM ci_waits w
 JOIN ci_polls p ON p.org_id = w.org_id AND p.host = w.host AND p.repo = w.repo AND p.sha = w.sha
 WHERE w.item_id = $1 AND w.ended_at IS NULL
@@ -340,6 +342,7 @@ func (q *Queries) OpenCIWaits(ctx context.Context, itemID uuid.UUID) ([]OpenCIWa
 			&i.CiPoll.LastError,
 			&i.CiPoll.LeaseOwner,
 			&i.CiPoll.LeaseUntil,
+			&i.CiPoll.FirstPolledAt,
 		); err != nil {
 			return nil, err
 		}
@@ -406,9 +409,10 @@ SET checks = coalesce($1, checks),
     etag = CASE WHEN $2::text = '' THEN etag ELSE $2::text END,
     last_error = $3,
     first_check_seen_at = coalesce(first_check_seen_at, $4),
-    next_poll_at = $5, interval_seconds = $6,
+    first_polled_at = coalesce(first_polled_at, $5),
+    next_poll_at = $6, interval_seconds = $7,
     lease_owner = NULL, lease_until = NULL
-WHERE host = $7 AND repo = $8 AND sha = $9 AND lease_owner = $10
+WHERE host = $8 AND repo = $9 AND sha = $10 AND lease_owner = $11
 `
 
 type RecordCIPollParams struct {
@@ -416,6 +420,7 @@ type RecordCIPollParams struct {
 	Etag             string
 	LastError        string
 	FirstCheckSeenAt *time.Time
+	FirstPolledAt    *time.Time
 	NextPollAt       time.Time
 	IntervalSeconds  int32
 	Host             string
@@ -425,14 +430,15 @@ type RecordCIPollParams struct {
 }
 
 // Records a poll's result under its lease owner and releases the lease; no row when another
-// owner holds the poll or none does. A NULL checks, an empty etag and a first_check_seen_at
-// already set keep what the poll has.
+// owner holds the poll or none does. A NULL checks, an empty etag, and a first_check_seen_at or
+// first_polled_at already set keep what the poll has.
 func (q *Queries) RecordCIPoll(ctx context.Context, arg RecordCIPollParams) (int64, error) {
 	result, err := q.db.Exec(ctx, recordCIPoll,
 		arg.Checks,
 		arg.Etag,
 		arg.LastError,
 		arg.FirstCheckSeenAt,
+		arg.FirstPolledAt,
 		arg.NextPollAt,
 		arg.IntervalSeconds,
 		arg.Host,

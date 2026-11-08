@@ -360,8 +360,10 @@ type Store interface {
 	// ErrNotFound when there is no such item.
 	AppendNote(ctx context.Context, e domain.Event, by domain.Actor) (domain.Event, error)
 
-	// NotesSinceLastRun returns an item's notes appended after its latest run_started event (every
-	// note before its first run), in append order: what the next run's brief carries.
+	// NotesSinceLastRun returns an item's notes appended after the run_started event of its latest
+	// run whose agent started (domain.SinceLastBrief; every note when no run's agent started), in
+	// append order: what the next run's brief carries. A run that failed before its agent started
+	// read none of them, so they stay.
 	NotesSinceLastRun(ctx context.Context, item domain.ItemID) ([]domain.Event, error)
 
 	// ItemEvents returns up to limit of an item's events with an id greater than after, in

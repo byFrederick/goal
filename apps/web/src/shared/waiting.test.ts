@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CICheck, ItemWaiting } from '../api/types';
-import { waitingDetail, waitingShort } from './waiting';
+import { waitingCard, waitingDetail, waitingShort } from './waiting';
 
 type ItemWaitingNeed = ItemWaiting['needs'][number];
 
@@ -111,5 +111,29 @@ describe('a CI wait', () => {
     failure.checks[0] = check({ name: 'lint', state: 'finished', result: 'failed' });
     expect(waitingShort(base({ failure }))).toBe('CI failed: lint');
     expect(waitingShort(base({ failure: { ...failure, checks: [] } }))).toBe('CI timed out');
+  });
+
+  it('words the card line as CI and its count, or CI failed and the check', () => {
+    expect(waitingCard(base({}))).toBe('CI · waiting');
+    expect(waitingCard(base({ finished: 9, total: 14 }))).toBe('CI · 9 of 14');
+    const failure = {
+      repo: 'github.com/acme/app',
+      sha: 'abc',
+      checks: [check({ name: 'task web:e2e', state: 'finished', result: 'failed', failed_jobs: ['3/12'] })],
+    };
+    expect(waitingCard(base({ failure }))).toBe('CI failed: task web:e2e');
+    expect(waitingCard(base({ failure: { ...failure, checks: [] } }))).toBe('CI timed out');
+  });
+
+  it('lists one line per commit with its short sha and counts, then each failed check', () => {
+    const waiting = base({
+      checks: [check({ state: 'finished', result: 'passed' }), check({ name: 'test' })],
+      failure: {
+        repo: 'github.com/acme/app',
+        sha: 'abc',
+        checks: [check({ name: 'e2e', state: 'finished', result: 'failed', failed_jobs: ['3/12'] })],
+      },
+    });
+    expect(waitingDetail(waiting)).toBe('github.com/acme/app 0123456 · 1 of 2\nFailed: e2e (3/12)');
   });
 });

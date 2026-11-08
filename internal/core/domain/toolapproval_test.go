@@ -19,6 +19,7 @@ const (
 	toolDeleteRepo       = "delete_repo"
 	globCreate           = "create_*"
 	globDelete           = "delete_*"
+	connTracker          = "tracker"
 )
 
 // requested is a tool_approval_requested event as the engine writes it; input is its data as the
@@ -28,7 +29,7 @@ func requested(id int64, tool string, input any) Event {
 		ID: id, At: qt0.Add(time.Duration(id) * time.Minute), Kind: EventToolApprovalRequested, Station: stationBuild,
 		Actor: roleArchitect, RunID: runOne,
 		Data: map[string]any{
-			KeyConnection: "tracker", KeyTool: tool, KeyInput: input, KeyAgent: roleArchitect, KeyRunID: runOne,
+			KeyConnection: connTracker, KeyTool: tool, KeyInput: input, KeyAgent: roleArchitect, KeyRunID: runOne,
 			KeyAlwaysAllowOffered: true,
 		},
 	}
@@ -49,6 +50,11 @@ func denied(id int64, note string) Event {
 }
 
 func started(id int64, run RunID) Event { return Event{ID: id, Kind: EventRunStarted, RunID: run} }
+
+// agentStarted is run's agent_started event: its agent read its brief.
+func agentStarted(id int64, run RunID) Event {
+	return Event{ID: id, Kind: EventAgentStarted, RunID: run}
+}
 
 func TestOpenToolApproval(t *testing.T) {
 	t.Parallel()
@@ -94,7 +100,7 @@ func TestToolApprovalOf_ReadsTheInputAsCanonicalJSON(t *testing.T) {
 		"decoded": map[string]any{"issue": float64(7), "body": "LGTM"},
 	} {
 		a := ToolApprovalOf(requested(3, toolCreateComment, input))
-		if string(a.Input) != `{"body":"LGTM","issue":7}` || a.Connection != "tracker" || a.Agent != roleArchitect ||
+		if string(a.Input) != `{"body":"LGTM","issue":7}` || a.Connection != connTracker || a.Agent != roleArchitect ||
 			a.RunID != runOne || a.EventID != 3 || !a.AlwaysAllowOffered {
 			t.Errorf("%s: ToolApprovalOf = %+v (input %s)", name, a, a.Input)
 		}
@@ -105,16 +111,16 @@ func TestGrantedCalls(t *testing.T) {
 	t.Parallel()
 
 	events := []Event{
-		started(1, runOne),
-		requested(2, toolCreateComment, json.RawMessage(`{"body":"one"}`)), granted(3),
-		started(4, "run-2"),
-		requested(5, toolCreateComment, json.RawMessage(`{"body":"two"}`)), denied(6, "Not yet"),
-		started(7, "run-3"),
-		requested(8, toolCloseIssue, json.RawMessage(`{"issue":7}`)), ev(9, EventMoved),
-		started(10, "run-4"),
+		started(1, runOne), agentStarted(2, runOne),
+		requested(3, toolCreateComment, json.RawMessage(`{"body":"one"}`)), granted(4),
+		started(5, "run-2"), agentStarted(6, "run-2"),
+		requested(7, toolCreateComment, json.RawMessage(`{"body":"two"}`)), denied(8, "Not yet"),
+		started(9, "run-3"), agentStarted(10, "run-3"),
+		requested(11, toolCloseIssue, json.RawMessage(`{"issue":7}`)), ev(12, EventMoved),
+		started(13, "run-4"),
 	}
 
-	want := []GrantedCall{{Connection: "tracker", Tool: toolCreateComment, Input: json.RawMessage(`{"body":"one"}`)}}
+	want := []GrantedCall{{Connection: connTracker, Tool: toolCreateComment, Input: json.RawMessage(`{"body":"one"}`)}}
 	if got := GrantedCalls(events, "run-2"); !reflect.DeepEqual(got, want) {
 		t.Errorf("GrantedCalls(run-2) = %+v; want the call granted before it started", got)
 	}
@@ -126,12 +132,34 @@ func TestGrantedCalls(t *testing.T) {
 	}
 }
 
+func TestGrantedCalls_ARunWhoseAgentNeverStartedKeepsTheGrant(t *testing.T) {
+	t.Parallel()
+
+	events := []Event{
+		started(1, runOne), agentStarted(2, runOne),
+		requested(3, toolCreateComment, json.RawMessage(`{"body":"one"}`)), granted(4),
+		started(5, "run-2"), // prepare failed: its agent never started
+		started(6, "run-3"),
+	}
+
+	want := []GrantedCall{{Connection: connTracker, Tool: toolCreateComment, Input: json.RawMessage(`{"body":"one"}`)}}
+	if got := GrantedCalls(events, "run-3"); !reflect.DeepEqual(got, want) {
+		t.Errorf("GrantedCalls(run-3) = %+v; want the grant run-2 never used", got)
+	}
+
+	events = append(events, agentStarted(7, "run-3"), started(8, "run-4"))
+	if got := GrantedCalls(events, "run-4"); len(got) != 0 {
+		t.Errorf("GrantedCalls(run-4) = %+v; want none: run-3's agent started with the grant", got)
+	}
+}
+
 func TestToolDecisionsSinceLastRun(t *testing.T) {
 	t.Parallel()
 
 	events := []Event{
-		started(1, runOne), requested(2, toolCreateComment, json.RawMessage(`{}`)), granted(3),
-		started(4, "run-2"), requested(5, toolCloseIssue, json.RawMessage(`{"issue":7}`)), denied(6, "Keep it open"),
+		started(1, runOne), agentStarted(2, runOne), requested(3, toolCreateComment, json.RawMessage(`{}`)), granted(4),
+		started(5, "run-2"), agentStarted(6, "run-2"),
+		requested(7, toolCloseIssue, json.RawMessage(`{"issue":7}`)), denied(8, "Keep it open"),
 	}
 
 	got := ToolDecisionsSinceLastRun(events)
@@ -140,8 +168,26 @@ func TestToolDecisionsSinceLastRun(t *testing.T) {
 		t.Fatalf("ToolDecisionsSinceLastRun = %+v; want the one denial since the latest run started", got)
 	}
 
-	if none := ToolDecisionsSinceLastRun(append(events, started(7, "run-3"))); len(none) != 0 {
-		t.Errorf("ToolDecisionsSinceLastRun after the next run started = %+v; want none", none)
+	if none := ToolDecisionsSinceLastRun(append(events, started(9, "run-3"), agentStarted(10, "run-3"))); len(none) != 0 {
+		t.Errorf("ToolDecisionsSinceLastRun after the next run's agent started = %+v; want none", none)
+	}
+}
+
+func TestToolDecisionsSinceLastRun_KeepsWhatARunWhoseAgentNeverStartedMissed(t *testing.T) {
+	t.Parallel()
+
+	events := []Event{
+		requested(1, toolCloseIssue, json.RawMessage(`{"issue":7}`)), denied(2, "Keep it open"),
+		started(3, "run-2"), // prepare failed: its agent never started
+		started(4, "run-3"),
+	}
+
+	if got := ToolDecisionsSinceLastRun(events); len(got) != 1 || got[0].Note != "Keep it open" {
+		t.Errorf("ToolDecisionsSinceLastRun = %+v; want the denial run-2's agent never read", got)
+	}
+
+	if none := ToolDecisionsSinceLastRun(append(events, agentStarted(5, "run-3"))); len(none) != 0 {
+		t.Errorf("ToolDecisionsSinceLastRun after run-3's agent started = %+v; want none", none)
 	}
 }
 

@@ -1,6 +1,5 @@
-// The waits an item is in, shown two ways: WaitLine is the board's one quiet line (the full list is its
-// tooltip for an item, files or turn wait; a CI wait shows its detail behind CIWait's ⓘ), WaitingFor the
-// item page's Waiting section with each need, its paths and each ref a link.
+// The waits an item is in, shown two ways: WaitLine is the board's one quiet line (its full list is the
+// tooltip), WaitingFor the item page's Waiting section with each need, its paths and each ref a link.
 import { Link } from '@tanstack/react-router';
 import type { ItemWaiting } from '../api/types';
 import { cn } from '../ui/cn';
@@ -25,7 +24,7 @@ export function WaitLine({
     return (
       <span className={cn('flex min-w-0 items-center gap-2 text-muted', className)}>
         {status ? <StatusIcon status={status} className="text-muted" /> : null}
-        <CIWait waiting={waiting} />
+        <CIWait waiting={waiting} card />
       </span>
     );
   }
