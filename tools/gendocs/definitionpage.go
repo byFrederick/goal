@@ -147,14 +147,25 @@ func (s definitionSchema) resolve(n *node) (*node, []string, error) {
 	return n, refs, nil
 }
 
-// typeObject is the type of a schema with properties.
-const typeObject = "object"
+// typeObject is the type of a schema with properties, and typeAny that of one the page cannot
+// name.
+const (
+	typeObject = "object"
+	typeAny    = "any"
+)
+
+// The keywords that combine subschemas.
+const (
+	keyAllOf = "allOf"
+	keyOneOf = "oneOf"
+	keyAnyOf = "anyOf"
+)
 
 // typeOf names the type of schema n in words: string, array of object, map of string, one of `"a"`, `"b"`.
 func (s definitionSchema) typeOf(n *node, depth int) (string, error) {
 	n, _, err := s.resolve(n)
 	if err != nil || n == nil {
-		return "any", err
+		return typeAny, err
 	}
 
 	if depth > 8 {
@@ -205,14 +216,14 @@ func literalType(n *node) string {
 func (s definitionSchema) variantTypes(n *node, depth int) (string, error) {
 	var branches []*node
 
-	for _, key := range []string{"oneOf", "anyOf"} {
+	for _, key := range []string{keyOneOf, keyAnyOf} {
 		if n.get(key) != nil {
 			branches = append(branches, n.get(key).items...)
 		}
 	}
 
 	if n.get("if") != nil {
-		branches = append(branches, n.get("then"), n.get("else"))
+		branches = append(branches, thenOrItsTest(n), n.get("else"))
 	}
 
 	var names []string
@@ -227,23 +238,26 @@ func (s definitionSchema) variantTypes(n *node, depth int) (string, error) {
 			return "", err
 		}
 
-		if name == "any" && b == n.get("then") && n.get("if").get("type") != nil {
-			name, err = s.typeOf(n.get("if"), depth+1)
-			if err != nil {
-				return "", err
-			}
-		}
-
-		if name != "any" && !slices.Contains(names, name) {
+		if name != typeAny && !slices.Contains(names, name) {
 			names = append(names, name)
 		}
 	}
 
 	if len(names) == 0 {
-		return "any", nil
+		return typeAny, nil
 	}
 
 	return strings.Join(names, " or "), nil
+}
+
+// thenOrItsTest is n's then, or its if when that only tests the type and the then states none.
+func thenOrItsTest(n *node) *node {
+	then := n.get("then")
+	if then != nil && typeTest(n.get("if")) && then.get("type") == nil && then.get("$ref") == nil && then.get("properties") == nil {
+		return n.get("if")
+	}
+
+	return then
 }
 
 func (s definitionSchema) namedType(n *node, t string, depth int) (string, error) {
@@ -363,7 +377,7 @@ func addFields(out, fs []field, condition string) []field {
 func variants(n *node) []*node {
 	var out []*node
 
-	for _, key := range []string{"oneOf", "anyOf", "allOf"} {
+	for _, key := range []string{keyOneOf, keyAnyOf, keyAllOf} {
 		if n.get(key) != nil {
 			out = append(out, n.get(key).items...)
 		}
@@ -448,24 +462,35 @@ func constrainsOnly(n *node) bool {
 		}
 	}
 
-	if props := n.get("properties"); props != nil {
-		for _, k := range props.keys {
-			p := props.fields[k]
-			if p.scalar == false || (len(p.keys) == 1 && p.get("const") != nil) {
-				continue
-			}
+	return pinsOnly(n.get("properties")) && subschemasConstrainOnly(n)
+}
 
+// pinsOnly reports whether each of properties is pinned to a const or forbidden.
+func pinsOnly(properties *node) bool {
+	if properties == nil {
+		return true
+	}
+
+	for _, k := range properties.keys {
+		p := properties.fields[k]
+		if p.scalar != false && (len(p.keys) != 1 || p.get("const") == nil) {
 			return false
 		}
 	}
 
+	return true
+}
+
+// subschemasConstrainOnly reports whether n's then, else, not and combined subschemas all only
+// constrain.
+func subschemasConstrainOnly(n *node) bool {
 	for _, k := range []string{"then", "else", "not"} {
 		if v := n.get(k); v != nil && !constrainsOnly(v) {
 			return false
 		}
 	}
 
-	for _, k := range []string{"allOf", "oneOf", "anyOf"} {
+	for _, k := range []string{keyAllOf, keyOneOf, keyAnyOf} {
 		if v := n.get(k); v != nil && !allConstrainOnly(v) {
 			return false
 		}
@@ -490,10 +515,64 @@ func allConstrainOnly(branches *node) bool {
 	return true
 }
 
-// rules lists, in schema order, the rules schema n states on its object in allOf entries and
-// oneOf or anyOf branches that only constrain, along the same paths fields takes. path names where
-// n is in the schema, for errors. Entries and branches that add fields are not rules; the rules
-// inside them are.
+// A rulePart is a subschema of an object's schema that is a rule, or that may hold rules.
+type rulePart struct {
+	schema *node
+	path   string
+	scope  ruleScope
+	rule   bool
+}
+
+// ruleParts are the subschemas of n, in schema order, along the paths fields takes: its allOf
+// entries, its oneOf and anyOf (one rule when every branch only constrains, else each branch), its
+// then and else, its array's elements and its map's values.
+func ruleParts(n *node, scope ruleScope, path string) []rulePart {
+	var out []rulePart
+
+	if all := n.get(keyAllOf); all != nil {
+		for i, e := range all.items {
+			at := fmt.Sprintf("%s%s[%d]", path, keyAllOf, i)
+			out = append(out, rulePart{schema: e, path: at, scope: scope, rule: constrainsOnly(e)})
+		}
+	}
+
+	for _, key := range []string{keyOneOf, keyAnyOf} {
+		branches := n.get(key)
+
+		switch {
+		case branches == nil:
+		case allConstrainOnly(branches):
+			choice := &node{object: true, keys: []string{key}, fields: map[string]*node{key: branches}}
+			out = append(out, rulePart{schema: choice, path: path + key, scope: scope, rule: true})
+		default:
+			for i, b := range branches.items {
+				out = append(out, rulePart{schema: b, path: fmt.Sprintf("%s%s[%d]", path, key, i), scope: scope})
+			}
+		}
+	}
+
+	nested := []struct {
+		key   string
+		scope ruleScope
+	}{
+		{"then", scope.within(n.get("if"), true)},
+		{"else", scope.within(n.get("if"), false)},
+		{"items", scope},
+		{"additionalProperties", scope},
+	}
+
+	for _, v := range nested {
+		if sub := n.get(v.key); sub != nil && sub.object {
+			out = append(out, rulePart{schema: sub, path: path + v.key, scope: v.scope})
+		}
+	}
+
+	return out
+}
+
+// rules lists, in schema order and each once, the rules schema n states on its object: its allOf
+// entries and its oneOf or anyOf whose branches only constrain, and those inside the subschemas
+// ruleParts names. path names where n is in the schema, for errors.
 func (s definitionSchema) rules(n *node, scope ruleScope, path string, seen []string) ([]string, error) {
 	n, refs, err := s.resolve(n)
 	if err != nil || n == nil {
@@ -510,69 +589,23 @@ func (s definitionSchema) rules(n *node, scope ruleScope, path string, seen []st
 
 	var out []string
 
-	add := func(rs []string, err error) error {
-		for _, r := range rs {
+	for _, part := range ruleParts(n, scope, path) {
+		var found []string
+
+		if part.rule {
+			r, err := ruleText(part.schema, part.scope, part.path)
+			if err != nil {
+				return nil, err
+			}
+
+			found = []string{r}
+		} else if found, err = s.rules(part.schema, part.scope, part.path+".", seen); err != nil {
+			return nil, err
+		}
+
+		for _, r := range found {
 			if !slices.Contains(out, r) {
 				out = append(out, r)
-			}
-		}
-
-		return err
-	}
-
-	if all := n.get("allOf"); all != nil {
-		for i, e := range all.items {
-			at := fmt.Sprintf("%sallOf[%d]", path, i)
-
-			if constrainsOnly(e) {
-				r, err := ruleText(e, scope, at)
-				if err := add([]string{r}, err); err != nil {
-					return nil, err
-				}
-
-				continue
-			}
-
-			if err := add(s.rules(e, scope, at+".", seen)); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	for _, key := range []string{"oneOf", "anyOf"} {
-		branches := n.get(key)
-		if branches == nil {
-			continue
-		}
-
-		if allConstrainOnly(branches) {
-			r, err := ruleText(&node{object: true, keys: []string{key}, fields: map[string]*node{key: branches}}, scope, path+key)
-			if err := add([]string{r}, err); err != nil {
-				return nil, err
-			}
-
-			continue
-		}
-
-		for i, b := range branches.items {
-			if err := add(s.rules(b, scope, fmt.Sprintf("%s%s[%d].", path, key, i), seen)); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	nested := []struct {
-		key   string
-		scope ruleScope
-	}{
-		{"then", scope.within(n.get("if"), true)}, {"else", scope.within(n.get("if"), false)},
-		{"items", scope}, {"additionalProperties", scope},
-	}
-
-	for _, v := range nested {
-		if sub := n.get(v.key); sub != nil && sub.object {
-			if err := add(s.rules(sub, v.scope, path+v.key+".", seen)); err != nil {
-				return nil, err
 			}
 		}
 	}
@@ -629,7 +662,7 @@ func choiceText(n *node) string {
 		return ""
 	}
 
-	quantity := map[string]string{"oneOf": "exactly one", "anyOf": "at least one"}[n.keys[0]]
+	quantity := map[string]string{keyOneOf: "exactly one", keyAnyOf: "at least one"}[n.keys[0]]
 	if quantity == "" {
 		return ""
 	}

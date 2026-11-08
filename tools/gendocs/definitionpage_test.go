@@ -32,6 +32,8 @@ func assertLines(t *testing.T, page string, want ...string) {
 }
 
 func TestDefinitionPage_RendersBounds(t *testing.T) {
+	t.Parallel()
+
 	page := renderFixture(t, `
 		"agents": {"type": "integer", "minimum": 1, "maximum": 20},
 		"wip": {"type": "integer", "minimum": 1, "default": 2},
@@ -61,6 +63,8 @@ func TestDefinitionPage_RendersBounds(t *testing.T) {
 }
 
 func TestDefinitionPage_RendersStringShorthand(t *testing.T) {
+	t.Parallel()
+
 	page := renderFixture(t, `
 		"checks": {
 			"type": "array",
@@ -80,6 +84,8 @@ func TestDefinitionPage_RendersStringShorthand(t *testing.T) {
 }
 
 func TestDefinitionPage_RendersRules(t *testing.T) {
+	t.Parallel()
+
 	page := renderFixture(t, `
 		"kind": {"enum": ["agent", "human"]},
 		"agent": {"type": "string"},
@@ -110,6 +116,8 @@ func TestDefinitionPage_RendersRules(t *testing.T) {
 }
 
 func TestDefinitionPage_RendersRulesInsideAConditionalVariant(t *testing.T) {
+	t.Parallel()
+
 	page := renderFixture(t, `"type": {"enum": ["mcp", "aws"]}`, `,
 		"allOf": [{
 			"if": {"properties": {"type": {"const": "mcp"}}},
@@ -127,6 +135,8 @@ func TestDefinitionPage_RendersRulesInsideAConditionalVariant(t *testing.T) {
 }
 
 func TestDefinitionPage_RuleItCannotDeriveFails(t *testing.T) {
+	t.Parallel()
+
 	_, err := renderDefinitionPage([]byte(`{"properties": {"spec": {"type": "object",
 		"properties": {"kind": {"enum": ["agent"]}, "gate": {"type": "object"}},
 		"allOf": [{"if": {"required": ["action"]}, "then": {"required": ["gate"]}}]}}}`))
