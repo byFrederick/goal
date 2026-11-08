@@ -175,6 +175,9 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	}
 	defer pool.Close()
 
+	// The "db pool" line, once a minute until goald stops: pool starvation shows in the logs.
+	go postgres.LogPoolStats(ctx, postgres.PoolStats(pool), clock, postgres.PoolStatsInterval, log)
+
 	// One value is the Store, Tenancy and Audit. Each binds its transactions to the organization
 	// in ctx: the engine takes it from each line, the API from the request.
 	store := postgres.New(pool)
