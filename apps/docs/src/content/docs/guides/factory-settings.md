@@ -10,6 +10,10 @@ You end with the factory's repository, runtime, budgets and flow set as you want
 - You need `definition:edit` on the factory to change anything. Without it, the groups show the running version read-only and there is no Save changes button.
 - Changes are saved as you make them, into the factory's open draft. Nothing runs on them until you publish.
 
+## An open draft
+
+While the factory has a draft with changes, Settings shows it under the title: its version, the number of changes, Review changes (opens the Definition editor's review) and Discard draft. A change made here or in the Definition editor lands in the same draft, so it never waits unseen. With no changes, or without the definition:edit permission, the banner is not shown.
+
 ## How Save changes publishes
 
 Save changes is in the top bar, with a line beside it that says which version it publishes, for example "Saving publishes v22". While it publishes the button reads "Saving…", and a check shows once the version is out. Save changes:
@@ -36,7 +40,7 @@ Test asks the host's API whether the token can do what the access asks, without 
 
 | Field | Sets | Notes |
 |---|---|---|
-| Repositories | `runtime.repositories` | Add a repository opens the entries in place: name, URL, access, token and whether items without a repository use it. Remove takes a row out. Both edit the draft; Save changes publishes it. |
+| Repositories | `runtime.repositories` | Add a repository opens the entries in place: name, URL, access, token and whether items without a repository use it. Remove takes a row out. On a factory that uses the `runtime.repository` shorthand, Add moves it into the list as a `repo` entry; removing the row Add created, before you change anything else, brings the shorthand back. Both edit the draft; Save changes publishes it. |
 | Agents that write | each agent's `code` | "All agents" unless an agent is set to read; otherwise the agents that write. Change an agent's access on the Agents page. |
 | Branch names | none | Read only: `goal/<number>-<slug>`, in every repository an item changes. |
 | Default branch | none yet | Shows "Not available yet". The API does not return the host's default branch. |

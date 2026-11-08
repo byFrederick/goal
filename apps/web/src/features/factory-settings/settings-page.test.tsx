@@ -1,15 +1,51 @@
 // @vitest-environment jsdom
-import { act, cleanup, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { listMembers } from '../../api/client';
 import { defKeys, membersQuery, orgQuery } from '../../api/queries';
 import type { Factory, Member, Org, OrgSummary } from '../../api/types';
+import { factoryModelOf, type Model } from '../../shared/definition/model';
 import { renderFactoryPage } from '../../test/route';
 import { FactorySettingsPage } from './settings-page';
 
 vi.mock(import('../../api/client'), async (original) => ({
   ...(await original()),
   listMembers: vi.fn(async () => []),
+}));
+
+const draftState = vi.hoisted(() => ({ changes: 0 }));
+
+vi.mock(import('../../api/definitions'), async (original) => ({
+  ...(await original()),
+  getDraft: vi.fn(
+    async () =>
+      ({
+        id: 'draft-1',
+        revision: 1,
+        next_number: 4,
+        change_count: draftState.changes,
+        problem_count: 0,
+        base: { id: 'v3', number: 3 },
+        current: { id: 'v3', number: 3 },
+        sections: [{ section: 'basics', changes: draftState.changes }],
+      }) as never,
+  ),
+  getDraftModel: vi.fn(
+    async () =>
+      ({
+        model: factoryModelOf({
+          basics: { name: 'sre', purpose: 'Triage.', size: 'medium', tools: [], work_types: ['incident'] },
+          line: { stations: [], flow: { release: 'push', targets: {} } },
+          agents: { agents: [] },
+          connections: [],
+          review: { budget: { weekly_usd: 50, on_exhausted: 'drain' } },
+        } as Model),
+        etags: { basics: 'b1', line: 'l1', agents: 'a1', connections: 'c1', review: 'r1' },
+        revision: 1,
+        edited: {},
+        ranges: {},
+      }) as never,
+  ),
 }));
 
 vi.mock(import('../../api/org-notifications'), async (original) => ({
@@ -55,17 +91,43 @@ const member = (name: string, role: Member['role']): Member => ({
 const orgWith = (can: string[]): Org => ({ ...org, created_at: '2026-10-01T00:00:00Z', can });
 
 /** Renders the settings page with its factory, the organization's `can` and its members (or none seeded). */
-async function renderSettings({ can = [], members }: { can?: string[]; members?: Member[] } = {}) {
+async function renderSettings({
+  can = [],
+  members,
+  withDraft = false,
+}: {
+  can?: string[];
+  members?: Member[];
+  withDraft?: boolean;
+} = {}) {
+  const open: Factory = withDraft
+    ? {
+        ...factory,
+        current: {
+          id: 'v3',
+          number: 3,
+          published_at: '2026-10-02T00:00:00Z',
+          published_by: { kind: 'user' as const, id: 'u', name: 'Ada' },
+        },
+        draft: {
+          id: 'd1',
+          revision: 1,
+          updated_at: '2026-11-08T10:00:00Z',
+          updated_by: { kind: 'user' as const, id: 'u', name: 'Ada' },
+        },
+        can: [...factory.can, 'definition:edit'],
+      }
+    : factory;
   const seed: [readonly unknown[], unknown][] = [
     [orgQuery(org.id).queryKey, orgWith(can)],
-    [defKeys.factory(org.id, factory.id), factory],
+    [defKeys.factory(org.id, factory.id), open],
   ];
   if (members) seed.push([membersQuery(org.id).queryKey, members]);
   const rendered = renderFactoryPage({
     page: () => <FactorySettingsPage />,
     path: 'settings',
     org,
-    factory,
+    factory: open,
     seed,
     topBar: true,
   });
@@ -229,5 +291,27 @@ describe('Factory settings page', () => {
       expect(within(group).getByText('Loading')).toBeTruthy();
       expect(group.querySelector('[aria-busy="true"]')).toBeTruthy();
     }
+  });
+
+  it('shows the open draft with its changes, Review changes and Discard draft', async () => {
+    draftState.changes = 2;
+    await renderSettings({ withDraft: true });
+    const banner = await screen.findByRole('region', { name: 'Draft' });
+    expect(within(banner).getByText('Draft of v4, 2 changes')).toBeTruthy();
+    expect(within(banner).getByRole('link', { name: 'Review changes' }).getAttribute('href')).toContain(
+      '/definition/review',
+    );
+    fireEvent.click(within(banner).getByRole('button', { name: 'Discard draft' }));
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+  });
+
+  it('shows no draft banner without changes or without a draft', async () => {
+    draftState.changes = 0;
+    await renderSettings({ withDraft: true });
+    await screen.findByRole('heading', { name: 'Settings' });
+    expect(screen.queryByRole('region', { name: 'Draft' })).toBeNull();
+    cleanup();
+    await renderSettings();
+    expect(screen.queryByRole('region', { name: 'Draft' })).toBeNull();
   });
 });

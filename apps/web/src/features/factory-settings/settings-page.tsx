@@ -19,6 +19,7 @@ import { DraftSessionProvider } from '../factory-editor/draft/use-draft';
 import { BudgetsSection } from './budgets-section';
 import { CodeSection } from './code-section';
 import { DangerZone } from './danger-zone';
+import { SettingsDraftBanner } from './draft-banner';
 import { FlowSection } from './flow-section';
 import { GeneralCard } from './general';
 import { JonahSection } from './jonah-section';
@@ -111,6 +112,7 @@ function SettingsBody({
       <TopBarSlot actions={canEdit ? <SaveChangesAction state={save} /> : undefined} />
       <h1 className="m-0 text-page-title">Settings</h1>
       <SaveRefusal refusal={save.refusal} />
+      <SettingsDraftBanner />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_200px] lg:gap-10">
         <div className="flex min-w-0 flex-col gap-4">
           <GeneralCard factory={factory} />
