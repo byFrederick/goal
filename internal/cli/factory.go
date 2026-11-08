@@ -86,7 +86,7 @@ func factory(ctx context.Context, out *printer, getenv func(string) string, args
 	case "delete":
 		return factoryDelete(ctx, out, getenv, rest)
 	case "ask":
-		return factoryAsk(ctx, out, getenv, rest, pollEvery)
+		return factoryAsk(ctx, out, getenv, rest)
 	default:
 		return errUsage
 	}

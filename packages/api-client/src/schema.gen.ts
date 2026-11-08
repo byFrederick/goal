@@ -1315,7 +1315,7 @@ export interface paths {
         put?: never;
         /**
          * Ask for a change to the factory's definition (a draft request)
-         * @description Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+         * @description Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes every check below is refused with 501 not-built and nothing is queued. Once a runner is wired, goald will run a request in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 501 not-built for every request that passes these checks.
          */
         post: operations["createDraftRequest"];
         delete?: never;
