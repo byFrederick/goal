@@ -51,7 +51,7 @@ Use `↑` and `↓` to move between results, `Enter` to open the one you chose, 
 The account page, titled Your account, holds your own settings. Open it from the account menu with Profile. Its left list jumps to each section:
 
 - **Profile.** Name is the name others see. Email for notifications is the address Goal uses for notification email and Slack; blank uses your sign-in email. Change either, then choose Save changes in the top bar.
-- **Appearance.** Choose Auto, Light or Dark. The account menu's Theme row sets the same choice.
+- **Appearance.** Choose Match device, Light or Dark. The account menu's Theme row sets the same choice, where Match device is called Auto.
 - **Sessions.** Shows This browser, marked This device. Sign out everywhere ends your sign-in on every device.
 
 The Notifications section is covered in [Set up notifications](/docs/guides/set-up-notifications/).
