@@ -1,7 +1,7 @@
 // The standing rules (Always allow, ADR 0037 decision 8) of one MCP server, under the tool group that holds
 // their tool, each with Revoke. The organization's active rules come from one query; the ones of this
 // factory, this environment and this server are picked by factory id (never by name), environment and server.
-// Revoke needs connection:manage and a sign-in from the last 10 minutes (session.ts opens the re-auth dialog
+// Revoke needs standing_rule:manage and a sign-in from the last 10 minutes (session.ts opens the re-auth dialog
 // and sends the request again). A revoked row leaves with an opacity and height collapse (MOTION.md), and a
 // 409 standing-rule-revoked is read to the person as goald words it, with the list refreshed.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -56,7 +56,7 @@ export function RulesPlaceholder() {
 
 function RuleRow({ rule }: { rule: StandingRule }) {
   const org = useOrg();
-  const canRevoke = useOrgHolds('connection:manage');
+  const canRevoke = useOrgHolds('standing_rule:manage');
   const client = useQueryClient();
   const [leaving, setLeaving] = useState(false);
   // The list is refreshed once the row has left, so the exit plays; an unmount first refreshes it at once.

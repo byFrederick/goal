@@ -206,7 +206,7 @@ func TestAPI_SignIn_OrgsByMembership(t *testing.T) {
 
 	org := decode[gen.Org](t, h.as(t, viewerToken, http.MethodGet, acmePath, ""), http.StatusOK)
 
-	wantCan := []string{"access:read", "connection:read", "knowledge:read", "member:read", "org:read", "personal_token:manage", "personal_token:read", "secret:read"}
+	wantCan := []string{"access:read", "knowledge:read", "member:read", "org:read", "personal_token:manage", "personal_token:read", "secret:read", "standing_rule:read"}
 	if org.Role == nil || *org.Role != gen.OrgRoleMember || !slices.Equal(org.Can, wantCan) || org.FactoryCount != 1 {
 		t.Errorf("acme for its viewer = role %v can %v count %d, want member, %v, 1", org.Role, org.Can, org.FactoryCount, wantCan)
 	}

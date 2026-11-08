@@ -22,7 +22,7 @@ export const scopeGroups: readonly { id: 'read' | 'work' | 'build'; label: strin
       { id: 'factory:read', label: 'See factories', needs: 'viewer' },
       { id: 'intake:read', label: 'See intake triggers', needs: 'viewer' },
       { id: 'audit:read', label: 'Read the audit log', needs: null },
-      { id: 'connection:read', label: 'See standing rules', needs: null },
+      { id: 'standing_rule:read', label: 'See standing rules', needs: null },
       { id: 'knowledge:read', label: 'Search the knowledge base', needs: null },
     ],
   },
