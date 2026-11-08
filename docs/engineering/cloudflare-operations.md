@@ -91,7 +91,27 @@ Every secret comes from the one place that makes it, and nobody copies one by ha
 
 The master keys stay in SOPS, not `random_password`, on purpose: they must be escrowed outside the state (losing them loses every organization's credentials), they rotate as a list (`k2:<new>,k1:<old>`, then `goal db rekey`), and a generated one would be replaced, with no way back, by any `-replace` or recreation of its resource. Everything else Goal can make again: a lost generated secret is rotated, not recovered.
 
-The URLs follow prototype 4-2 (`modules/database-urls`): port 5432 (never PgBouncer's 6432, which drops notifications and session advisory locks), the PostgreSQL database `goal`, users `<role>.<branch-id>` with the branch id of the administrator's user name, `sslmode=verify-full&sslrootcert=system` for goald and goal db init (pgx; goald's image carries a CA bundle), `sslmode=verify-full` alone for the auth service (node-postgres reads `sslrootcert` as a file), goald's pool capped at `pool_max_conns=8` (PS-5 leaves 22 connections: goald's pool and listeners, auth's pool of 10, migrations), passwords URL-encoded.
+The URLs follow prototype 4-2 (`modules/database-urls`): port 5432 (never PgBouncer's 6432, which drops notifications and session advisory locks), the PostgreSQL database `goal`, users `<role>.<branch-id>` with the branch id of the administrator's user name, `sslmode=verify-full&sslrootcert=system` for goald and goal db init (pgx; goald's image carries a CA bundle), `sslmode=verify-full` alone for the auth service (node-postgres reads `sslrootcert` as a file), goald's pool capped at `pool_max_conns=16` (Connection budget, below), passwords URL-encoded.
+
+### Connection budget
+
+PS-5 has `max_connections = 25` and reserves 3 for superusers, which leaves 22 for Goal. They are split as follows; a change to one share must keep the sum at or under 22.
+
+| Holder | Connections | Set in |
+| --- | --- | --- |
+| goald's pgxpool, its listeners included | 16 | `goald_pool_max_conns` in `deploy/terraform/locals.tf`, sent as `pool_max_conns` in `GOAL_DATABASE_URL` |
+| the auth service's pg.Pool | 4 | `poolMax` in `apps/auth/src/db.ts` |
+| migrations (`goal db init`) | 2 | what is left |
+
+A new limit takes effect only when its process starts: goald's when the Worker restarts goald after the URL secret changes (Deploys), auth's when its new image is deployed. Between the Terraform apply and that deploy, a goald that restarts on its own holds the new 16 while auth may still hold an older, larger pool, so dispatch the deploy right after the apply.
+
+*Check:* the PlanetScale dashboard shows the database's open connections, or, as the administrator on the `goal` database:
+
+```sql
+SELECT usename, application_name, count(*) FROM pg_stat_activity GROUP BY 1, 2;
+```
+
+goald's rows are user `goal_app.<branch-id>`, auth's are application `goal-auth`. Requests that wait for a free connection show as slow API calls with few queries; goald logs no line for pool waits yet.
 
 `deploy/terraform/secrets/production.sops.yaml` is committed, encrypted with age to `age1kttpj5ev6g08st6s20nezlqjdaa75l30z08nxhudpe2eapcv7fwqsv47mz` (the creation rule in `deploy/terraform/.sops.yaml`, which every sops task passes with `--config`); keys stay readable, values are encrypted. `task tf:sops-test`, part of `task tf:check`, encrypts and decrypts a sample under the same rule with a throwaway age key, so a broken rule fails the check without touching the real key. The plan refuses any value still empty, but the SMTP URL.
 
