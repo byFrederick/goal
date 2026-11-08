@@ -49,6 +49,7 @@ object, required.
     - `token`: string. The {{secret}} that opens the repositories. Required for write; omit it for a public repository that is read.
     - `access`: one of `"read"`, `"write"`, required. write lets agents whose code is write push, open pull requests and merge; read never does.
     - `default`: boolean. The entry an item uses when it names no repository. At most one entry has it, and it must name one repository. The only entry is the default when it names one repository.
+  - `buildCache`: boolean, default `true`. Whether runs restore and save a per-repository cache of Go's module and build caches and the pnpm store. Default true.
   - `runner`: one of `"docker"`, `"ecs"`. Removed in phase 4 (field-removed): the platform chooses the sandbox backend.
   - `image`: string. Removed in phase 4 (field-removed): set image in an environment file.
   - `auth`: one of `"claude-subscription"`, `"anthropic-api-key"`, `"bedrock"`. Removed in phase 4 (field-removed): set modelKey.

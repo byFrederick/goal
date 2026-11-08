@@ -47,6 +47,8 @@ type Store struct {
 	views  map[domain.SavedViewID]savedViewRecord
 	ci     ciRows
 	jonah  jonahRows
+	// buildCaches is the build cache index (ports.BuildCaches).
+	buildCaches []buildCacheRow
 	// exhausted holds since when each factory's weekly budget is used up (MarkBudgetExhausted).
 	exhausted map[domain.FactoryID]time.Time
 	ids       int

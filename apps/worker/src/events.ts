@@ -1,4 +1,5 @@
 import type { SDKMessage, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { BuildCacheOutcome } from './cache.js';
 
 /**
  * The worker's stdout protocol: one JSON object per line. goald decodes it with
@@ -78,6 +79,11 @@ export interface Finished {
   peak_memory_bytes?: number;
   /** Where peak_memory_bytes came from: 'cgroup' or 'machine' (/proc/meminfo); absent with it. */
   memory_source?: 'cgroup' | 'machine';
+  /**
+   * How the run's build cache went (src/cache.ts): hit, miss, off or error. Absent when the run
+   * cloned no workspace or its repository uses neither Go nor pnpm.
+   */
+  build_cache?: BuildCacheOutcome;
 }
 
 /** Progress text is cut to these lengths; events are for watching, not for replaying. */

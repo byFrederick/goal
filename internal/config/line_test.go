@@ -315,6 +315,47 @@ func TestLine_WeeklyBudgetMapsToTheRuntime(t *testing.T) {
 	}
 }
 
+// runtime.buildCache maps onto the runtime; absent keeps the cache on, and the schema refuses a
+// value that is not a boolean.
+func TestLine_BuildCacheMapsToTheRuntime(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		field   string
+		want    bool
+		wantErr bool
+	}{
+		{name: "omitted", want: true},
+		{name: "true", field: "    buildCache: true\n", want: true},
+		{name: "false", field: "    buildCache: false\n", want: false},
+		{name: "a string", field: "    buildCache: \"off\"\n", wantErr: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			f, err := Load(checkTree(edited(runtimeModel, runtimeModel+tc.field), nil))
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("Load accepted a string runtime.buildCache, want a schema error")
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got := f.Line().Runtime.BuildCacheEnabled(); got != tc.want {
+				t.Errorf("BuildCacheEnabled() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 // A target is a positive number; zero or less is no target and is refused.
 // board.flow.assemblies.overlap says whether goald holds items whose files overlap; it
 // serializes them unless a factory allows it.

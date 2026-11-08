@@ -50,6 +50,7 @@ func TestCheckHost(t *testing.T) {
 		{name: "and its tool approvals", method: http.MethodPost, host: dockerHost, path: api.ToolApprovalPath, want: http.StatusNoContent},
 		{name: "a path under the tool approvals'", method: http.MethodPost, host: evilHost, path: api.ToolApprovalPath + "/x", want: http.StatusMisdirectedRequest},
 		{name: "and its knowledge snapshots", method: http.MethodGet, host: dockerHost, path: api.KnowledgePath + "handbook", want: http.StatusNoContent},
+		{name: "and its build caches", method: http.MethodPut, host: dockerHost, path: api.BuildCachePath + "key/archive", want: http.StatusNoContent},
 	}
 
 	for _, tt := range tests {
