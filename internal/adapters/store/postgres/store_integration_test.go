@@ -36,13 +36,14 @@ func TestStore_Conformance(t *testing.T) {
 		s.exportPage = 2 // so the exports' conformance cases read several pages
 
 		return storetest.Harness{
-			Store: s,
-			Flow:  s,
-			Spend: s,
-			Jonah: s,
-			Tries: s,
-			Kept:  s,
-			Audit: s,
+			Store:       s,
+			Flow:        s,
+			Spend:       s,
+			Jonah:       s,
+			Tries:       s,
+			Kept:        s,
+			Audit:       s,
+			BuildCaches: s,
 			LeaseSpans: func(t *testing.T, org domain.OrgID, id domain.ItemID) []domain.LeaseSpan {
 				t.Helper()
 

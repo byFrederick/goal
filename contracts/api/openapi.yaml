@@ -1783,13 +1783,15 @@ paths:
       tags: [definitions]
       summary: Ask for a change to the factory's definition (a draft request)
       description: >-
-        Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the
-        factory's draft and never publishes. agent, when set, names the agent the request is about
-        (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft
-        is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once
-        trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid
-        while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open
-        while the factory has a queued or running request.
+        Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes
+        every check below is refused with 501 not-built and nothing is queued. Once a runner is
+        wired, goald will run a request in a box that writes its result into the factory's draft
+        and never publishes. agent, when set, names the agent the request is about (Ask Jonah for
+        a fix): an agent of the open draft, or of the current version when no draft is open. 422
+        draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404
+        agent-not-found for an agent the definition does not have; 409 yaml-invalid while the
+        draft's factory.yaml does not parse and agent is set; 501 not-built for every request
+        that passes these checks.
       requestBody:
         required: true
         content:
@@ -4220,8 +4222,8 @@ paths:
       summary: Import credentials from a .env or YAML text
       description: >-
         env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is
-        sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked
-        before anything is written: 400 credential-invalid for an unknown format, text that does
+        sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older
+        name, is taken too). Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does
         not parse, a name that is not a credential name or whose env variable is reserved. A dry
         run answers each name as new or existing, with how many connections use it, and stores
         nothing. A real run creates each new name as an api_key with no factories, and replaces
@@ -4384,8 +4386,8 @@ paths:
       summary: Import secrets from a .env or YAML text
       description: >-
         env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is
-        sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked
-        before anything is written: 400 secret-invalid for an unknown format, text that does not
+        sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older
+        name, is taken too). Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not
         parse, an empty import, or a name that is not a secret name or whose env variable is
         reserved. A dry run answers each name as new or existing, with what uses the existing one,
         and stores nothing. A real run creates each new name open to no factory, and replaces
@@ -8486,7 +8488,7 @@ components:
       description: >-
         One agent run: one container working one item at one station. Its full transcript is not
         kept (phase 2.2); the item's events carry the trace.
-      required: [id, item_id, station, agent, model, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, definition_version_id, definition_version, cpu_seconds, peak_memory_bytes, box_size]
+      required: [id, item_id, station, agent, model, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, definition_version_id, definition_version, cpu_seconds, peak_memory_bytes, box_size, build_cache]
       properties:
         id: { type: string }
         item_id: { type: string }
@@ -8534,6 +8536,20 @@ components:
           allOf: [{ $ref: "#/components/schemas/SandboxSize" }]
           nullable: true
           description: The box size the run ran in; null for a run from before box sizes were recorded
+        build_cache:
+          allOf: [{ $ref: "#/components/schemas/BuildCache" }]
+          nullable: true
+          description: >-
+            What happened to the run's build cache (Go's module and build caches and the pnpm
+            store) while its box prepared; null when the run had no Go or pnpm repository, or for a
+            run from before it was recorded
+    BuildCache:
+      type: string
+      description: >-
+        What happened to a run's build cache: hit restored a matching cache; miss found none, and
+        the box saved one; off is a factory that turned the cache off; error is a restore that
+        failed, so the run went on cold
+      enum: [hit, miss, off, error]
     MemorySource:
       type: string
       description: >-

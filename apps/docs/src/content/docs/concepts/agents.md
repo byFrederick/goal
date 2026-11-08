@@ -42,7 +42,9 @@ A station can run several copies of its agent in parallel. Each copy has a slot,
 4. Each note a person leaves on the item while the run works is passed to the agent as the run continues.
 5. The run ends with exactly one `finished` event, and the item moves on or waits. A run that needs a person ends early: see [questions](../questions/) and [tool approvals](../skills-and-rules/#tools-that-ask-first).
 
-The worker source is in `apps/worker/src`. `agent.ts` builds the agent's options and its permission checks, `run.ts` runs one task, and `prepare.ts` sets the box up.
+A box on a repository that uses Go or pnpm also restores a build cache after it installs the tools: Go's module and build caches and the pnpm store, which an earlier run of the same repository saved. The cache is shared by the organization's runs on that repository and is keyed by its lockfiles (`go.sum`, `go.work.sum`, `pnpm-lock.yaml`) and its Go, Node and pnpm versions, so a change to any of them starts from cold once. When no cache matches, the box saves one after the agent ends, unless the archive is over 2 GiB. A restore that fails never fails the run: it goes on cold. A factory turns the cache off with `runtime.buildCache: false`. Each run reports `hit`, `miss`, `off` or `error`.
+
+The worker source is in `apps/worker/src`. `agent.ts` builds the agent's options and its permission checks, `run.ts` runs one task, `prepare.ts` sets the box up, and `cache.ts` restores and saves the build cache.
 
 ## Where you meet agents
 
