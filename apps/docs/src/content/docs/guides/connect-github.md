@@ -36,6 +36,8 @@ Webhooks bring events in. For what git doesn't do, such as reading issues, check
 
 Publishing warns when an agent that only reads, or a check, can call a GitHub tool that writes. Switch the environment to `github-read`, or set those tools to `ask` or `off`. A token an environment names, such as `GH_TOKEN`, is the environment's: Goal can't narrow it, so make it read-only too. Pick the token the way [Connect code to a factory](../connect-code/#pick-a-token-for-each-entry) describes. When a station waits for CI, goald reads the repository's check runs and commit statuses with the entry's token, so a fine-grained token needs read access to Checks and Commit statuses as well; a factory with no station that waits for CI doesn't need it. The token test on onboarding and in Settings > Code shows a `ci` line with the host's reason; the line is a warning only when a station sets `waitFor: ci` ([Connect code](../connect-code/#pick-a-token-for-each-entry)).
 
+A run's GitHub login also signs in mise's tool downloads from github.com at prepare, which avoids the anonymous rate limit and timeouts; a run with no github.com login downloads anonymously.
+
 ## Add a code host for Enterprise or self-managed GitLab
 
 github.com and gitlab.com are built in. A repository on any other host, such as `ghe.example.com` (GitHub Enterprise) or `gitlab.example.com` (self-managed GitLab), needs its host on the organization's list before a version that uses it publishes or its token is tested.
