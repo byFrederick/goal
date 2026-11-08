@@ -67,6 +67,17 @@ type AuditLog struct {
 	RequestID  *string
 }
 
+type BuildCache struct {
+	OrgID         uuid.UUID
+	RepositoryKey string
+	CacheKey      string
+	ObjectKey     string
+	SizeBytes     *int64
+	State         string
+	CreatedAt     time.Time
+	UsedAt        time.Time
+}
+
 type CiPoll struct {
 	OrgID            uuid.UUID
 	Host             string
