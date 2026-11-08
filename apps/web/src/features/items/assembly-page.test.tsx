@@ -367,7 +367,7 @@ describe('AssemblyPage plan', () => {
     });
 
     const row = planRow('Part 3 title');
-    expect(within(row).getByText('Waiting for CI · 9 of 14')).toBeTruthy();
+    expect(within(row).getByText('CI · 9 of 14')).toBeTruthy();
     expect(within(row).getByRole('button', { name: 'About CI' })).toBeTruthy();
   });
 
