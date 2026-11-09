@@ -721,7 +721,7 @@
                     },
                     "refresh": {
                       "enum": ["onLand", "eachPart"],
-                      "description": "When the integration branch takes in the default branch: onLand (the default), when it lands, or eachPart, before each part runs."
+                      "description": "When the integration branch takes in the default branch. onLand (the default): when the assembly lands. eachPart: each part's brief also tells the agent to bring the integration branch up to date first; goald does not update the branch itself."
                     },
                     "minParts": {
                       "type": "integer",

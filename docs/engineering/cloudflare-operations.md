@@ -229,7 +229,7 @@ What each pattern means:
 
 | What the logs show | Cause | What to do |
 | --- | --- | --- |
-| `db_wait_ms` close to `duration_ms`; between `db pool` lines `empty_acquire_count` and `acquire_duration_ms` rise; `acquired_conns` equals `max_conns` and `idle_conns` is 0 | Pool starvation: requests queue for one of too few connections | Find the requests with the most `queries` (each holds a connection per store call), then cut their queries or raise `goald_pool_max_conns` within the database's connection limit |
+| `db_wait_ms` close to `duration_ms`; between `db pool` lines `empty_acquire_count` and `acquire_duration_ms` rise; `acquired_conns` equals `max_conns` and `idle_conns` is 0 | Pool starvation: requests queue for one of too few connections | Find the requests with the most `queries` (each holds a connection per store call), then cut their queries: the pool cannot grow, because the [Connection budget](#connection-budget) has no connection to spare |
 | `db_wait_ms` low, `duration_ms` high, `queries` small | A slow query | Run the request's queries with `EXPLAIN ANALYZE` on the database |
 | `db_wait_ms` low, `duration_ms` high, `queries` large | Many round trips: each costs the database's latency | Batch the reads; the query budget test pins the counts ([testing.md](testing.md#the-query-budget)) |
 | `canceled_acquire_count` rises | Requests gave up while waiting for a connection: clients timed out or went away | As for pool starvation |
