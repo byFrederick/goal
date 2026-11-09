@@ -33,8 +33,8 @@ type ciCommit struct {
 // reports whether the run may start and, when it may, the `## CI` section its brief starts
 // with:
 //
-//   - a station without waitFor, or an item with no pushed commit (ciCommits): the run starts
-//     with no section;
+//   - a station without waitFor, or an item with no pushed commit and no open pull request
+//     (ciCommits): the run starts with no section;
 //   - a commit whose before wait ended unreadable since the item's latest move or retry: the
 //     item blocks for a person, naming the token and the permission it needs (ciUnreadable);
 //   - a commit with no ended wait: a before wait opens on it and the item goes back to its
@@ -50,7 +50,19 @@ func (e *Engine) ciGate(ctx context.Context, log *slog.Logger, c claimed) (strin
 		return "", "", true
 	}
 
-	commits, err := e.ciCommits(ctx, log, c.line, c.item)
+	waits, err := e.store.CIWaits(ctx, c.item.ID, c.station.ID)
+	if err != nil {
+		e.block(ctx, log, c, fmt.Sprintf("read the item's CI waits: %v", err))
+		return "", "", false
+	}
+
+	reset, err := e.latestMoveOrRetry(ctx, c.item.ID)
+	if err != nil {
+		e.block(ctx, log, c, err.Error())
+		return "", "", false
+	}
+
+	commits, err := e.ciCommits(ctx, log, c.line, c.item, heldPullRequests(waits, ciAfterVisit(reset)))
 	if err != nil {
 		e.block(ctx, log, c, err.Error())
 		return "", "", false
@@ -60,23 +72,11 @@ func (e *Engine) ciGate(ctx context.Context, log *slog.Logger, c claimed) (strin
 		return "", "", true
 	}
 
-	waits, err := e.store.CIWaits(ctx, c.item.ID, c.station.ID)
-	if err != nil {
-		e.block(ctx, log, c, fmt.Sprintf("read the item's CI waits: %v", err))
-		return "", "", false
-	}
-
 	var (
 		settled    []domain.CIWaitRecord
 		pending    []ciCommit
 		unreadable []string
 	)
-
-	reset, err := e.latestMoveOrRetry(ctx, c.item.ID)
-	if err != nil {
-		e.block(ctx, log, c, err.Error())
-		return "", "", false
-	}
 
 	for _, cm := range commits {
 		w, ok := endedWaitOn(waits, cm)
@@ -109,37 +109,75 @@ func (e *Engine) ciGate(ctx context.Context, log *slog.Logger, c claimed) (strin
 	return ciSection(settled), "", true
 }
 
-// ciCommits are the commits the item's CI is waited on (ADR 0044 decision 4): for each
-// repository its runs pushed to (a row with Wrote), the latest pushed head, in the order the
-// runs first pushed to each; for a repository one of the item's pull requests is in, that pull
-// request's current head as Checks returns it instead. A head that cannot be read is logged and
-// the pushed head kept with the pull request's URL, so the poller follows the head. None when
-// no run pushed.
-func (e *Engine) ciCommits(ctx context.Context, log *slog.Logger, l domain.Line, it domain.Item) ([]ciCommit, error) {
+// ciCommits are the commits the item's CI is waited on (ADR 0044 decision 4, amended
+// 2026-11-09): for each repository its runs pushed to (a row with Wrote), the latest pushed head,
+// in the order the runs first pushed to each; for a repository one of the item's pull requests
+// is in, that pull request's current head as Checks returns it instead. A head that cannot be
+// read is logged and the pushed head kept with the pull request's URL, so the poller follows the
+// head. An open pull request of the item, or of held (the pull requests the visit's latest after
+// waits are on, which a held run's output may be the only one to name), in a repository no run
+// pushed to adds that pull request's current head after the pushed ones. None when no run pushed
+// and no pull request is named.
+func (e *Engine) ciCommits(ctx context.Context, log *slog.Logger, l domain.Line, it domain.Item, held []string) ([]ciCommit, error) {
 	runs, err := e.store.Runs(ctx, it.ID, ciRunsBound)
 	if err != nil {
 		return nil, fmt.Errorf("read the item's runs: %w", err)
 	}
 
-	return e.withPullRequests(ctx, log, l, it, pushedHeads(runs)), nil
-}
-
-// withPullRequests puts on each of commits that is in the repository of one of the item's pull
-// requests that pull request's URL and current head, as ciCommits does.
-func (e *Engine) withPullRequests(ctx context.Context, log *slog.Logger, l domain.Line, it domain.Item, commits []ciCommit) []ciCommit {
-	if len(commits) == 0 {
-		return nil
+	urls := it.PullRequests(l)
+	for _, url := range held {
+		if !slices.Contains(urls, url) {
+			urls = append(urls, url)
+		}
 	}
 
-	for _, url := range it.PullRequests(l) {
+	return e.withPullRequests(ctx, log, l, urls, pushedHeads(runs), true), nil
+}
+
+// heldPullRequests are the pull requests the after waits of visit's latest round are on.
+func heldPullRequests(waits []domain.CIWaitRecord, visit string) []string {
+	var urls []string
+
+	for _, w := range latestRound(waits, visit) {
+		if w.PRURL != "" && !slices.Contains(urls, w.PRURL) {
+			urls = append(urls, w.PRURL)
+		}
+	}
+
+	return urls
+}
+
+// withPullRequests puts on each of commits that is in the repository of one of the pull requests
+// at urls that pull request's URL and current head, as ciCommits does. With unpushed, a pull
+// request in a repository no commit is in adds a commit at its head (openHead); one whose head
+// cannot be read is logged and left out, so the merge's own refusal still applies.
+func (e *Engine) withPullRequests(ctx context.Context, log *slog.Logger, l domain.Line, urls []string, commits []ciCommit,
+	unpushed bool,
+) []ciCommit {
+	for _, url := range urls {
 		targets, err := e.codeRepositories(ctx, l, []string{url})
 		if err != nil {
 			log.WarnContext(ctx, "ci gate cannot place a pull request", slog.String("pull_request", url), slog.Any("error", err))
 			continue
 		}
 
-		i := slices.IndexFunc(commits, func(cm ciCommit) bool { return cm.repo == targets[0].repo.Key() })
-		if i < 0 || commits[i].prURL != "" {
+		key := targets[0].repo.Key()
+		i := slices.IndexFunc(commits, func(cm ciCommit) bool { return cm.repo == key })
+
+		switch {
+		case i < 0 && unpushed:
+			head, err := e.openHead(ctx, l, url)
+			if err != nil {
+				log.WarnContext(ctx, "ci gate cannot read a pull request's head", slog.String("pull_request", url), slog.Any("error", err))
+				continue
+			}
+
+			if head != "" {
+				commits = append(commits, ciCommit{repo: key, sha: head, prURL: url})
+			}
+
+			continue
+		case i < 0, commits[i].prURL != "":
 			continue
 		}
 
@@ -152,6 +190,29 @@ func (e *Engine) withPullRequests(ctx context.Context, log *slog.Logger, l domai
 	}
 
 	return commits
+}
+
+// openHead is the head of the pull request at url while it is open, read with the host and token
+// a merge uses (repositoryHost); "" when it is closed or merged, so there is nothing to wait for.
+func (e *Engine) openHead(ctx context.Context, l domain.Line, url string) (string, error) {
+	t, err := e.repositoryHost(ctx, l, url)
+	if err != nil {
+		return "", err
+	}
+
+	cctx, cancel := context.WithTimeout(ctx, ciChecksTimeout)
+	defer cancel()
+
+	pr, err := t.host.PullRequest(cctx, t.repo, t.token, url)
+	if err != nil {
+		return "", fmt.Errorf("read the pull request: %w", err)
+	}
+
+	if !pr.Open || pr.Merged {
+		return "", nil
+	}
+
+	return pr.HeadSHA, nil
 }
 
 // pushedHeads are the latest pushed head of each repository runs (oldest first) wrote to, in the
