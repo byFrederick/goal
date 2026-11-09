@@ -16,6 +16,10 @@ export class Goald extends RealGoald {
     return fakeFor(this.ctx.id) as unknown as Container;
   }
 
+  protected override bootMs(): number {
+    return fakeFor(this.ctx.id).bootMs ?? super.bootMs();
+  }
+
   protected override async environment(): Promise<Record<string, string>> {
     await scheduler.wait(secretsMs);
     return super.environment();
