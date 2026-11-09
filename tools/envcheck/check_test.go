@@ -433,17 +433,26 @@ func TestRegistry_Schema(t *testing.T) {
 		entry   string
 		wantErr string // "" for valid
 	}{
-		"valid":            {valid, ""},
-		"indirect":         {valid + "    indirect: cmd/goald/settings.go\n", ""},
-		"a default value":  {valid + "    default: \"8080\"\n", "default"},
-		"a value":          {valid + "    value: x\n", "value"},
-		"an example":       {valid + "    example: x\n", "example"},
-		"unknown class":    {strings.Replace(valid, "class: config", "class: private", 1), "class"},
-		"unknown reader":   {strings.Replace(valid, "[goald]", "[web]", 1), "readers"},
-		"no readers":       {strings.Replace(valid, "[goald]", "[]", 1), "readers"},
-		"lower-case name":  {strings.Replace(valid, "GOAL_X", "goal_x", 1), "name"},
-		"no meaning":       {strings.Replace(valid, "    meaning: \"A setting.\"\n", "", 1), "meaning"},
-		"required not set": {strings.Replace(valid, "    required: false\n", "", 1), "required"},
+		"valid":    {valid, ""},
+		"indirect": {valid + "    indirect: cmd/goald/settings.go\n", ""},
+		"a default and a condition": {
+			valid + "    default: \"8080\"\n    requiredWhen: \"goald under GOAL_AUTH=session.\"\n", "",
+		},
+		"a secret with a default": {
+			strings.Replace(valid, "class: config", "class: secret", 1) + "    default: \"x\"\n", "default",
+		},
+		"a condition with required true": {
+			strings.Replace(valid, "required: false", "required: true", 1) + "    requiredWhen: \"goald always.\"\n", "requiredWhen",
+		},
+		"a multi-line default": {valid + "    default: \"a\\nb\"\n", "default"},
+		"a value":              {valid + "    value: x\n", "value"},
+		"an example":           {valid + "    example: x\n", "example"},
+		"unknown class":        {strings.Replace(valid, "class: config", "class: private", 1), "class"},
+		"unknown reader":       {strings.Replace(valid, "[goald]", "[web]", 1), "readers"},
+		"no readers":           {strings.Replace(valid, "[goald]", "[]", 1), "readers"},
+		"lower-case name":      {strings.Replace(valid, "GOAL_X", "goal_x", 1), "name"},
+		"no meaning":           {strings.Replace(valid, "    meaning: \"A setting.\"\n", "", 1), "meaning"},
+		"required not set":     {strings.Replace(valid, "    required: false\n", "", 1), "required"},
 		"absolute indirect": {
 			valid + "    indirect: /etc/x\n", "indirect",
 		},
@@ -575,9 +584,9 @@ func TestReference_Stale(t *testing.T) {
 		got := reference(reg)
 
 		for _, want := range []string{
-			"## goald (`cmd/goald`)\n\n| Name | Class | Required | Meaning |\n| --- | --- | --- | --- |\n| `GOAL_LISTEN` | config | yes | The address. |\n",
-			"## The goal CLI (`cmd/goal`)\n\n| Name | Class | Required | Meaning |\n| --- | --- | --- | --- |\n| `GOAL_LISTEN` | config | yes | The address. |\n",
-			"| `AUTH_URL` | public | no | Where \\| it is. |\n",
+			"## goald (`cmd/goald`)\n\n| Name | Class | Required | Default | Meaning |\n| --- | --- | --- | --- | --- |\n| `GOAL_LISTEN` | config | yes |  | The address. |\n",
+			"## The goal CLI (`cmd/goal`)\n\n| Name | Class | Required | Default | Meaning |\n| --- | --- | --- | --- | --- |\n| `GOAL_LISTEN` | config | yes |  | The address. |\n",
+			"| `AUTH_URL` | public | no |  | Where \\| it is. |\n",
 		} {
 			if !strings.Contains(got, want) {
 				t.Errorf("reference lacks %q:\n%s", want, got)
@@ -588,6 +597,51 @@ func TestReference_Stale(t *testing.T) {
 			t.Errorf("reference has a section for a reader with no variables:\n%s", got)
 		}
 	})
+}
+
+func TestReference_Columns(t *testing.T) {
+	t.Parallel()
+
+	reg := registry{Variables: []entry{
+		{
+			Name: "GOAL_ADDR", Readers: []string{readerGoald}, Class: classConfig,
+			Default: "127.0.0.1:8080", RequiredWhen: "goald under GOAL_AUTH=session", Meaning: "The address.",
+		},
+		{Name: "GOAL_TOKEN", Readers: []string{readerGoald}, Class: classSecret, Meaning: "A token."},
+	}}
+
+	got := reference(reg)
+
+	for _, want := range []string{
+		"| Name | Class | Required | Default | Meaning |\n| --- | --- | --- | --- | --- |\n",
+		"| `GOAL_ADDR` | config | goald under GOAL_AUTH=session | `127.0.0.1:8080` | The address. |\n",
+		"| `GOAL_TOKEN` | secret | no |  | A token. |\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("reference lacks %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestReference_Escapes(t *testing.T) {
+	t.Parallel()
+
+	reg := registry{Variables: []entry{
+		{Name: "GOAL_X", Readers: []string{readerGoald}, Class: classConfig, Meaning: "Keys 2:<new>,1:<old>, a|b."},
+	}}
+
+	got := reference(reg)
+
+	row := "| `GOAL_X` | config | no |  | Keys 2:&lt;new&gt;,1:&lt;old&gt;, a\\|b. |\n"
+	if !strings.Contains(got, row) {
+		t.Errorf("reference lacks %q:\n%s", row, got)
+	}
+
+	for line := range strings.SplitSeq(got, "\n") {
+		if strings.HasPrefix(line, "| `") && strings.ContainsAny(line, "<>") {
+			t.Errorf("row has a raw < or >: %q", line)
+		}
+	}
 }
 
 // TestRepository checks this checkout, as task env:check does.

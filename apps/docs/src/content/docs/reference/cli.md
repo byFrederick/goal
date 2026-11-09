@@ -13,7 +13,7 @@ Every command of the `goal` CLI, in the order its usage text lists them: each se
 
 Factory definitions live in goald (drafts and published versions), not in files: goal factory push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, start, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, jonah, test, agent, spend, triggers, webhooks) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
+Every command that talks to goald (run, follow, start, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, jonah, test, agent, spend, triggers, webhooks, lane, intake, key) acts in one organization: --org &lt;slug|id&gt;, else GOAL\_ORG, else org in the config file ($XDG\_CONFIG\_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it), else the install's only organization (decisions are the local user's); with GOAL\_API\_KEY set, or a key or personal token stored by goal login --token, commands act in its own organization
 
 With sign-in on (GOAL\_AUTH=session), commands send GOAL\_API\_KEY (an API key goal\_sk\_… or a personal token goal\_pat\_…) when it is set, else what goal login stored for goald's origin, and only over https or to this machine; a refused credential or permission exits 77
 
@@ -308,7 +308,7 @@ Flags: `--yes`.
 goal factory ask <factory> "<text>" [--agent A] [--wait]
 ```
 
-ask goald to change the factory's draft (a draft request, about agent A with --agent); it never publishes. --wait waits until it is done or failed and prints what it changed
+not built yet: goald refuses every draft request (501 not-built) and queues nothing, so the command fails and --wait never waits. Change the draft with goal factory pull and goal factory push
 
 Flags: `--agent A`, `--wait`.
 
@@ -334,7 +334,7 @@ act in this organization from now on (config file)
 goal org create <slug> --name N [--mark M]
 ```
 
-create an organization (platform admins only)
+create an organization (any signed-in person)
 
 Flags: `--name N`, `--mark M`.
 
@@ -468,7 +468,7 @@ delete it (refused while something uses it; the error names each use)
 goal secret import <file> [--format env|yaml] [--on-conflict replace|skip] [--dry-run]
 ```
 
-import a .env file or a YAML file's credentials: map (format from the extension by default; new names are open to no factory, a name that exists is skipped unless --on-conflict replace); prints each name as new or exists (--dry-run) or what was done with it
+import a .env file or a YAML file's secrets: map (format from the extension by default; new names are open to no factory, a name that exists is skipped unless --on-conflict replace); prints each name as new or exists (--dry-run) or what was done with it
 
 Flags: `--format env|yaml`, `--on-conflict replace|skip`, `--dry-run`.
 
@@ -922,7 +922,7 @@ the catalog's templates, latest version of each
 goal db init
 ```
 
-create the database roles goald runs as (goal\_owner, goal\_app) and hand the schema to goal\_owner
+create the database roles goald and auth run as (goal\_owner, goal\_app, goal\_auth) and hand the schema to goal\_owner
 
 ## goal db migrate
 
@@ -954,7 +954,7 @@ make the person an owner of the organization, the same way
 goal db rekey
 ```
 
-reseal every connection under the active master key (the first of GOAL\_MASTER\_KEYS) as goal\_owner; then drop old keys
+reseal every organization's sealed secrets (connections, credentials and the rest, previous values too) under the active master key (the first of GOAL\_MASTER\_KEYS) as goal\_owner; then drop old keys
 
 ## goal admin list
 

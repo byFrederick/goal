@@ -11,25 +11,48 @@ import (
 
 // The reference pages of the docs site (apps/docs), and their sources.
 const (
-	referenceDir    = "apps/docs/src/content/docs/reference"
-	cliPage         = referenceDir + "/cli.md"
-	definitionPage  = referenceDir + "/definition.md"
-	environmentPage = referenceDir + "/environment.md"
-	glossaryPage    = referenceDir + "/glossary.md"
+	referenceDir        = "apps/docs/src/content/docs/reference"
+	cliPage             = referenceDir + "/cli.md"
+	definitionPage      = referenceDir + "/definition.md"
+	environmentFilePage = referenceDir + "/environment-file.md"
+	memoryFilePage      = referenceDir + "/memory-file.md"
+	environmentPage     = referenceDir + "/environment.md"
+	glossaryPage        = referenceDir + "/glossary.md"
 
-	cliSource         = "internal/cli/main.go"
-	definitionSource  = "contracts/definitions/factory.schema.json"
-	environmentSource = "docs/reference/environment.md"
-	glossarySource    = "docs/reference/glossary.md"
+	cliSource             = "internal/cli/main.go"
+	definitionSource      = "contracts/definitions/factory.schema.json"
+	environmentFileSource = "contracts/definitions/environment.schema.json"
+	memoryFileSource      = "contracts/definitions/memory.schema.json"
+	environmentSource     = "docs/reference/environment.md"
+	glossarySource        = "docs/reference/glossary.md"
 
 	// repoBlob is where a repository-relative link of a copied page points on the site.
 	repoBlob = "https://github.com/byFrederick/goal/blob/main/"
 )
 
 // referencePages are the reference pages gendocs writes, in report order.
-var referencePages = []string{cliPage, definitionPage, environmentPage, glossaryPage}
+var referencePages = []string{cliPage, definitionPage, environmentFilePage, memoryFilePage, environmentPage, glossaryPage}
 
 var errStaleReference = errors.New("reference pages differ from what their sources generate")
+
+// A schemaPage is a reference page rendered from a JSON Schema of the definition's files.
+type schemaPage struct{ page, source, title, description string }
+
+// schemaPages are the pages rendered from the definition's schemas.
+var schemaPages = []schemaPage{
+	{
+		definitionPage, definitionSource, "Factory definition reference",
+		"Every field of a factory definition, with its type, whether it is required, its default and what it means.",
+	},
+	{
+		environmentFilePage, environmentFileSource, "Environment file reference",
+		"Every field of an environment file, environments/<name>.yaml, with its type, whether it is required, its default and what it means.",
+	},
+	{
+		memoryFilePage, memoryFileSource, "Memory file reference",
+		"Every field of memory.yaml, the factory memory, with its type, whether it is required and what it means.",
+	},
+}
 
 // copiedPages are the pages whose body is a docs/reference file's, without its H1.
 var copiedPages = []struct{ page, source, title, description string }{
@@ -47,13 +70,15 @@ func renderReference(fsys fs.FS, usage string) (map[string]string, error) {
 
 	pages := map[string]string{cliPage: renderCLIPage(commands, conventions)}
 
-	schema, err := fs.ReadFile(fsys, definitionSource)
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", definitionSource, err)
-	}
+	for _, p := range schemaPages {
+		schema, err := fs.ReadFile(fsys, p.source)
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", p.source, err)
+		}
 
-	if pages[definitionPage], err = renderDefinitionPage(schema); err != nil {
-		return nil, fmt.Errorf("%s: %w", definitionSource, err)
+		if pages[p.page], err = renderSchemaPage(schema, p); err != nil {
+			return nil, fmt.Errorf("%s: %w", p.source, err)
+		}
 	}
 
 	for _, c := range copiedPages {

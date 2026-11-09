@@ -4,7 +4,7 @@ A `knowledge.sources` entry's shape or its checks (`contracts/definitions/factor
 
 ## Also change
 
-Their tests (`TestCheck_KnowledgeEntries`, `TestCheck_FactoryMemory`, `TestSecretsCheck_KnowledgeSources`, `TestFromYAML_KeepsKnowledgeEntryObjects`); the "Knowledge" and "Factory memory" sections of `docs/engineering/factory-definition.md`; `task docs:ref:gen` for the docs site's definition reference
+Their tests (`TestCheck_KnowledgeEntries`, `TestCheck_FactoryMemory`, `TestSecretsCheck_KnowledgeSources`, `TestFromYAML_KeepsKnowledgeEntryObjects`); the "Knowledge" and "Factory memory" sections of `docs/engineering/factory-definition.md`; `task docs:ref:gen` for the docs site's definition and memory file references
 
 ## Run
 

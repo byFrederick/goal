@@ -54,6 +54,10 @@ type runBundle struct {
 	// Definition is a draft request's draft (definitionBundle), written into the workspace
 	// instead of a repository; nil for every other run.
 	Definition *bundleDefinition `json:"definition,omitempty"`
+	// BuildCache says whether a station run restores and saves the build cache of its workspace's
+	// repository (buildcache.go): off for every other run, a run with no repository and a line
+	// whose runtime.buildCache is false.
+	BuildCache bundleBuildCache `json:"build_cache"`
 }
 
 // bundleDefinition is the factory's draft at the revision a draft request read: every file by
@@ -480,9 +484,13 @@ func (g *Gateway) bundle(ctx context.Context, c domain.TaskClaims) (runBundle, e
 		return runBundle{}, err
 	}
 
-	if err := g.addCode(ctx, line, agent, it.ID, branch, &b); err != nil {
+	rows, err := g.addCode(ctx, line, agent, it.ID, branch, &b)
+	if err != nil {
 		return runBundle{}, err
 	}
+
+	_, cached := cacheRepository(line, rows)
+	b.BuildCache.Enabled = cached && g.servesBuildCache()
 
 	if err := g.addRules(ctx, c, it, &b); err != nil {
 		return runBundle{}, err
@@ -760,16 +768,18 @@ func addRepository(repo domain.Repository, branch, base string, fresh domain.Fre
 
 // addCode puts the run's code in b as the engine decided it at run start (engine.runCode): the
 // item's repositories, an item with no rows using the default entry, each on branch, a login per
-// entry with a token and the prefixes the run may not write.
-func (g *Gateway) addCode(ctx context.Context, line domain.Line, agent domain.AgentSpec, item domain.ItemID, branch string, b *runBundle) error {
+// entry with a token and the prefixes the run may not write. It returns the item's rows.
+func (g *Gateway) addCode(
+	ctx context.Context, line domain.Line, agent domain.AgentSpec, item domain.ItemID, branch string, b *runBundle,
+) ([]domain.ItemRepository, error) {
 	rows, err := g.items.ItemRepositories(ctx, item)
 	if err != nil {
-		return fmt.Errorf("repositories of item %s: %w", item, err)
+		return nil, fmt.Errorf("repositories of item %s: %w", item, err)
 	}
 
 	putCode(line, line.RunCode(agent, domain.ResolveItemRepositories(rows, line)), branch, b)
 
-	return nil
+	return rows, nil
 }
 
 // putCode puts code, a run's under line's entries, in b: its clones, each on branch, a login per

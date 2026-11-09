@@ -18,19 +18,19 @@ Give the item a title and submit it to the factory:
 goal run <factory> "Add a health check endpoint"
 ```
 
-The first line of the brief is the title. Anything after the first line becomes the body, and `--body` adds more text to it. `goal run` follows the item on the terminal until it reaches a human station, asks a question, or stops. Pass `--detach` to submit without following. Other flags: `--type` picks one of the factory's work types, and `--priority` orders the item ahead of others (higher first).
+The first line of the brief is the title. Anything after the first line becomes the body, and `--body` adds more text to it. `goal run` follows the item on the terminal until it reaches a human station, asks a question, or stops. Pass `--detach` to submit without following. Other flags: `--type` picks one of the factory's work types, and `--priority` orders the item ahead of others (higher first). `--at`, `--in` and `--after` delay the start until a time, after a wait or after other items are done, and `--repo` names the repositories the item works on. [Submit and follow items](/docs/guides/submit-and-follow-items/) covers each.
 
 ```sh
 goal run <factory> "Add a health check endpoint" --body "Return 200 from /healthz when the database answers."
 ```
 
-The web app can submit an item too. Setup submits the template's starter item at its last step, the First item step. The step names the repository only when you connected code in the Code step; a factory set up with No code shows the item without repository wording.
+The web app submits items too. Press **New item** in the sidebar or on the Board, or press the key `C`; [Submit and follow items](/docs/guides/submit-and-follow-items/) describes the form. Setup submits the template's starter item at its last step, the First item step. The step names the repository only when you connected code in the Code step; a factory set up with No code shows the item without repository wording.
 
-Agents cannot run without a model key. If the factory has none when the First item step opens, for example because you skipped it in the Line step, the step submits nothing. It says that agents need a model key and shows the same key form as the Line step. **Publish and start** saves the key, publishes it as a new version and then submits the starter item.
+Agents cannot run without a model key. If the factory has none when the First item step opens, the step submits nothing. It says that agents need a model key and shows the same key form as the Line step. **Publish and start** saves the key, publishes it as a new version and then submits the starter item.
 
 ## 2. Watch it move
 
-The item moves through the factory's line: its stations, the agents at each one, and the order they run in all come from the factory's definition. The screens show an example line of Intake, Spec, Build, Review, Done. A factory's own stations may have other names. [Concepts](/docs/concepts/) explains the flow.
+The item moves through the factory's line: its stations, the agents at each one, and the order they run in all come from the factory's definition. The Software delivery template's line is Inbox, Spec, Build, Review, Done. A factory's own stations may have other names. [Concepts](/docs/concepts/) explains the flow.
 
 To follow an item again after the terminal stopped following it:
 
@@ -54,7 +54,7 @@ An item at a human station waits for an approval. Read its outputs with `goal it
 goal approve <item>
 ```
 
-The same command also approves a tool call that the item's agent is waiting on. Pass `--always-allow` only if that agent role should call that tool without asking from now on. That is a standing rule, and it needs the permission to manage secrets and access (`standing_rule:manage`).
+The same command also approves a tool call that the item's agent is waiting on. Pass `--always-allow` only if that agent role should call that tool without asking from now on. That is a standing rule, and it needs the permission to manage standing rules (`standing_rule:manage`). Only owners and admins with a sign-in from the last 10 minutes hold it, and an API key never does.
 
 To refuse a tool call instead, deny it with a note. The agent's next run receives the denial and the note:
 
@@ -102,7 +102,7 @@ If an output is wrong, send the item back for rework. A reason is required:
 goal reject <item> --reason "The health check must not touch the database."
 ```
 
-To leave a note for the agents without sending the item back, use `goal note <item> "<text>"`. The item's next run reads it.
+To leave a note for the agents without sending the item back, use `goal note <item> "<text>"`. The item's next run reads it, and a run in progress reads it between its turns.
 
 To stop an item where it is, use `goal pause <item>`. `goal retry <item>` resumes it.
 
@@ -113,4 +113,4 @@ To stop an item where it is, use `goal pause <item>`. `goal retry <item>` resume
 ## Related
 
 - [Concepts](/docs/concepts/): the factory, its flow, agents and questions.
-- [Reference](/docs/reference/): every command and its flags.
+- [CLI reference](/docs/reference/cli/): every command and its flags.

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"slices"
 	"strconv"
@@ -28,8 +29,10 @@ type ObjectStore struct {
 	mu      sync.Mutex
 	objects map[string][]byte
 	writes  map[string]int
-	// presignErr, when set, is what PresignGet fails with (FailPresign).
+	// presignErr, when set, is what PresignGet and PresignPut fail with (FailPresign).
 	presignErr error
+	// uploadBase is where PresignPut's URLs point: PresignBase until ServeUploadsAt.
+	uploadBase string
 }
 
 // PresignBase is where the fake's presigned URLs point.
@@ -37,7 +40,7 @@ const PresignBase = "https://bucket.example.com/"
 
 // NewObjectStore returns an empty bucket.
 func NewObjectStore() *ObjectStore {
-	return &ObjectStore{objects: map[string][]byte{}, writes: map[string]int{}}
+	return &ObjectStore{objects: map[string][]byte{}, writes: map[string]int{}, uploadBase: PresignBase}
 }
 
 // Get implements ports.ObjectStore.
@@ -97,7 +100,69 @@ func (s *ObjectStore) PresignGet(_ context.Context, key string, ttl time.Duratio
 	return PresignBase + key + "?" + q.Encode(), nil
 }
 
-// FailPresign makes every later PresignGet fail with err; nil makes it sign again.
+// PresignPut implements ports.ObjectStore: the upload base (PresignBase, or what ServeUploadsAt
+// set), the key and the ttl in seconds as X-Amz-Expires, unless FailPresign set an error. A PUT
+// to the URL stores its body at the key when the store serves the base (ServeHTTP).
+func (s *ObjectStore) PresignPut(_ context.Context, key string, ttl time.Duration) (string, error) {
+	if ttl <= 0 {
+		return "", fmt.Errorf("presign upload %s for %s: %w", key, ttl, domain.ErrInvalid)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.presignErr != nil {
+		return "", fmt.Errorf("presign upload %s: %w", key, s.presignErr)
+	}
+
+	q := url.Values{"X-Amz-Expires": {strconv.Itoa(int(ttl.Seconds()))}}
+
+	return s.uploadBase + key + "?" + q.Encode(), nil
+}
+
+// ServeUploadsAt points PresignPut's URLs at base, the URL of a server running the store's
+// ServeHTTP, such as an httptest server's URL with a trailing slash. PresignGet keeps PresignBase.
+func (s *ObjectStore) ServeUploadsAt(base string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.uploadBase = base
+}
+
+// ServeHTTP takes the uploads PresignPut signs: a PUT to /<key> carrying X-Amz-Expires stores its
+// body at key. Any other method is 405, and a PUT without the signed query 403.
+func (s *ObjectStore) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		w.Header().Set("Allow", http.MethodPut)
+		http.Error(w, "only signed uploads", http.StatusMethodNotAllowed)
+
+		return
+	}
+
+	if r.URL.Query().Get("X-Amz-Expires") == "" {
+		http.Error(w, "not a signed upload", http.StatusForbidden)
+
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "read the upload", http.StatusBadRequest)
+
+		return
+	}
+
+	key := strings.TrimPrefix(r.URL.Path, "/")
+
+	s.mu.Lock()
+	s.write(key, body)
+	s.mu.Unlock()
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// FailPresign makes every later PresignGet and PresignPut fail with err; nil makes them sign
+// again.
 func (s *ObjectStore) FailPresign(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

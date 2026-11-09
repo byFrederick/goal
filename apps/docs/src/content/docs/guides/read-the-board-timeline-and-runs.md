@@ -11,14 +11,13 @@ Open a factory's Board at `/o/<org>/f/<factory>/board`.
 
 - **Your role:** when your role on the factory is viewer or approver, a chip next to the title says so, such as "You’re a viewer of sre". On a phone it sits under the top bar. Editors, admins and owners see no chip.
 - **Columns** are the line's stations, in the order work moves through them. Each card is an item.
-- **Lanes** split each column by agent role, so you can see which role has the work.
-- **Cards** show what the run on the item is doing now, and its plan's steps when it has one.
+- **Cards** show what the run on the item is doing now, and name the item's agent. Columns are not split by agent role: to see one role's work, use the **Agent role** filter.
 - **Column order:** a station with a buffer, such as Build, shows its **In progress** cards first, at the top. The **Ready, buffer n of m** cards sit below them, dimmed, under their own label. The same order holds on a phone.
 - **Show N more:** a column shows its first six In progress cards, then a **Show N more** button that reveals the rest. In a station with a buffer, the button ends the In progress group, above the Ready cards. **Show fewer** folds the column back.
 - **Assembly line:** a card that is part of an assembly shows the assembly's title, one pip per part (filled for each merged part) and its place, such as `2 of 4`. An assembly with many parts shows one bar, filled to the share merged, instead of one pip per part.
 - **Repositories:** when the items on the Board name more than one repository, each card shows its first repository as `owner/name` and `+N` for the others. The ⓘ beside it lists every repository and how it joined the item: **Named when filed**, **Factory default**, **An agent pushed to it**, or **A station's output named it**. A Board whose items all use one repository shows none of this. Goal decides this from the items it loaded, not from the factory definition, so a factory with several repositories shows them once an item uses a second one.
 - **Done column:** its header says **Merged pull requests** when a station of the line merges, and **Finished items** when none does. Both show the number finished this week.
-- **Waiting** items say what they wait on: a person's decision, another item, or a clock. An item that waits its turn at a merge station says `Waits for software#763 to land`; its tooltip and the item's Waiting section name the branch it lands on, or the default branch. A waiting card and its row in the list use the same words. An item that waits for CI at a station with `waitFor: ci` says `CI · 9 of 14` on its card (the checks finished, of all of them) while it runs, and `CI · waiting` before Goal has read any. When a failure sent it back, the card says `CI failed: task web:e2e`, naming the first failed check, or `CI timed out` when no check failed. The card keeps these short so they fit its width; hover the line for the long form, `Waiting for CI · 9 of 14` or `CI failed: task web:e2e (3/12)`, which also names the first failed job. The item page shows the long form. Beside the label, the ⓘ (About CI) lists each repository, its commit as a link to the pull request, and each check with its state (Running, Pending, Passed, Failed or Neutral), linked to the check on the code host. The item page shows the same line under its steps.
+- **Waiting** items say what they wait on: a person's decision, another item, or a clock. An item that waits its turn at a merge station says `Waits for software#763 to land`; hover the line and its tooltip names the branch it lands on, or the default branch. The item page does not name the branch: its **Overlaps** card says `Waits for #763 <title>.` The Items list shows the item's state word. An item that waits for CI at a station with `waitFor: ci` says `CI · 9 of 14` on its card (the checks finished, of all of them) while it runs, and `CI · waiting` before Goal has read any. When a failure sent it back, the card says `CI failed: task web:e2e`, naming the first failed check, or `CI timed out` when no check failed. The card keeps these short so they fit its width; hover the line for the long form, `Waiting for CI · 9 of 14` or `CI failed: task web:e2e (3/12)`, which also names the first failed job. The item page shows the long form. Beside the label, the ⓘ (About CI) lists each repository, its commit as a link to the pull request, and each check with its state (Running, Pending, Passed, Failed or Neutral), linked to the check on the code host. The item page shows the same line under its steps.
 - **Constraint:** the column of the line's constraint, the drum, carries a yellow mark and the word **Constraint** in its header. The buffer's **Ready, buffer n of m** group is in that column, whichever station it is. Which station that is comes from the factory definition's `flow.constraint`; without it, the line's detected constraint.
 - **Expedite** items sit in a yellow **Expedite** box in each column, all at the same height across the board; the label is in the first column's box. The boxes show whenever the line has an expedite lane, even when empty. Each column keeps a minimum width of about 200 px; when the stations don't fit, the board scrolls sideways inside its own frame, and you can scroll it with the keyboard once it has focus. On a phone the lane shows just the **Expedite** chip above the station's expedite cards.
 
@@ -26,11 +25,17 @@ A card that moves to another column or lane, because an agent finished or becaus
 
 The search box is in the top bar. The **Board | List** switch shows there from 1024 px wide; on narrower screens, open the list from **Items** in the sidebar. Four dropdown buttons next to the title filter by work type, lane, assembly and agent role; each choice is kept in the page's address, so a link reproduces the view. On a phone, the **Filter** button shows them, with status and grouping by assembly, and the Board has one tab per station.
 
-The Items page at `/o/<org>/f/<factory>/items` lists the same items as a table, with saved views and CSV export. When the items name more than one repository, the table gets a **Repositories** column after **Title**, in the same form as the cards.
+The Items page at `/o/<org>/f/<factory>/items` lists the same items as a table, with saved views and a bulk bar (see below). It has no CSV export. When the items name more than one repository, the table gets a **Repositories** column after **Title**, in the same form as the cards, from 1536 px wide.
+
+## Items: bulk actions and saved views
+
+**Bulk bar.** When you check rows in the Items table, a bar named "Bulk actions" appears at the bottom with "N selected". **Move** opens the Move menu for every checked item, **Pause** pauses each one, **Set lane** sets each one's lane, and **Clear** unchecks them. Move, Pause and Set lane show only when you may operate items; a refusal names the item it concerns.
+
+**Saved views.** The row of tabs above the filters holds the built-in views and your saved ones. To keep the current filters, choose **+ Save view**, name the view and save it. A person who may manage the factory can switch on **Share with the factory**. A view you own, or a shared one when you manage the factory, has an Actions menu with **Rename…** and **Delete…**.
 
 ## Needs you
 
-`/o/<org>/needs-you` lists what waits on a person, across factories: approvals, decisions, questions and alerts. Work from it, then open each item to act on it. A change Jonah proposed that made its number worse also appears here, naming the proposal and its worse number, with no item. **Undo this change** writes the proposal that reverses it and opens it for you to approve; it is refused when an undo of the change already waits or was published, and when a later edit changed the text the proposal replaced. A factory whose weekly budget is used up appears here too, with no item, until its line has room again: it shows what the last 7 days of runs cost against the cap, since when the budget is used up, and when the line resumes on its own, once the oldest runs leave the 7-day window. The Board's line says the same: "Resumes about Mon 02:00" ends its weekly budget message. Raising the cap in a new version clears it at once. [Act on an item](../act-on-an-item/) covers the actions.
+`/o/<org>/needs-you` lists what waits on a person, across factories: approvals, decisions, questions and alerts. Most entries are decided in place: an approval has **Approve** and **Deny** (keys A and D) and, when offered, **Always allow**; a question shows its card to answer. Other entries open the item. A change Jonah proposed that made its number worse also appears here, naming the proposal and its worse number, with no item. **Undo this change** writes the proposal that reverses it and opens it for you to approve; it is refused when an undo of the change already waits or was published, and when a later edit changed the text the proposal replaced. A factory whose weekly budget is used up appears here too, with no item, until its line has room again: it shows what the last 7 days of runs cost against the cap, since when the budget is used up, and when the line resumes on its own, once the oldest runs leave the 7-day window. The Board's line says the same: "Resumes about Mon 02:00" ends its weekly budget message. Raising the cap in a new version clears it at once. [Act on an item](/docs/guides/act-on-an-item/) covers the actions.
 
 ## The item page and its Timeline
 
@@ -43,9 +48,9 @@ The page has six tabs. The tab row sits right under the title and scrolls sidewa
 - **Changes** shows the outputs the stations produced, and says so when nothing has been produced yet.
 - **Checks** shows the checks that have run on the item, and says so when none have.
 
-The selected tab and the note field are the main column. From wide screens the details column sits to the right of them; on narrower screens it comes after the tab's content. It shows the item's details, its cost, the items it overlaps with, and the rules its runs received. The Trace and Teardown tabs hide it and use the full width.
+The selected tab and the note field are the main column. From wide screens the details column sits to the right of them; on narrower screens it comes after the tab's content. It shows the item's details, its cost, the **Overlaps** card, the **Human touches** card and the rules its runs received. The Trace and Teardown tabs hide it and use the full width.
 
-- **Trace** shows every run of the item, oldest first, on one time axis. Each run lists its tool calls, checks, notes and human touches as rows. Select a row to see its detail beside the list. On a narrow column the axis shows fewer, round time marks, so labels never overlap. On a phone, each run is a list and the detail opens under the row. Open it from **Full trace** on the Latest steps card. On a narrow screen the Latest steps card comes after the tab's content, so a link to a tab opens on that tab. It shows "No tool calls yet." before any run, and new steps appear as agents work.
+- **Trace** shows every run of the item, oldest first, on one time axis. Each run lists its tool calls, checks, notes and human touches as rows. Select a row to see its detail beside the list. On a narrow column the axis shows fewer, round time marks, so labels never overlap. On a phone, each run is a list and the detail opens under the row. On a column under 720 px wide, a **Latest steps** card after the tab's content shows the newest steps, with **Full trace** to open this tab; it says "No tool calls yet." before any run. On a phone the card is **Latest in this run**, and **All N events** opens the full timeline. Wider screens have no such card: use the Trace tab.
 - **Watch live** (the button in the item's header) opens the Trace tab and scrolls to the newest step of the run that is working (smoothly, or at once if your system reduces motion), and keeps new tool calls, results and agent messages in view as they arrive. Scroll up to stop following; select **Watch live** again to scroll back to the newest step and follow again. The button is disabled, with the tip "No run is working on this item", when no run is working or the item is not in progress.
 
 - **Teardown** shows where the item's lead time, cost and human help went, worked out from its runs and events each time you open the tab. It has four figures: lead time against the factory's target, cost against the item's budget, the rework loops with their time and cost, and the human touches. Below them, **Time by station** splits each station's time into working and waiting. Stations follow the line's order, so a station the item was sent back to keeps its place; a station no longer in the line comes last. **Runs** lists each run with its agent, model, turns, time, cost and outcome. **Why it went back** lists each failed check or send-back with its reason, and links to that step in the Trace tab. **Human touches** lists each time a person stepped in and how long the item waited for them, and links to the Timeline. An item no agent has picked up shows "No breakdown yet". Runs takes the full width when nothing went back and no person stepped in; otherwise it shares the row with those two lists on wide screens. Below 1000 px the Waiting column is hidden and Runs is a list.
@@ -90,13 +95,14 @@ An item that does not exist, or that you cannot see, exits with an error and pri
 
 ## Runs
 
-`/o/<org>/runs` lists the organization's agent runs, newest first, across every factory. Each row shows the factory, the item, the station, the agent, the model, when the run started, how long it took, its turns, its cost, its CPU, its peak memory, the size of its box and its status.
+`/o/<org>/runs` lists the organization's agent runs, newest first, across every factory. It covers one UTC day, picked from the **Today** or **Yesterday** menu, and shows at most 50 rows. **Export CSV** downloads the runs. Each row shows the factory, the item, the station, the agent, the model, when the run started, how long it took, its turns, its cost, its CPU, its peak memory, the size of its box and its **Outcome**: **Running**, **Finished**, **Stopped** or **Failed**.
 
 - **CPU** is the box's CPU time from prepare to the end of the run, shown as seconds (`42 s`) or minutes (`3.1 min`).
 - **Peak memory** is the most memory the box used at once, for example `1.2 GB`. It is read from the box's cgroup where it has one, and otherwise from the machine's memory in use, which includes the box's own system processes.
+- **Cache** is the label under CPU: whether the run's box restored the saved Go and pnpm caches of its repository. **Cache hit** restored a matching cache. **Cache miss** found none, so the box saved one for later runs. **Cache off** means the factory turned the cache off (`runtime.buildCache`). **Cache error** means the restore failed and the run went on cold. No label means the run had no Go or pnpm repository, or ran before the cache existed. On the item page, the Details card shows the same label as a Build cache row for the run working the item.
 - **Box** is the box's size: Small, Medium or Large.
 
-A column shows — when the run is still going, or when the box couldn't measure the value. CPU, Peak memory and Box show from 1440 px wide; the ⓘ beside CPU repeats these meanings.
+A column shows — when the run is still going, or when the box couldn't measure the value. Model shows from 1024 px wide and Turns from 1280 px. CPU, Peak memory, Box and Outcome show from 1440 px wide; the ⓘ beside CPU repeats these meanings.
 
 Narrow the list with the search box and the filters. The CLI does the same:
 
@@ -105,7 +111,7 @@ goal runs --factory acme-line --status running
 goal runs --since 2026-10-26T00:00:00Z --limit 20
 ```
 
-Runs no longer has a Send to Jonah button: Jonah reads the line's evidence on its own. To keep an item as a test, use the Teardown tab of the item ([Act on an item](../act-on-an-item/#keep-an-item-as-a-test)).
+Runs no longer has a Send to Jonah button: Jonah reads the line's evidence on its own. To keep an item as a test, use the Teardown tab of the item ([Act on an item](/docs/guides/act-on-an-item/#keep-an-item-as-a-test)).
 
 `--status` takes `running`, `succeeded`, `failed` or `cancelled`. A long list prints a `--cursor` for the next page.
 
@@ -124,6 +130,6 @@ goal andon acme-line
 
 ## Related
 
-- [Act on an item](../act-on-an-item/)
-- [Submit and follow items](../submit-and-follow-items/)
+- [Act on an item](/docs/guides/act-on-an-item/)
+- [Submit and follow items](/docs/guides/submit-and-follow-items/)
 - [Concepts](/docs/concepts/) for stations, lanes and runs.

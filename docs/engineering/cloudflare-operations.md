@@ -91,7 +91,38 @@ Every secret comes from the one place that makes it, and nobody copies one by ha
 
 The master keys stay in SOPS, not `random_password`, on purpose: they must be escrowed outside the state (losing them loses every organization's credentials), they rotate as a list (`k2:<new>,k1:<old>`, then `goal db rekey`), and a generated one would be replaced, with no way back, by any `-replace` or recreation of its resource. Everything else Goal can make again: a lost generated secret is rotated, not recovered.
 
-The URLs follow prototype 4-2 (`modules/database-urls`): port 5432 (never PgBouncer's 6432, which drops notifications and session advisory locks), the PostgreSQL database `goal`, users `<role>.<branch-id>` with the branch id of the administrator's user name, `sslmode=verify-full&sslrootcert=system` for goald and goal db init (pgx; goald's image carries a CA bundle), `sslmode=verify-full` alone for the auth service (node-postgres reads `sslrootcert` as a file), goald's pool capped at `pool_max_conns=8` (PS-5 leaves 22 connections: goald's pool and listeners, auth's pool of 10, migrations), passwords URL-encoded.
+The URLs follow prototype 4-2 (`modules/database-urls`): port 5432 (never PgBouncer's 6432, which drops notifications and session advisory locks), the PostgreSQL database `goal`, users `<role>.<branch-id>` with the branch id of the administrator's user name, `sslmode=verify-full&sslrootcert=system` for goald and goal db init (pgx; goald's image carries a CA bundle), `sslmode=verify-full` alone for the auth service (node-postgres reads `sslrootcert` as a file), goald's pool capped at `pool_max_conns=8` (Connection budget, below), passwords URL-encoded.
+
+### Connection budget
+
+PS-5 has `max_connections = 25` and reserves 3 for superusers, which leaves 22 for Goal. They are split as follows; a change to one share must keep the sum at or under 22.
+
+| Holder | Connections | Set in |
+| --- | --- | --- |
+| goald's pool (pgxpool) | 8 | `goald_pool_max_conns` in `deploy/terraform/locals.tf`, sent as `pool_max_conns` in `GOAL_DATABASE_URL` |
+| goald's listeners, held for goald's whole life | 4 | the definition cache and the feed's item, definition and access notices (`cmd/goald/main.go`, `internal/adapters/store/postgres/listener.go`) |
+| goald's lock connections, one per minute loop | up to 4 | schedules, Jonah's review sweep, Jonah's try sweep and the digest (`withSessionLock` in `internal/adapters/store/postgres/intake.go`, `WithDigestLock` in `digests.go`) |
+| the auth service's pool (pg.Pool) | 4 | `poolMax` in `apps/auth/src/db.ts` |
+| migrations, at goald's start only | 2 | `migrateRequiring` in `internal/adapters/store/postgres/postgres.go` |
+| **Total** | **22** | |
+
+goald's listeners and lock connections are outside its pool: goald opens them from the pool's config with their own connect, so `pool_max_conns` does not cap them. goald therefore holds up to 16 connections, not 8. Migrations finish before the pool fills, so the steady state is 20, which leaves 2 for an operator's session.
+
+pgxpool keeps an idle connection for 30 minutes, so after a burst, such as goald's restart after a deploy, its pool stays at or near `max_conns` for half an hour. The signs that the budget is exceeded:
+
+- goald's `db pool` line ([Slow requests](#slow-requests-pool-starvation-or-a-slow-query), below) shows `total_conns` at or near `max_conns` while `idle_conns` is high.
+- goald's minute loops log `connect: … SQLSTATE 53300`, such as `schedules failed: schedule lock: connect: …`, and the same for `jonah review sweep`, `jonah try sweep` and `notify digest`.
+- The auth container logs `auth.refused` with "remaining connection slots are reserved for roles with the SUPERUSER attribute" and exits; `/api/auth/get-session` answers 503, so nobody can sign in.
+
+A new limit takes effect only when its process starts: goald's when the Worker restarts goald after the URL secret changes (Deploys), auth's when its new image is deployed. Between the Terraform apply and that deploy, a goald that restarts on its own holds the new pool size while auth may still hold an older, larger pool, so dispatch the deploy right after the apply.
+
+*Check:* the PlanetScale dashboard shows the database's open connections, or, as the administrator on the `goal` database:
+
+```sql
+SELECT usename, application_name, count(*) FROM pg_stat_activity GROUP BY 1, 2;
+```
+
+goald's rows are user `goal_app.<branch-id>`, auth's are application `goal-auth`. Requests that wait for a free connection show as slow API calls with few queries; goald logs no line for pool waits yet.
 
 `deploy/terraform/secrets/production.sops.yaml` is committed, encrypted with age to `age1kttpj5ev6g08st6s20nezlqjdaa75l30z08nxhudpe2eapcv7fwqsv47mz` (the creation rule in `deploy/terraform/.sops.yaml`, which every sops task passes with `--config`); keys stay readable, values are encrypted. `task tf:sops-test`, part of `task tf:check`, encrypts and decrypts a sample under the same rule with a throwaway age key, so a broken rule fails the check without touching the real key. The plan refuses any value still empty, but the SMTP URL.
 
@@ -184,6 +215,26 @@ On `basic`, goald's bursts above 1/4 vCPU (the start, a knowledge sync) are slow
   - signing in, which goes through auth;
   - `container stopped` lines with `exitCode` 137 or an out-of-memory `reason` (`wrangler tail goal --search "container stopped"`). Either means the size is too small.
 - **To go back,** set `Goald`'s `instance_type` to `standard-1` and `Auth`'s to `basic` in `deploy/cloudflare/wrangler.jsonc` (and in the topology fixture), merge, and deploy that sha (Deploys, above). Back out only the container that misbehaves.
+
+## Slow requests: pool starvation or a slow query
+
+goald's logs tell the two apart: a request that waited for a database connection has a high `db_wait_ms`, and one that ran many or slow queries has a high `duration_ms` with a low `db_wait_ms`. Read them with `wrangler tail goal --search "api request"` and `wrangler tail goal --search "db pool"`.
+
+- **`api request`**, one line per request ([internal/api/accesslog.go](../../internal/api/accesslog.go)), carries two database fields beside `duration_ms`:
+  - `queries`: the round trips the request made to PostgreSQL. Every store call is its own transaction, so one call counts at least three (BEGIN with `set_config`, the query, COMMIT).
+  - `db_wait_ms`: the total time the request waited for a connection from goald's pool, over all its store calls.
+- **`db pool`**, once a minute ([internal/adapters/store/postgres/poolstats.go](../../internal/adapters/store/postgres/poolstats.go)), is pgxpool's `Stat()` for goald's pool. `acquire_count`, `empty_acquire_count` (acquires that found no idle connection and waited), `canceled_acquire_count` (acquires whose request ended while waiting) and `acquire_duration_ms` (the total time acquires took) count from goald's start, so compare two lines. `acquired_conns`, `idle_conns`, `total_conns` and `max_conns` are the connections at that moment; `max_conns` is `goald_pool_max_conns` in `deploy/terraform/locals.tf`.
+
+What each pattern means:
+
+| What the logs show | Cause | What to do |
+| --- | --- | --- |
+| `db_wait_ms` close to `duration_ms`; between `db pool` lines `empty_acquire_count` and `acquire_duration_ms` rise; `acquired_conns` equals `max_conns` and `idle_conns` is 0 | Pool starvation: requests queue for one of too few connections | Find the requests with the most `queries` (each holds a connection per store call), then cut their queries or raise `goald_pool_max_conns` within the database's connection limit |
+| `db_wait_ms` low, `duration_ms` high, `queries` small | A slow query | Run the request's queries with `EXPLAIN ANALYZE` on the database |
+| `db_wait_ms` low, `duration_ms` high, `queries` large | Many round trips: each costs the database's latency | Batch the reads; the query budget test pins the counts ([testing.md](testing.md#the-query-budget)) |
+| `canceled_acquire_count` rises | Requests gave up while waiting for a connection: clients timed out or went away | As for pool starvation |
+
+Queries that run outside a request (the engine, the scheduled jobs) are not in any `api request` line, but they hold connections and show in the `db pool` line.
 
 ## What the first deploy showed
 
