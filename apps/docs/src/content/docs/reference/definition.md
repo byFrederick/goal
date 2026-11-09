@@ -100,7 +100,7 @@ object, required.
   - `vault`: string.
 - `skills`: array of object.
   - `name`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, required.
-  - `source`: string matching `^(\./.+|skills\.sh:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+)$`, required. A local folder (./skills/x) or a skills.sh reference (skills.sh:owner/repo@skill), pinned by the lockfile.
+  - `source`: string matching `^(\./.+|skills\.sh:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+)$`, required. A local folder (./skills/x) or a skills.sh reference (skills.sh:owner/repo@skill). A skills.sh skill reaches an agent only when the checked-out repository vendors it in .claude/skills; the skill picker copies a catalog skill into ./skills/&lt;name&gt; instead.
   - `origin`: string matching `^skills\.sh:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+#[0-9a-f]{40}$`. Where a vendored skill came from: the skills.sh skill and the commit it was copied at. The source stays the local folder (./skills/&lt;name&gt;) it was copied into. Written by the builder; read-only in the UI.
 - `rules`: array of object. Factory rules (ADR 0014): always-on guidance for the agents each rule's appliesTo targets. Each is a markdown file under rules/ with frontmatter (description, appliesTo, paths).
   - `name`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, required.

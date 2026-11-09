@@ -301,7 +301,7 @@
         "name": { "$ref": "#/$defs/slug" },
         "source": {
           "type": "string",
-          "description": "A local folder (./skills/x) or a skills.sh reference (skills.sh:owner/repo@skill), pinned by the lockfile.",
+          "description": "A local folder (./skills/x) or a skills.sh reference (skills.sh:owner/repo@skill). A skills.sh skill reaches an agent only when the checked-out repository vendors it in .claude/skills; the skill picker copies a catalog skill into ./skills/<name> instead.",
           "pattern": "^(\\./.+|skills\\.sh:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+)$"
         },
         "origin": {
