@@ -182,6 +182,10 @@ type Store interface {
 	// Leases returns the live leases held at a station; their slots are the station's WIP.
 	Leases(ctx context.Context, factory domain.FactoryID, station string) ([]domain.Lease, error)
 
+	// FactoryLeases returns the live leases held at every station of a factory, by station then
+	// slot: what Leases returns for each station, in one read.
+	FactoryLeases(ctx context.Context, factory domain.FactoryID) ([]domain.Lease, error)
+
 	// ClaimNext takes the next waiting item at c.Station in pull order (FOR UPDATE SKIP
 	// LOCKED), sets it in_progress, inserts a lease on c.Slot and appends a claimed event.
 	// It returns ErrOrgFull or ErrFactoryFull when the organization's or the factory's leases
@@ -373,6 +377,11 @@ type Store interface {
 	// ErrNotFound.
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
 
+	// AskEvents returns, by item, the events of the given items whose kind is one of
+	// domain.AskKinds, in append order, in one read: what domain.OpenQuestion and
+	// domain.OpenToolApproval need. An item with none of them, or unknown, is not in the map.
+	AskEvents(ctx context.Context, ids []domain.ItemID) (map[domain.ItemID][]domain.Event, error)
+
 	// FactoryActivity returns up to limit of the factory's latest events whose kind is one of
 	// domain.ActivityKinds, newest first (by at, then id), each with its item's number and title.
 	FactoryActivity(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ActivityEvent, error)
@@ -395,8 +404,8 @@ type Store interface {
 	SearchItems(ctx context.Context, q ItemSearch) ([]domain.Item, error)
 
 	// Assemblies returns, by id, those of ids that are items of the factory with parts (items
-	// whose ParentID they are), each with every one of its parts in number order, wherever they
-	// are. Ids of items without parts or of another factory's items are absent.
+	// whose ParentID they are), each with its integration branch and every one of its parts in
+	// number order, wherever they are. Ids of items without parts or of another factory's items are absent.
 	Assemblies(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID]domain.Assembly, error)
 
 	// StationLoads returns the load of every station of a factory that has open items: how
@@ -515,6 +524,10 @@ type Store interface {
 	// CIWaits returns the item's CI waits at station, open and ended, by start, each with its
 	// poll's latest state. An unknown item has none.
 	CIWaits(ctx context.Context, item domain.ItemID, station string) ([]domain.CIWaitRecord, error)
+
+	// CIWaitsOf returns what CIWaits returns for each of keys, in one read, by key; a key with no
+	// waits is absent.
+	CIWaitsOf(ctx context.Context, keys []domain.CIWaitKey) (map[domain.CIWaitKey][]domain.CIWaitRecord, error)
 
 	// OpenCIWaitsOnPoll returns the organization's open CI waits on key's host, repository and
 	// sha, by start: every wait one poll of that commit decides.
@@ -884,8 +897,11 @@ type Claim struct {
 	FactoryID domain.FactoryID
 	// Station is the full station spec; the lease's agent is Station.AgentFor(item.Lane), or ""
 	// when the item's lane has no route (the engine then blocks the item).
-	Station   domain.Station
-	Slot      int
+	Station domain.Station
+	Slot    int
+	// Lanes is which items the slot takes, Station.SlotLanes()[Slot]: a kept slot only its lane, a
+	// shared slot no lane that keeps slots. The zero value takes every item.
+	Lanes     domain.SlotLane
 	Now       time.Time
 	ExpiresAt time.Time
 }
@@ -1279,6 +1295,12 @@ type ObjectStore interface {
 	// decision 7). It makes no network call and does not check that key exists. The URL is a
 	// bearer credential: never log it. A ttl at or below zero is domain.ErrInvalid.
 	PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error)
+
+	// PresignPut returns a SigV4 query-signed URL that anyone holding it can PUT the object at key
+	// with, valid for ttl, so a cloud box uploads a build cache archive to the bucket itself,
+	// bigger than a request through the control Worker can carry. It makes no network call. The
+	// URL is a bearer credential: never log it. A ttl at or below zero is domain.ErrInvalid.
+	PresignPut(ctx context.Context, key string, ttl time.Duration) (string, error)
 
 	// Put stores body at key, replacing what was there, and returns it.
 	Put(ctx context.Context, key string, body []byte) (ObjectInfo, error)

@@ -23,6 +23,7 @@ func (f *Factory) Line() domain.Line {
 		Runtime: domain.Runtime{
 			Model: s.Runtime.Model, ModelConnection: s.Runtime.ModelConnection, ModelKey: s.Runtime.ModelKey,
 			Size: domain.SandboxSize(s.Runtime.Size), Tools: slices.Clone(s.Runtime.Tools),
+			BuildCache: s.Runtime.BuildCache,
 		},
 		Stations: make([]domain.Station, 0, len(s.Board.Stations)),
 		Agents:   make([]domain.AgentSpec, 0, len(s.Agents)),
@@ -198,6 +199,9 @@ func flowPolicy(fl Flow) domain.FlowPolicy {
 
 	if a := fl.Andon; a != nil {
 		p.Andon = &domain.AndonPolicy{ReworkRate: a.ReworkRate, Window: a.Window}
+		if p.Andon.Window == 0 {
+			p.Andon.Window = domain.DefaultAndonWindow
+		}
 	}
 
 	if t := fl.Targets; t != nil {

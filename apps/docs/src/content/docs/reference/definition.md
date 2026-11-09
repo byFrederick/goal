@@ -49,6 +49,7 @@ object, required.
     - `token`: string. The {{secret}} that opens the repositories. Required for write; omit it for a public repository that is read.
     - `access`: one of `"read"`, `"write"`, required. write lets agents whose code is write push, open pull requests and merge; read never does.
     - `default`: boolean. The entry an item uses when it names no repository. At most one entry has it, and it must name one repository. The only entry is the default when it names one repository.
+  - `buildCache`: boolean, default `true`. Whether runs restore and save a per-repository cache of Go's module and build caches and the pnpm store. Default true.
   - `runner`: one of `"docker"`, `"ecs"`. Removed in phase 4 (field-removed): the platform chooses the sandbox backend.
   - `image`: string. Removed in phase 4 (field-removed): set image in an environment file.
   - `auth`: one of `"claude-subscription"`, `"anthropic-api-key"`, `"bedrock"`. Removed in phase 4 (field-removed): set modelKey.
@@ -200,7 +201,7 @@ object, required.
     - `merges`: one of `"serialize"`, `"allow"`. Only on a station with action merge: how many items it integrates into the same merge target at once. A merge target is the branch an item's pull request merges into: the default branch for a standalone item or an assembly's landing, and the assembly's integration branch for a part. serialize (the default): one item per merge target at a time; allow: several at once.
     - `waitFor`: `"ci"` or object. Make goald wait for CI on the item's pushed commits (ADR 0044): a run at the station starts only once CI on the item's current commits has finished, and after a run pushes, the item moves on only once CI on what it pushed has passed. ci uses the defaults; { ci: { grace, max, rounds } } sets any of them, a field left out taking its default. Nothing here names a host, a CI system, a workflow or a check: goald reads every check the code host reports for the commit.
       - `ci`: object, required. Wait for CI, with any of the defaults changed. max must be above grace.
-        - `grace`: string matching `^[1-9][0-9]*(s|m|h)$`, default `"5m"`. How long after the run ended a first check may take to appear, such as 5m; a commit with no check by then gets no CI, and the wait ends.
+        - `grace`: string matching `^[1-9][0-9]*(s|m|h)$`, default `"5m"`. How long a first check may take to appear, such as 5m. It counts from goald's first poll of the commit, or from the wait's start when that is earlier; a commit with no check by then gets no CI, and the wait ends.
         - `max`: string matching `^[1-9][0-9]*(s|m|h)$`, default `"60m"`. The longest goald waits for CI on one commit, such as 60m; CI not finished by then counts as failed, and the station runs again.
         - `rounds`: integer, default `3`. How many CI rounds one visit to the station gets; after that many, the item blocks for a person, naming the failing checks.
     - `context`: array of one of `"inflight"`. What goald preloads into the feedback of every run at this station. inflight: an In flight section listing up to 30 of the factory's open items and assemblies with the paths each expects to change, ranked by overlap with the item.
@@ -215,7 +216,7 @@ object, required.
     - `release`: one of `"drum-buffer-rope"`, `"push"`.
     - `andon`: object.
       - `reworkRate`: number.
-      - `window`: integer.
+      - `window`: integer. How many of a gate's last verdicts since the last clear of the andon cord the rework-rate warning counts. Defaults to 10.
     - `targets`: object. What the line aims for; flow metrics show each against its target. Omit a target to have none.
       - `throughputPerDay`: number. Items done per day.
       - `leadTimeHours`: number. p85 lead time, created to done, in hours.

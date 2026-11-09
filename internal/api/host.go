@@ -12,13 +12,16 @@ import (
 
 // GatewayPath is where goald serves the agents' MCP gateway, RunPath the run bundle beside it
 // (GET, the same task token), ToolApprovalPath where a run reports an Ask-first tool call (POST,
-// the same task token) and KnowledgePath the folder of its knowledge snapshots (GET
-// KnowledgePath<source>, the same task token); they are the gateway's paths.
+// the same task token), KnowledgePath the folder of its knowledge snapshots (GET
+// KnowledgePath<source>, the same task token) and BuildCachePath the folder of its build caches
+// (BuildCachePath<key>, <key>/archive and <key>/done, the same task token); they are the
+// gateway's paths.
 const (
 	GatewayPath      = "/mcp"
 	RunPath          = "/run"
 	ToolApprovalPath = "/run/tool-approval"
 	KnowledgePath    = "/run/knowledge/"
+	BuildCachePath   = "/run/build-cache/"
 )
 
 // healthPath is the liveness check, which load balancers call by address.
@@ -40,7 +43,7 @@ func CheckHost(hosts []string, next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == healthPath || r.URL.Path == GatewayPath || r.URL.Path == RunPath || r.URL.Path == ToolApprovalPath ||
-			strings.HasPrefix(r.URL.Path, KnowledgePath) {
+			strings.HasPrefix(r.URL.Path, KnowledgePath) || strings.HasPrefix(r.URL.Path, BuildCachePath) {
 			next.ServeHTTP(w, r)
 			return
 		}

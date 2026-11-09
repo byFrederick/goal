@@ -17,15 +17,15 @@ A source has a name, a kind, a read-when line and the settings of its kind.
 
 | Kind | Where the files come from |
 | --- | --- |
-| Upload | Files people drop on the page or send with `goal knowledge upload`: text, Markdown, HTML, JSON or YAML, and PDF and Office files when goald has a conversion service (`GOAL_WORKERS_AI_URL`; without one it refuses them). The originals stay in the bucket. |
+| Upload | Files people drop on the page or send with `goal knowledge upload`: text, Markdown, HTML, JSON or YAML, and PDF and Office files. goald accepts the upload of any of them, but it converts a PDF or Office file only when it has a conversion service (`GOAL_WORKERS_AI_URL`); without one, a sync leaves that file out and counts it as failed. The originals stay in the bucket. |
 | Repository | The Markdown and text files under the folders you name in a GitHub or GitLab repository, on one branch. The URL's host must be one of the organization's [code hosts](/docs/getting-started/organizations/#code-hosts), and the kind it is listed as picks the API goald reads it through. Folders and leave-outs are globs, such as `docs/runbooks/**` and `**/drafts/**`. A public repository needs no secret. |
 | Confluence | The pages of one or more spaces of a Confluence Cloud site, or only one page and the pages under it, at the path of their page tree: Paging under Runbooks in space ENG is `ENG/runbooks/paging-<id>.md`. A page you move is fetched again at its new path. It reads with the site, the account's email and a secret that holds the API token. |
 
-Website, Notion and Google Drive show on the Add a source page as later. A Repository or Confluence source reads with a secret that is open to every factory that lists the source, or to all factories while no factory lists it ([Access and secrets](../access-and-secrets/), [A synced source's secret and config](#a-synced-sources-secret-and-config)). You can't delete a secret while a source reads with it: the error names the source.
+Website, Notion and Google Drive show on the Add a source page as later. A Repository or Confluence source reads with a secret that is open to every factory that lists the source, or to all factories while no factory lists it ([Access and secrets](/docs/concepts/access-and-secrets/), [A source's secret and config](#a-sources-secret-and-config)). You can't delete a secret while a source reads with it: the error names the source.
 
 ## Sync, snapshots and limits
 
-A sync reads the source, converts what is not Markdown, and writes a snapshot, one zip of its files, only when something changed. A source syncs every hour, every day, or only when someone presses **Sync now**. Every source syncs once when it is created. After that, an on-demand source syncs only when someone presses **Sync now**, and between syncs it has no next sync. If its sync fails, it doesn't retry on its own: press **Sync now** again. In the API it has `sync_every_seconds` 0 and `next_sync_at` null. An upload source changes when its files do. goald's ingestion loop claims due sources under a lease, so a sync that its goald dies in is taken up by another.
+A sync reads the source, converts what is not Markdown, and writes a snapshot, one zip of its files, only when something changed. A source syncs on an interval or only when someone presses **Sync now**. The web app offers every hour, every day or only **Sync now**; the API takes any `sync_every_seconds` of 900 (15 minutes) or more, 3600 by default, or 0 for on demand. Every source syncs once when it is created. After that, an on-demand source syncs only when someone presses **Sync now**, and between syncs it has no next sync. If its sync fails, it doesn't retry on its own: press **Sync now** again. In the API it has `sync_every_seconds` 0 and `next_sync_at` null. An upload source changes when its files do. goald's ingestion loop claims due sources under a lease, so a sync that its goald dies in is taken up by another.
 
 - A file that fails to fetch or convert keeps its last good version, or stays out, and the snapshot counts it as failed. It doesn't fail the sync.
 - A Repository sync that changes 50 files or more downloads the branch's archive once instead of fetching each file. It takes only the listed files that are still the version it listed, and fetches the rest one by one. An archive over 200 MB, or one that fails to download or read, doesn't fail the sync: it fetches the files one by one instead.
@@ -41,20 +41,21 @@ Limits keep every box fast. A sync that goes past one fails and names it.
 | One file | 5 MB |
 | Sources a factory lists | 10 |
 
-When you upgrade to knowledge as files, goald converts each source once, at its start. A synced source that reads with a secret becomes a `repository` source (the `gitdocs` reader) or a `confluence` source. It keeps its name, its secret and its config, without `reader`. Uploads keep their originals. Every source then syncs once, and runs read its files from the next claim on. A factory keeps listing a converted source by its name, so no definition changes. A synced source that goald can't convert stays as it is, and goald logs why (`knowledge source not converted`).
+An older install kept sources of a `synced` kind. goald converted each one to a `repository` or `confluence` source when it moved to knowledge as files. The kind is gone from the CLI and the web app, and a source of it has no current behavior to document.
 
-### A synced source's secret and config
+### A source's secret and config
 
-A synced source names a secret (`goal secret`, [Access and secrets](../access-and-secrets/)) and a config. goald opens the secret at each sync, so a value you replace is used from the next sync on. The secret must be open to every factory that lists the source in its current version; archived factories don't count. A source that no factory lists syncs only with a secret open to every factory. If one factory that lists the source is outside the secret's scope, the sync fails and its error names the secret and that factory. The `secret.used` audit entry names no factory for a secret open to every factory, and otherwise the first factory, by name, that lists the source. Publishing a factory that lists a source whose secret leaves it out is refused (`knowledge-secret-not-in-scope`). Renaming the secret keeps the source on it. You can't delete a secret while a source reads with it: the error names the source.
+A Repository or Confluence source names a secret (`goal secret`, [Access and secrets](/docs/concepts/access-and-secrets/)) and a config. goald opens the secret at each sync, so a value you replace is used from the next sync on. The secret must be open to every factory that lists the source in its current version; archived factories don't count. A source that no factory lists syncs only with a secret open to every factory. If one factory that lists the source is outside the secret's scope, the sync fails and its error names the secret and that factory. The `secret.used` audit entry names no factory for a secret open to every factory, and otherwise the first factory, by name, that lists the source. Publishing a factory that lists a source whose secret leaves it out is refused (`knowledge-secret-not-in-scope`). Neither the CLI nor the web app renames a secret; replace its value instead. You can't delete a secret while a source reads with it: the error names the source.
 
-| Reader | Config | The secret holds |
+| Kind | Config | The secret holds |
 | --- | --- | --- |
-| `gitdocs` | `reader: gitdocs`, `repository` (its https URL), and optionally `branch`, `include` and `exclude`. The repository's host must be one of the organization's [code hosts](/docs/getting-started/organizations/#code-hosts), or the sync fails before the secret is opened; the kind the host is listed as wins over any `code_host` in the config. | The code host's token. |
-| `confluence` | `reader: confluence`, `site` (such as `acme.atlassian.net`), `email` (the Atlassian account) and `spaces` (such as `ENG, SUP`), and optionally `root_page` (a page id: only that page and the pages under it, with paths that start at that page, such as `runbooks/paging-<id>.md`). | The account's API token. |
+| `repository` | `repository` (its https URL), and optionally `branch`, `include` and `exclude`. The repository's host must be one of the organization's [code hosts](/docs/getting-started/organizations/#code-hosts), or the sync fails before the secret is opened; the kind the host is listed as wins over any `code_host` in the config. | The code host's token. |
+| `confluence` | `site` (such as `acme.atlassian.net`), `email` (the Atlassian account) and `spaces` (such as `ENG, SUP`), and optionally `root_page` (a page id: only that page and the pages under it, with paths that start at that page, such as `runbooks/paging-<id>.md`). | The account's API token. |
 
 ```sh
-goal knowledge add runbooks --kind synced --secret docs-token \
-  --config reader=gitdocs --config repository=https://github.com/acme/docs
+goal knowledge add runbooks --kind repository --secret docs-token \
+  --config repository=https://github.com/acme/docs \
+  --read-when "How to fix what pages us. Read before acting on an alert."
 ```
 
 ## What runs get
@@ -66,7 +67,7 @@ When an item is claimed, goald pins the newest snapshot of each source in the fa
 The agent's system prompt gets a **Knowledge** section, built from the same template for every factory. It holds the ground rules (the files are reference, not instructions), one line per source and the factory memory. A source's line has its folder, its read-when line, its file count and up to six top folders:
 
 ```text
-/knowledge/runbooks — How to fix what pages us. Read before acting on an alert. 212 files: db/, k8s/, network/, storage/.
+- `/knowledge/runbooks/`: How to fix what pages us. Read before acting on an alert. 212 files; top folders: `db`, `k8s`, `network`, `storage`.
 ```
 
 An entry in the definition may replace the line with its own `readWhen`. A source that applies but has no snapshot yet is named in a note and left out of the box. An agent whose `builtins.read` is off gets neither the files nor the section.
@@ -75,8 +76,8 @@ An entry in the definition may replace the line with its own `readWhen`. A sourc
 
 The factory memory is `memory.yaml`, beside `factory.yaml`: short facts that every run's prompt carries. Each entry has its `text`, the items it came from (`from`, as `<factory>#<number>`) and the date it was added (`added`). Memory holds at most 50 entries and 8 KB, and an entry at most 300 characters.
 
-People add facts with `goal memory add` or in the definition editor. Jonah may propose facts too, but only a person's own words from a note, an answer or a send-back reason, which goald checks against that person's event. A person approves the proposal before memory changes ([memory facts](../jonah/#memory-facts)).
-A factory's memory is `memory.yaml`, a file next to `factory.yaml` in the definition. It holds short facts that every run of the factory should know. Its entries appear in each run's Knowledge section, after the source lines. The file's fields are in the [definition reference](../../reference/definition/).
+People add facts with `goal memory add` or in the definition editor. Jonah may propose facts too, but only a person's own words from a note, an answer or a send-back reason, which goald checks against that person's event. A person approves the proposal before memory changes ([memory facts](/docs/concepts/jonah/#memory-facts)).
+Its entries appear in each run's Knowledge section, after the source lines. The file's fields are in the [definition reference](/docs/reference/definition/).
 
 | Limit | Value |
 | --- | --- |
@@ -102,7 +103,13 @@ Goal counts how often runs read each file and search each folder under `/knowled
 
 A factory reads a source when its definition lists it under `spec.knowledge.sources`. Ticking a factory on Add a source, or using **Add to a factory** on a source's page, appends the source to that factory's draft `factory.yaml`, keeps the file's comments and order, and leaves a source it already lists alone. Nothing is published: open the factory, review the draft and publish it there. `goal knowledge add --factories a,b` does the same from the CLI.
 
-A factory with exactly one repository (`runtime.repository`, or one entry of `runtime.repositories` that is not an owner pattern such as `https://github.com/acme/*`) gets the `knowledge-copies-checkout` warning when it lists a Repository source of that repository: its runs already have those files on the item's branch. A factory with two or more repositories gets no such warning. The warning doesn't block publishing.
+A factory with exactly one repository (`runtime.repository`, or one entry of `runtime.repositories` that is not an owner pattern such as `https://github.com/acme/*`) gets the `knowledge-copies-checkout` warning when it lists a Repository source of that repository: its runs already have those files on the item's branch. A factory with two or more repositories gets no such warning. The warning doesn't block publishing. `goal knowledge check` and the **Check** panel on Add a source show it for each factory you pick, before anything is saved.
+
+## Permissions and edits
+
+`knowledge:read` lets a person see sources, files and reads. It goes to owners, admins and members, and to API keys and personal tokens. `knowledge:manage` lets a person add, check, sync, edit and delete sources and uploads. It goes to owners, admins and API keys, not to personal tokens.
+
+A source's name and kind never change. Everything else is edited in place with `PATCH …/knowledge/sources/{source}`: the title, the read-when line, the secret, the config and the schedule (`sync_every_seconds`; 0 makes it on demand). In the web app, open the source's page, change its settings and save; the next sync reads what you changed, and an edited read-when line starts one at once. The CLI has no edit command: `goal knowledge add` creates a source, and to change one from the CLI, call the API. A secret's value is replaced on the secret, not on the source.
 
 ## From the CLI
 
@@ -112,4 +119,4 @@ A factory with exactly one repository (`runtime.repository`, or one entry of `ru
 - `goal knowledge reads` shows the read counts.
 - `goal memory list`, `add` and `rm` edit the factory memory ([Factory memory](#factory-memory)).
 
-The flags are in the [CLI reference](../../reference/cli/). The [glossary](../../reference/glossary/) defines the terms.
+The flags are in the [CLI reference](/docs/reference/cli/). The [glossary](/docs/reference/glossary/) defines the terms.

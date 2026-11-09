@@ -3,11 +3,16 @@ package api_test
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/byFrederick/goal/internal/api"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // nobody is the access log's principal of a request that has none.
@@ -139,5 +144,44 @@ func TestAPI_AccessLogUnderNone(t *testing.T) {
 	line := logs.accessLine(t, res.header.Get("X-Request-Id"))
 	if line["principal"] != "user:local" || line["org_id"] != string(testOrg) || line["operation"] != opGetOrg {
 		t.Errorf("line = %v; want the local user in acme's getOrg", line)
+	}
+}
+
+// meteredDefinitions runs two queries that waited 7ms for their connections on each factory
+// listing, as the store's tracer would count them on the request's meter.
+type meteredDefinitions struct{ api.Definitions }
+
+func (d meteredDefinitions) Factories(ctx context.Context) ([]ports.FactoryRecord, error) {
+	m := ports.DBMeterFrom(ctx)
+	m.AddQuery()
+	m.AddQuery()
+	m.AddWait(7 * time.Millisecond)
+
+	return d.Definitions.Factories(ctx)
+}
+
+// Every request's line says how many queries it ran and how long it waited for connections: a
+// request that ran none says 0 and 0.
+func TestAccessLog_LogsQueriesAndDBWait(t *testing.T) {
+	t.Parallel()
+
+	logs := &logBuffer{}
+	h := newHarnessLogged(t, nil, logs, func(_ *harness, d *api.Deps) {
+		d.Definitions = meteredDefinitions{d.Definitions}
+	})
+
+	for _, c := range []struct {
+		path            string
+		queries, waitMS float64
+	}{{acmePath, 2, 7}, {healthPath, 0, 0}} {
+		res := h.request(t, http.MethodGet, c.path, "", nil)
+		if res.status != http.StatusOK {
+			t.Fatalf("GET %s = %d %s", c.path, res.status, res.body)
+		}
+
+		line := logs.accessLine(t, res.header.Get("X-Request-Id"))
+		if line["queries"] != c.queries || line["db_wait_ms"] != c.waitMS {
+			t.Errorf("GET %s: queries = %v, db_wait_ms = %v; want %v, %v (line %v)", c.path, line["queries"], line["db_wait_ms"], c.queries, c.waitMS, line)
+		}
 	}
 }

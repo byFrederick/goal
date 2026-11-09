@@ -425,6 +425,37 @@ func TestAPI_SecretImport(t *testing.T) {
 	}
 }
 
+// A YAML import with the secrets: map the Import page asks for previews and imports like an env
+// one.
+func TestAPI_SecretImportYAML(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.createSecret(t)
+
+	text, err := json.Marshal("secrets:\n  acme-token: " + secretReplacedValue + "\n  sentry-token: '" + secretImportedValue + "'\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	importBody := func(extra string) string { return `{"format":"yaml","text":` + string(text) + extra + `}` }
+
+	expectDryRun(t, decode[gen.SecretImportResult](t, h.request(t, http.MethodPost, secretImportPath, importBody(`,"dry_run":true`), nil), http.StatusOK))
+
+	replaced := decode[gen.SecretImportResult](t, h.request(t, http.MethodPost, secretImportPath, importBody(`,"on_conflict":"replace"`), nil), http.StatusOK)
+	if secretOutcomes(replaced) != "acme-token:replaced sentry-token:created" {
+		t.Errorf("YAML import with replace = %s; want acme-token replaced, sentry-token created", secretOutcomes(replaced))
+	}
+
+	if v := h.openSecret(t, secretName); v != secretReplacedValue {
+		t.Error("a YAML import with replace left acme-token's value")
+	}
+
+	if _, err := h.secrets.Get(inOrg(t), "sentry-token"); err != nil {
+		t.Errorf("a YAML import did not create sentry-token: %v", err)
+	}
+}
+
 // expectDryRun checks an import's dry run of acme-token, used by the github connection, and
 // sentry-token, which is new: what each is, and no outcome.
 func expectDryRun(t *testing.T, dry gen.SecretImportResult) {

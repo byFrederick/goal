@@ -26,9 +26,11 @@ For GitHub, once you add the webhook, GitHub sends a ping. The **Status** line t
 
 ## Read the log
 
-**Deliveries** lists what the webhook received, newest first, and **Show older** loads the next page. It shows only refusals and the deliveries a trigger names; GitHub's ping and deliveries that arrive before a trigger names the webhook never show. Each delivery shows its receipt, **Accepted** or **Refused** with the reason, such as a signature that did not match. A delivery Goal had already taken shows no row of its own: the first delivery reads "Sent N times".
+**Deliveries** lists what the webhook received, newest first, and **Show older** loads the next page. It lists refusals and the deliveries a trigger names. Each delivery shows its receipt, **Accepted** or **Refused** with the reason, such as a signature that did not match. A delivery Goal had already taken shows no row of its own: the first delivery reads "Sent N times".
 
 Under a delivery is one line per factory whose triggers name it: **Created** with the item's ref, **Skipped** with the reason, or **Failed** with the error.
+
+Accepted deliveries that no enabled trigger names, such as GitHub's ping, are not listed. Under the rows, or under "No deliveries to show yet.", one line counts them over the last 30 days, such as "12 more deliveries no trigger names in the last 30 days"; it is hidden when there are none.
 
 **View request** on a delivery opens its headers and body, for people with `webhook:manage`. [What is kept and for how long](/docs/guides/webhooks/#read-the-delivery-log) is on the webhooks page.
 

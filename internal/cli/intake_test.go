@@ -103,7 +103,7 @@ func newIntakeGoald(t *testing.T) *intakeGoald {
 	g := &intakeGoald{bodies: map[string][]byte{
 		cmdIntake: indented(t, intakeAnswer(nightly, ci, at)),
 		"trigger": indented(t, detail),
-		subDeliveries: indented(t, gen.WebhookDeliveryPage{NextAfter: &next, Deliveries: []gen.WebhookDelivery{
+		subDeliveries: indented(t, gen.WebhookDeliveryPage{NextAfter: &next, UnnamedDays: []gen.WebhookUnnamedDay{{Day: day(6), Count: 2}}, Deliveries: []gen.WebhookDelivery{
 			{
 				Id: "d2", ReceivedAt: at, Outcome: gen.WebhookDeliveryOutcomeCreated, Item: &gen.WebhookDeliveryItem{Id: "i12", Number: 12},
 				Receipt: new(gen.WebhookDeliveryReceiptAccepted), Evaluations: []gen.WebhookDeliveryEvaluation{
@@ -559,6 +559,35 @@ func TestWebhooks_List(t *testing.T) {
 	}
 
 	checkGolden(t, "webhooks-list", out)
+}
+
+// list's 7-day count sums each day's delivered, which goald counts with the deliveries no trigger
+// names: 2 kept and 3 unnamed today, 1 unnamed yesterday.
+func TestWebhooks_ListCountsUnnamedDeliveries(t *testing.T) {
+	t.Parallel()
+
+	g := newIntakeGoald(t)
+
+	var list gen.WebhookList
+	if err := json.Unmarshal(g.bodies[subList], &list); err != nil {
+		t.Fatal(err)
+	}
+
+	today := time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC)
+	list.Webhooks[0].Days = []gen.WebhookDeliveryDay{
+		{Day: openapi_types.Date{Time: today.AddDate(0, 0, -1)}, Delivered: 1},
+		{Day: openapi_types.Date{Time: today}, Delivered: 2 + 3, Refused: 1},
+	}
+	g.bodies[subList] = indented(t, list)
+
+	out, _, err := goalIntake(t, g.srv.URL, cmdWebhooks, subList)
+	if err != nil {
+		t.Fatalf("goal webhooks list = %v", err)
+	}
+
+	if !strings.Contains(out, "6 delivered, 1 refused") {
+		t.Errorf("goal webhooks list = %q; want 6 delivered, 1 refused in its 7 days", out)
+	}
 }
 
 // The deliveries of the webhook named print newest first, then the next page's command;
