@@ -135,7 +135,7 @@ run "the_database_urls_follow_the_planetscale_rules" {
   }
 
   assert {
-    condition     = local.secret_values.GOAL_DATABASE_URL == "postgres://goal_app.br4nch:generated0000000000000000000000000000000000000000@db.example.com:5432/goal?sslmode=verify-full&sslrootcert=system&pool_max_conns=8"
+    condition     = local.secret_values.GOAL_DATABASE_URL == "postgres://goal_app.br4nch:generated0000000000000000000000000000000000000000@db.example.com:5432/goal?sslmode=verify-full&sslrootcert=system&pool_max_conns=16"
     error_message = "goald's URL: goal_app.<branch>, port 5432, database goal, verify-full against the system CAs, pool capped at 8."
   }
 

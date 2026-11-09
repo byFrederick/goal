@@ -99,6 +99,7 @@ An item that does not exist, or that you cannot see, exits with an error and pri
 
 - **CPU** is the box's CPU time from prepare to the end of the run, shown as seconds (`42 s`) or minutes (`3.1 min`).
 - **Peak memory** is the most memory the box used at once, for example `1.2 GB`. It is read from the box's cgroup where it has one, and otherwise from the machine's memory in use, which includes the box's own system processes.
+- **Cache** is the label under CPU: whether the run's box restored the saved Go and pnpm caches of its repository. **Cache hit** restored a matching cache. **Cache miss** found none, so the box saved one for later runs. **Cache off** means the factory turned the cache off (`runtime.buildCache`). **Cache error** means the restore failed and the run went on cold. No label means the run had no Go or pnpm repository, or ran before the cache existed. On the item page, the Details card shows the same label as a Build cache row for the run working the item.
 - **Box** is the box's size: Small, Medium or Large.
 
 A column shows — when the run is still going, or when the box couldn't measure the value. Model shows from 1024 px wide and Turns from 1280 px. CPU, Peak memory, Box and Outcome show from 1440 px wide; the ⓘ beside CPU repeats these meanings.

@@ -6,7 +6,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { factoryRepositoryTestsQuery } from '../../api/queries';
 import { testFactoryRepository } from '../../api/repositories';
 import type { FactoryRepositoryTest } from '../../api/types';
@@ -38,6 +38,10 @@ const keptUrl = (url: string) =>
     .replace(/\/+$/, '')
     .replace(/\.git$/, '')
     .toLowerCase();
+
+/** An entry with its keys in order, so two entries compare by value. */
+const sorted = (entry: RepositoryEntry) =>
+  Object.fromEntries(Object.entries(entry).sort(([a], [b]) => a.localeCompare(b)));
 
 /** The entries the section shows: runtime.repositories, or the runtime.repository shorthand as one write entry. */
 function entriesOf(basics: BasicsSection): { entries: RepositoryEntry[]; shorthand: boolean } {
@@ -183,6 +187,26 @@ export function CodeSection() {
   const stored = basics.repositories ?? [];
   const edit = (next: RepositoryEntry[]) =>
     session.edit(setBasics(basics, 'repositories', next.length > 0 ? next : undefined));
+  // What Add converted: the shorthand as it was and the entry made from it, so removing the new row can undo it.
+  const converted = useRef<{ repository: NonNullable<BasicsSection['repository']>; first: RepositoryEntry } | null>(
+    null,
+  );
+  /** A Remove that leaves exactly the converted entry puts the shorthand back; true when it did. */
+  const restoreShorthand = (next: RepositoryEntry[]) => {
+    const was = converted.current;
+    const left = next[0];
+    if (!was || !left || next.length !== 1 || JSON.stringify(sorted(left)) !== JSON.stringify(sorted(was.first))) {
+      return false;
+    }
+    converted.current = null;
+    const { repositories: _list, ...rest } = basics;
+    session.edit(setBasics(rest, 'repository', was.repository));
+    setEditing(false);
+    return true;
+  };
+  const remove = (next: RepositoryEntry[]) => {
+    if (!restoreShorthand(next)) edit(next);
+  };
   const add = () => {
     if (shorthand) {
       // Publish refuses runtime.repository together with runtime.repositories, so the shorthand moves into the list.
@@ -195,6 +219,7 @@ export function CodeSection() {
         ...(token ? { token } : {}),
         default: true,
       };
+      if (repository) converted.current = { repository, first };
       session.edit(setBasics(rest, 'repositories', [first, { name: freshName([first]), url: '', access: 'read' }]));
     } else {
       edit([...stored, { name: freshName(stored), url: '', access: 'read' }]);
@@ -256,7 +281,7 @@ export function CodeSection() {
         </span>
         {editing ? (
           <>
-            <RepositoriesField basics={basics} shorthand={shorthand} />
+            <RepositoriesField basics={basics} shorthand={shorthand} onRemoved={restoreShorthand} />
             <Button variant="white" size="sm" className="self-start" onClick={() => setEditing(false)}>
               Done
             </Button>
@@ -275,7 +300,7 @@ export function CodeSection() {
                     kept={keptByUrl.get(keptUrl(entry.url))}
                     loading={loading}
                     waitsCi={waitsCi}
-                    onRemove={() => edit(stored.filter((e) => e !== stored.find((s) => s.name === entry.name)))}
+                    onRemove={() => remove(stored.filter((e) => e !== stored.find((s) => s.name === entry.name)))}
                   />
                 ))}
               </ul>

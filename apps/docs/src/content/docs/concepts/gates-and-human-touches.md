@@ -23,29 +23,29 @@ On approval the item moves on to the next station. On rejection the item goes ba
 
 At a station with `waitFor: ci`, an approval whose run pushed commits takes effect only once CI on those commits passes, and a merge on approval waits with it. When CI fails, the gate's agent runs again with the failing checks in its brief. A rejection does not wait for CI. [Wait for CI](/docs/concepts/stations-and-flow/#after-a-run-pushes) explains the hold and its rounds.
 
-A gate's rejections are limited by `board.stations[].gate.maxRework`, from 0 to 5. When it is omitted, the limit is 0, so the first rejection goes to a person. Once an item has used up the gate's rework allowance, its next rejection leaves the item waiting for a person at the gate's station. A person then approves it or rejects it.
+A gate's rejections are limited by `board.stations[].gate.maxRework`, from 0 to 5. When it is omitted, the limit is 0, so the first rejection goes to a person. The limit is compared with the item's total rework count, from every source, not only this gate's rejections. Once the count has reached it, the next rejection leaves the item waiting for a person at the gate's station. A person then approves it or rejects it.
 
-The gate's `onReject` names a station on the same line. The engine refuses to send work to a station that is not on the line.
+The gate's `onReject` must name a station upstream of the gate on the same line. The factory check fails when it does not. See [rework](/docs/concepts/rework/) for where rejected work goes.
 
 ## Merge on approval
 
 A station with `action: merge` merges the item's pull requests when the item is approved there. It works at a human station, and at an agent station with a gate. The merge reads the pull requests from the station outputs of the item, and takes them in the order the outputs name them, each in its own repository.
 
-Each pull request has one of three outcomes when it can't be merged:
+Each pull request has one of these outcomes when it can't be merged:
 
-- A conflict with its base sends the item back to be built again.
-- A pull request that isn't mergeable yet, such as one whose required checks haven't passed, keeps the item at the gate, which runs again and merges it later.
+- A conflict with its base sends the item back to be built again. With `flow.assemblies.onConflict: human`, the conflict blocks the item instead.
+- A pull request that isn't mergeable yet, such as one whose required checks haven't passed, keeps the item at the gate, which runs again and merges it later. After 5 deferrals in a row, the item is blocked instead.
 - Any other refusal blocks the item, with the reason.
 
 Pull requests merged before a refusal stay merged, and merging again skips them. An item with pull requests in several repositories can therefore be merged in some of them and not yet in the others.
 
 goald merges a pull request only when its head is the item's branch in that repository, or, for an assembly's landing, the assembly's integration branch there. A pull request from a fork or from any other branch is refused with a reason that names it and its branch, because no station checked it. goald also merges only in a repository an entry with `access: write` covers (see [repositories and what agents may write](/docs/concepts/access-and-secrets/#repositories-and-what-agents-may-write)).
 
-When the organization's policy does not let agents merge, an approved item waits at the station for a person to merge it.
+An approved item waits at the station for a person to merge it in two cases: the organization's policy does not let agents merge, or the item was made from a webhook delivery whose trigger is not marked `create.trusted`, so its text comes from outside the organization.
 
 ## Human touches
 
-A human touch is one action a person takes on an item. The actions that count are approvals, rejections, merges, moves, pauses, retries, notes and releases. Each touch has a reason:
+A human touch is one action a person takes on an item. Every event a person causes on an item counts as a touch, such as an approval, a rejection, a merge, a move, a pause, a retry, a note, an answer or a release. Two kinds of event do not count: filing the item (`created`, `part_created`) and `lease_taken`. Each touch has a reason:
 
 | Reason | When it is used |
 | --- | --- |
@@ -58,7 +58,7 @@ A person can label a touch with a reason. A touch the line required is counted a
 
 Two measures use touches:
 
-- The **touchless rate** is the share of finished items that no person touched. The **Floor** screen shows it.
+- The **touchless rate** is the share of finished items that no person touched. The `TOUCHLESS` column of `goal status` shows it.
 - The touch counts per station and per reason show where people had to help.
 
 ## Related

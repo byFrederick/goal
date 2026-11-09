@@ -20,6 +20,8 @@ Each guide starts with the result you get and lists the steps to reach it. Comma
 - [Use the Floor and Home](/docs/guides/use-the-floor-and-home/): see one factory's line and what waits on you, and every factory at a glance.
 - [Read the Board, the item Timeline and Runs](./read-the-board-timeline-and-runs/): find what is moving, what is waiting and what each agent run did.
 - [Read Spend and box usage](./read-spend-and-box-usage/): see what agents cost over a window, and the CPU and memory their run boxes use by agent and station.
-- [Self-host with Docker Compose](./self-host-with-docker-compose/): run Goal on one machine with `goal up`.
+- [Factory settings](/docs/guides/factory-settings/): set a factory's repository, model key, environments, budgets and flow choices, and publish them as a new version.
+- [Set up notifications](/docs/guides/set-up-notifications/): choose where you are told about approvals, questions, andon pulls and budgets, read the daily digest, and connect Slack.
+- [Self-host with Docker Compose](./self-host-with-docker-compose/): run Goal on one machine with `task up` or `task up:compose`.
 
 For what the terms mean, read the [concepts](/docs/concepts/). For every command, flag and endpoint, read the [reference](/docs/reference/).
