@@ -31,6 +31,8 @@ type Harness struct {
 	Tries ports.PastTries
 	// Kept keeps the same store's kept tests.
 	Kept ports.KeptTests
+	// BuildCaches indexes the same store's build caches.
+	BuildCaches ports.BuildCaches
 	// NewOrg returns a new organization.
 	NewOrg func(t *testing.T) domain.OrgID
 	// NewFactory returns a factory of org the store accepts items for.
@@ -65,6 +67,7 @@ func suiteCases() []suiteCase {
 		{"ClaimNext_NoWork", testClaimNoWork},
 		{"ClaimNext_SlotTaken", testClaimSlotTaken},
 		{"ClaimNext_SkipsItemsWithOpenNeeds", testClaimSkipsOpenNeeds},
+		{"ClaimNext_KeepsSlotsForALane", testClaimKeepsSlotsForALane},
 		{"Edges_AddListRemove", testEdgesAddListRemove},
 		{"Edges_CycleRefused", testEdgesCycleRefused},
 		{"Edges_OtherFactoryRefused", testEdgesOtherFactoryRefused},
@@ -171,7 +174,7 @@ func suiteCases() []suiteCase {
 	tests = append(append(append(tests, jonahTests...), fileTests...), startTests...)
 	tests = append(append(append(tests, triesTests...), keptTestsTests...), graderChecksTests...)
 	tests = append(append(append(tests, followUpsTests...), followUpFilingTests...), repositoriesTests...)
-	tests = append(append(tests, baseCommitTests...), ciWaitsTests...)
+	tests = append(append(append(tests, baseCommitTests...), ciWaitsTests...), buildCachesTests...)
 
 	return tests
 }
@@ -206,9 +209,11 @@ const (
 	// laneBackend routes to agBackend at a routed station.
 	laneBackend = "backend"
 	agBackend   = "backend-engineer"
-	ttl         = time.Minute
-	model       = "model-a"
-	typeTask    = "task"
+	// laneFrontend shares the slots that laneBackend does not keep.
+	laneFrontend = "frontend"
+	ttl          = time.Minute
+	model        = "model-a"
+	typeTask     = "task"
 )
 
 var (

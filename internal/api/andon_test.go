@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -165,7 +166,14 @@ spec:
 func (h *harness) publishReview(t *testing.T) {
 	t.Helper()
 
-	files := textFiles(map[string]string{yamlFile: review, writerFile: writerPrompt, defaultEnvFile: defaultEnv})
+	h.publishDefinition(t, review)
+}
+
+// publishDefinition imports and publishes the review factory defined by doc through the API.
+func (h *harness) publishDefinition(t *testing.T, doc string) {
+	t.Helper()
+
+	files := textFiles(map[string]string{yamlFile: doc, writerFile: writerPrompt, defaultEnvFile: defaultEnv})
 	decode[gen.Factory](t, h.request(t, http.MethodPost, factoriesPath, body(t, map[string]any{
 		"start": map[string]any{"kind": authoring.StartImport, "keep_id": true, filesKey: files},
 	}), nil), http.StatusCreated)
@@ -240,6 +248,29 @@ func TestAPI_AndonGateTalliesSinceTheLastClear(t *testing.T) {
 	want := []gen.GateTally{{Station: stCheck, Verdicts: 2, Rejected: 1, TopReason: new("no evidence"), Warning: true}}
 	if got := h.andon(t, "review").Gates; !reflect.DeepEqual(got, want) {
 		t.Errorf("gates after the clear = %+v; want %+v", got, want)
+	}
+}
+
+// A policy with only reworkRate counts the last domain.DefaultAndonWindow verdicts, and warns once
+// enough of them are rejections.
+func TestAPI_AndonWarnsWithTheDefaultWindow(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.publishDefinition(t, strings.Replace(review, "{ reworkRate: 0.4, window: 5 }", "{ reworkRate: 0.5 }", 1))
+
+	// Five old approvals fall outside the window of the ten newer verdicts, four of them rejections.
+	h.verdicts(t, t0.Add(-2*time.Hour), map[bool][]string{false: slices.Repeat([]string{""}, 5)})
+	h.verdicts(t, t0.Add(-time.Hour), map[bool][]string{false: slices.Repeat([]string{""}, 6), true: slices.Repeat([]string{"no tests"}, 4)})
+
+	got := h.andon(t, "review")
+	if got.Policy == nil || got.Policy.ReworkRate != 0.5 || got.Policy.Window != domain.DefaultAndonWindow {
+		t.Errorf("policy = %+v; want 0.5 over %d", got.Policy, domain.DefaultAndonWindow)
+	}
+
+	want := []gen.GateTally{{Station: stCheck, Verdicts: 10, Rejected: 4, TopReason: new("no tests"), Warning: true}}
+	if !reflect.DeepEqual(got.Gates, want) {
+		t.Errorf("gates = %+v; want %+v", got.Gates, want)
 	}
 }
 

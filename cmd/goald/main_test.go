@@ -181,6 +181,11 @@ func TestEgress_ForwardsTheGatewaysPaths(t *testing.T) {
 		t.Errorf("egress forwards knowledge under %s and the gateway serves it under %s, goald routes %s",
 			egress.KnowledgePrefix, gateway.KnowledgePath, api.KnowledgePath)
 	}
+
+	if egress.BuildCachePrefix != api.BuildCachePath || gateway.BuildCachePath != api.BuildCachePath {
+		t.Errorf("egress forwards build caches under %s and the gateway serves them under %s, goald routes %s",
+			egress.BuildCachePrefix, gateway.BuildCachePath, api.BuildCachePath)
+	}
 }
 
 // goald forwards /api/auth/* to the identity service only under GOAL_AUTH=session; under none it

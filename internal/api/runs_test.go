@@ -131,7 +131,7 @@ func TestAPI_RunsCarryCPUMemoryAndBoxSize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res := domain.RunResult{Status: domain.RunSucceeded, CPUSeconds: &cpu, PeakMemoryBytes: &peak, PeakMemorySource: domain.MemoryCgroup}
+	res := domain.RunResult{Status: domain.RunSucceeded, CPUSeconds: &cpu, PeakMemoryBytes: &peak, PeakMemorySource: domain.MemoryCgroup, BuildCache: domain.BuildCacheHit}
 	if err := h.store.FinishRun(inOrg(t), counted, res, t0.Add(2*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
@@ -141,9 +141,9 @@ func TestAPI_RunsCarryCPUMemoryAndBoxSize(t *testing.T) {
 	large := gen.SandboxSize(domain.SandboxLarge)
 	wantCounted := map[string]any{
 		"cpu_seconds": cpu, "peak_memory_bytes": float64(peak),
-		"peak_memory_source": "cgroup", "box_size": string(large),
+		"peak_memory_source": "cgroup", "box_size": string(large), "build_cache": "hit",
 	}
-	wantBare := map[string]any{"cpu_seconds": nil, "peak_memory_bytes": nil, "box_size": nil}
+	wantBare := map[string]any{"cpu_seconds": nil, "peak_memory_bytes": nil, "box_size": nil, "build_cache": nil}
 
 	for id, want := range map[domain.RunID]map[string]any{counted: wantCounted, bare: wantBare} {
 		var run json.RawMessage

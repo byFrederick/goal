@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,18 +9,13 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/byFrederick/goal/internal/api/gen"
 )
 
-const (
-	webDraftRequests = "/v1/orgs/acme/factories/web/draft/requests"
-	askID            = "01900000-0000-7000-8000-000000000001"
-)
+const webDraftRequests = "/v1/orgs/acme/factories/web/draft/requests"
 
-// goalAsk runs goal factory ask args against api, polling a --wait every millisecond, and returns
-// what it printed and its exit code.
+// goalAsk runs goal factory ask args against api and returns what it printed and its exit code.
 func goalAsk(t *testing.T, api string, args ...string) string {
 	t.Helper()
 
@@ -31,7 +25,7 @@ func goalAsk(t *testing.T, api string, args ...string) string {
 	getenv := testEnv(t, api, map[string]string{envOrg: orgAcme})
 	code := 0
 
-	if err := errors.Join(factoryAsk(t.Context(), out, getenv, args, time.Millisecond), out.err); err != nil {
+	if err := errors.Join(factoryAsk(t.Context(), out, getenv, args), out.err); err != nil {
 		code = 1
 		_, _ = fmt.Fprintln(&stderr, "goal:", err)
 	}
@@ -39,46 +33,52 @@ func goalAsk(t *testing.T, api string, args ...string) string {
 	return fmt.Sprintf("exit %d\n--- stdout\n%s--- stderr\n%s", code, stdout.String(), stderr.String())
 }
 
-func draftRequestOf(status gen.DraftRequestStatus) gen.DraftRequest {
-	r := gen.DraftRequest{
-		Id: askID, Text: "give review a 4th reviewer", Status: status, ChangedPaths: []string{},
-		Requester: gen.Actor{Kind: gen.ActorKindUser, Id: "local", Name: "Local user"}, CreatedAt: time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC),
-	}
+// notBuiltGoald answers every ask 501 not-built, as goald does until a draft request runner is
+// wired, and fails the test when the request is read.
+func notBuiltGoald(t *testing.T) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
 
-	switch status {
-	case gen.DraftRequestStatusDone:
-		r.Summary, r.ChangedPaths, r.CostUsd, r.Turns = "Added a fourth reviewer to review.", []string{"factory.yaml", "agents/reviewer.md"}, 0.42, 7
-	case gen.DraftRequestStatusFailed:
-		r.Summary, r.Error = "Nothing was changed.", "factory.yaml changed in the draft while the request ran; ask again"
-	case gen.DraftRequestStatusQueued, gen.DraftRequestStatusRunning:
-	}
+	var asks atomic.Int32
 
-	return r
-}
-
-func TestFactoryAsk_PrintsIDAndStatus(t *testing.T) {
-	t.Parallel()
-
-	srv, sent := routeGoald(t, map[string]goaldAnswer{
-		"POST " + webDraftRequests: {http.StatusCreated, draftRequestOf(gen.DraftRequestStatusQueued)},
+	code, detail := "not-built", "draft requests are not built yet: goald has no runner for them, so it does not queue them"
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST "+webDraftRequests, func(w http.ResponseWriter, _ *http.Request) {
+		asks.Add(1)
+		writeJSON(t, w, http.StatusNotImplemented, gen.Problem{
+			Status: http.StatusNotImplemented, Title: http.StatusText(http.StatusNotImplemented), Code: &code, Detail: &detail,
+		})
+	})
+	mux.HandleFunc("GET "+webDraftRequests+"/", func(_ http.ResponseWriter, r *http.Request) {
+		t.Errorf("goal factory ask read %s; a refused request has nothing to wait for", r.URL.Path)
 	})
 
-	got := goalAsk(t, srv.URL, searchFactory, "give review a 4th reviewer")
-	want := "exit 0\n--- stdout\nasked web: request " + askID + " is queued\n" +
-		"goald changes the draft when it runs; --wait waits for it\n--- stderr\n"
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
 
-	if got != want {
-		t.Errorf("goal factory ask printed\n%s\nwant\n%s", got, want)
+	return srv, &asks
+}
+
+func TestFactoryAsk_RefusesNotBuilt(t *testing.T) {
+	t.Parallel()
+
+	srv, asks := notBuiltGoald(t)
+
+	for _, args := range [][]string{
+		{searchFactory, "give review a 4th reviewer"},
+		{searchFactory, "give review a 4th reviewer", "--wait"},
+		{searchFactory, "fix the writer", "--agent", "writer", "--wait"},
+	} {
+		got := goalAsk(t, srv.URL, args...)
+		want := "exit 1\n--- stdout\n--- stderr\ngoal: refused: draft requests are not built yet; goald does not run them, " +
+			"so goal factory ask cannot change the draft of web. Change it with goal factory pull and goal factory push\n"
+
+		if got != want {
+			t.Errorf("goal factory ask %v printed\n%s\nwant\n%s", args, got, want)
+		}
 	}
 
-	goalAsk(t, srv.URL, searchFactory, "fix the writer", "--agent", "writer")
-
-	wantSent := []string{
-		"POST " + webDraftRequests + ` {"text":"give review a 4th reviewer"}`,
-		"POST " + webDraftRequests + ` {"agent":"writer","text":"fix the writer"}`,
-	}
-	if s := sent(); strings.Join(s, "\n") != strings.Join(wantSent, "\n") {
-		t.Errorf("goald was sent\n%s\nwant\n%s", strings.Join(s, "\n"), strings.Join(wantSent, "\n"))
+	if n := asks.Load(); n != 3 {
+		t.Errorf("goald was asked %d times, want 3", n)
 	}
 
 	if got := goalAsk(t, srv.URL, searchFactory); !strings.HasPrefix(got, "exit 1") {
@@ -86,85 +86,22 @@ func TestFactoryAsk_PrintsIDAndStatus(t *testing.T) {
 	}
 }
 
-// waitGoald answers the create queued and each read running until the third, which is final.
-func waitGoald(t *testing.T, final gen.DraftRequest) (*httptest.Server, *atomic.Int32) {
-	t.Helper()
-
-	var reads atomic.Int32
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST "+webDraftRequests, func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(t, w, http.StatusCreated, draftRequestOf(gen.DraftRequestStatusQueued))
-	})
-	mux.HandleFunc("GET "+webDraftRequests+"/"+askID, func(w http.ResponseWriter, _ *http.Request) {
-		r := draftRequestOf(gen.DraftRequestStatusRunning)
-		if reads.Add(1) > 2 {
-			r = final
-		}
-
-		writeJSON(t, w, http.StatusOK, r)
-	})
-
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
-	return srv, &reads
-}
-
-func TestFactoryAsk_WaitPrintsSummaryAndChangedPaths(t *testing.T) {
+// A goald that still queues requests gets its answer printed, and --wait does not read it.
+func TestFactoryAsk_PrintsAQueuedRequestWithoutWaiting(t *testing.T) {
 	t.Parallel()
 
-	srv, reads := waitGoald(t, draftRequestOf(gen.DraftRequestStatusDone))
-
-	got := goalAsk(t, srv.URL, searchFactory, "give review a 4th reviewer", "--wait")
-	want := "exit 0\n--- stdout\nasked web: request " + askID + " is queued\n" +
-		"request " + askID + " is done: 7 turns, $0.42\n" +
-		"Added a fourth reviewer to review.\n" +
-		"changed in the draft:\n  factory.yaml\n  agents/reviewer.md\n" +
-		"review the draft and publish it with: goal factory publish web\n--- stderr\n"
-
-	if got != want {
-		t.Errorf("goal factory ask --wait printed\n%s\nwant\n%s", got, want)
-	}
-
-	if n := reads.Load(); n != 3 {
-		t.Errorf("--wait read the request %d times, want 3: until it ended", n)
-	}
-}
-
-func TestFactoryAsk_WaitFailsWithTheRequestsError(t *testing.T) {
-	t.Parallel()
-
-	srv, _ := waitGoald(t, draftRequestOf(gen.DraftRequestStatusFailed))
-
-	got := goalAsk(t, srv.URL, searchFactory, "give review a 4th reviewer", "--wait")
-	want := "exit 1\n--- stdout\nasked web: request " + askID + " is queued\n" +
-		"request " + askID + " is failed: 0 turns, $0.00\n" +
-		"Nothing was changed.\n" +
-		"--- stderr\ngoal: request " + askID + " failed: factory.yaml changed in the draft while the request ran; ask again\n"
-
-	if got != want {
-		t.Errorf("goal factory ask --wait of a failed request printed\n%s\nwant\n%s", got, want)
-	}
-}
-
-func TestFactoryAsk_WaitStopsOnCtrlC(t *testing.T) {
-	t.Parallel()
-
-	srv, _ := routeGoald(t, map[string]goaldAnswer{
-		"GET " + webDraftRequests + "/" + askID: {http.StatusOK, draftRequestOf(gen.DraftRequestStatusRunning)},
+	id := "01900000-0000-7000-8000-000000000001"
+	srv, sent := routeGoald(t, map[string]goaldAnswer{
+		"POST " + webDraftRequests: {http.StatusCreated, gen.DraftRequest{Id: id, Text: "fix it", Status: gen.DraftRequestStatusQueued, ChangedPaths: []string{}}},
 	})
 
-	c, err := connect(t.Context(), testEnv(t, srv.URL, map[string]string{envOrg: orgAcme}), "")
-	if err != nil {
-		t.Fatal(err)
+	got := goalAsk(t, srv.URL, searchFactory, "fix it", "--wait")
+	if want := "exit 0\n--- stdout\nasked web: request " + id + " is queued\n--- stderr\n"; got != want {
+		t.Errorf("goal factory ask printed\n%s\nwant\n%s", got, want)
 	}
 
-	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
-	defer cancel()
-
-	if _, err := awaitDraftRequest(ctx, c, searchFactory, askID, time.Millisecond); err == nil || !strings.Contains(err.Error(), "keeps running") {
-		t.Errorf("wait cut short = %v, want that the request keeps running", err)
+	if s := sent(); len(s) != 1 {
+		t.Errorf("goald was sent %v, want only the ask", s)
 	}
 }
 

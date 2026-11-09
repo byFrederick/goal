@@ -235,7 +235,9 @@ func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, doma
 			return slotTaken
 		}
 
-		next, err := q.LockNextWaitingItem(ctx, db.LockNextWaitingItemParams{FactoryID: factory, Station: c.Station.ID, Now: c.Now})
+		next, err := q.LockNextWaitingItem(ctx, db.LockNextWaitingItemParams{
+			FactoryID: factory, Station: c.Station.ID, Now: c.Now, Lane: optional(c.Lanes.Lane), ExcludeLanes: c.Lanes.Exclude,
+		})
 		if notFound(err) {
 			return fmt.Errorf("station %s: %w", c.Station.ID, ports.ErrNoWork)
 		}
@@ -806,7 +808,7 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 			InputTokens: res.InputTokens, OutputTokens: res.OutputTokens, CostUsd: res.CostUSD,
 			Error: optional(res.Error), EndedAt: &endedAt, Output: jsonOrNull(res.Output),
 			CpuSeconds: res.CPUSeconds, PeakMemoryBytes: res.PeakMemoryBytes,
-			PeakMemorySource: optional(string(res.PeakMemorySource)),
+			PeakMemorySource: optional(string(res.PeakMemorySource)), BuildCache: optional(string(res.BuildCache)),
 		})
 		if notFound(err) {
 			return nil // already finished

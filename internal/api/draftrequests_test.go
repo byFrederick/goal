@@ -14,38 +14,47 @@ import (
 
 const acmeDraftRequests = "/v1/orgs/acme/factories/acme/draft/requests"
 
-// An editor's request is queued and reads back, alone and in the list, newest first; the next
-// one waits for it to end.
+// Asking is refused until a runner is wired: 501 not-built, and nothing is queued.
+func TestAPI_DraftRequestNotBuilt(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	code, p := callWithProblem(t, h, http.MethodPost, acmeDraftRequests, `{"text":"give review a 4th reviewer"}`, nil)
+	wantProblem(t, "create", code, p, http.StatusNotImplemented, "not-built")
+
+	if p.Detail == nil || !strings.Contains(*p.Detail, "not built yet") {
+		t.Errorf("detail = %v, want that draft requests are not built yet", p.Detail)
+	}
+
+	wantDraftRequestList(t, h, "")
+}
+
+// A request seeded in the store reads back, alone and in the list, newest first.
 func TestAPI_DraftRequests(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
 
-	var first gen.DraftRequest
-	if code := h.call(t, http.MethodPost, acmeDraftRequests, `{"text":"  give review a 4th reviewer  "}`, &first); code != http.StatusCreated {
-		t.Fatalf("create = %d, want 201", code)
-	}
-
-	wantQueuedByLocalUser(t, first, "give review a 4th reviewer")
+	firstID := h.seedDraftRequest(t, acmeID, "give review a 4th reviewer", "")
 
 	var got gen.DraftRequest
-	if code := h.call(t, http.MethodGet, acmeDraftRequests+"/"+first.Id, "", &got); code != http.StatusOK || got.Id != first.Id || got.Status != gen.DraftRequestStatusQueued {
+	if code := h.call(t, http.MethodGet, acmeDraftRequests+"/"+firstID, "", &got); code != http.StatusOK || got.Id != firstID {
 		t.Errorf("get = %d %+v, want the queued request", code, got)
 	}
 
-	// The request ends, as the runner will finish it, so the factory takes the next one.
+	wantQueuedByLocalUser(t, got, "give review a 4th reviewer")
+
 	h.finishDraftRequests(t, acmeID)
 
-	var second gen.DraftRequest
-	if code := h.call(t, http.MethodPost, acmeDraftRequests, `{"text":"fix the writer","agent":"writer"}`, &second); code != http.StatusCreated || second.Agent != "writer" {
-		t.Fatalf("create for writer = %d %+v, want 201", code, second)
+	secondID := h.seedDraftRequest(t, acmeID, "fix the writer", "writer")
+
+	list := wantDraftRequestList(t, h, "", secondID, firstID)
+	if list[0].Agent != "writer" || list[1].Status != gen.DraftRequestStatusDone {
+		t.Errorf("list = %+v, want the writer's request, then the first one done", list)
 	}
 
-	if list := wantDraftRequestList(t, h, "", second.Id, first.Id); list[1].Status != gen.DraftRequestStatusDone {
-		t.Errorf("list[1] = %+v, want the first request done", list[1])
-	}
-
-	wantDraftRequestList(t, h, "?limit=1", second.Id)
+	wantDraftRequestList(t, h, "?limit=1", secondID)
 }
 
 // wantDraftRequestList lists acme's requests with query and checks that they are ids, in order.
@@ -75,12 +84,9 @@ func TestAPI_DraftRequestOfAnotherFactory(t *testing.T) {
 
 	h := newHarness(t)
 
-	var r gen.DraftRequest
-	if code := h.call(t, http.MethodPost, acmeDraftRequests, `{"text":"give review a 4th reviewer"}`, &r); code != http.StatusCreated {
-		t.Fatalf("create = %d, want 201", code)
-	}
+	id := h.seedDraftRequest(t, acmeID, "give review a 4th reviewer", "")
 
-	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/draft/requests/"+r.Id, "", nil); code != http.StatusNotFound {
+	if code := h.call(t, http.MethodGet, "/v1/orgs/acme/factories/line/draft/requests/"+id, "", nil); code != http.StatusNotFound {
 		t.Errorf("get through line = %d, want 404", code)
 	}
 }
@@ -95,7 +101,8 @@ func wantQueuedByLocalUser(t *testing.T, r gen.DraftRequest, text string) {
 	}
 }
 
-// An agent counts when the open draft has it, even before it is published.
+// An agent counts when the open draft has it, even before it is published: the request passes
+// the agent check and reaches the not-built refusal.
 func TestAPI_DraftRequestAgentOfTheDraft(t *testing.T) {
 	t.Parallel()
 
@@ -103,10 +110,8 @@ func TestAPI_DraftRequestAgentOfTheDraft(t *testing.T) {
 	h.putDraftYAML(t, strings.Replace(acme, "- { name: writer, prompt: ./agents/writer.md }",
 		"- { name: writer, prompt: ./agents/writer.md }\n    - { name: editor, prompt: ./agents/writer.md }", 1))
 
-	var r gen.DraftRequest
-	if code := h.call(t, http.MethodPost, acmeDraftRequests, `{"text":"tighten the editor","agent":"editor"}`, &r); code != http.StatusCreated || r.Agent != "editor" {
-		t.Errorf("create for the draft's editor = %d %+v, want 201", code, r)
-	}
+	code, p := callWithProblem(t, h, http.MethodPost, acmeDraftRequests, `{"text":"tighten the editor","agent":"editor"}`, nil)
+	wantProblem(t, "create for the draft's editor", code, p, http.StatusNotImplemented, "not-built")
 }
 
 func TestAPI_DraftRequestRefusals(t *testing.T) {
@@ -125,12 +130,8 @@ func TestAPI_DraftRequestRefusals(t *testing.T) {
 	code, p := callWithProblem(t, h, http.MethodPost, acmeDraftRequests, `{"text":"fix it","agent":"nobody"}`, nil)
 	wantProblem(t, "unknown agent", code, p, http.StatusNotFound, "agent-not-found")
 
-	if code := h.call(t, http.MethodPost, acmeDraftRequests, `{"text":"exactly 2000 `+strings.Repeat("x", domain.MaxDraftRequestText-13)+`"}`, nil); code != http.StatusCreated {
-		t.Fatalf("create of 2000 characters = %d, want 201", code)
-	}
-
-	code, p = callWithProblem(t, h, http.MethodPost, acmeDraftRequests, `{"text":"and another"}`, nil)
-	wantProblem(t, "second while one is queued", code, p, http.StatusConflict, "draft-request-open")
+	code, p = callWithProblem(t, h, http.MethodPost, acmeDraftRequests, `{"text":"exactly 2000 `+strings.Repeat("x", domain.MaxDraftRequestText-13)+`"}`, nil)
+	wantProblem(t, "2000 characters", code, p, http.StatusNotImplemented, "not-built")
 
 	code, p = callWithProblem(t, h, http.MethodGet, acmeDraftRequests+"/01900000-0000-7000-8000-999999999999", "", nil)
 	wantProblem(t, "unknown request", code, p, http.StatusNotFound, "draft-request-not-found")
@@ -152,9 +153,8 @@ func TestAPI_DraftRequestRefusesAnAgentOfABrokenDraft(t *testing.T) {
 	wantProblem(t, "agent of a broken draft", code, p, http.StatusConflict, "yaml-invalid")
 
 	// Without an agent the request does not read the draft.
-	if code := h.call(t, http.MethodPost, acmeDraftRequests, `{"text":"fix the YAML"}`, nil); code != http.StatusCreated {
-		t.Errorf("create without an agent = %d, want 201", code)
-	}
+	code, p = callWithProblem(t, h, http.MethodPost, acmeDraftRequests, `{"text":"fix the YAML"}`, nil)
+	wantProblem(t, "create without an agent", code, p, http.StatusNotImplemented, "not-built")
 }
 
 func TestAPI_DraftRequestViewerMayReadButNotAsk(t *testing.T) {
@@ -162,14 +162,11 @@ func TestAPI_DraftRequestViewerMayReadButNotAsk(t *testing.T) {
 
 	h := newHarness(t)
 
-	var r gen.DraftRequest
-	if code := h.call(t, http.MethodPost, acmeDraftRequests, `{"text":"give review a 4th reviewer"}`, &r); code != http.StatusCreated {
-		t.Fatalf("create = %d, want 201", code)
-	}
+	id := h.seedDraftRequest(t, acmeID, "give review a 4th reviewer", "")
 
 	h.as(acmeMember(domain.FactoryViewer))
 
-	for _, path := range []string{acmeDraftRequests, acmeDraftRequests + "/" + r.Id} {
+	for _, path := range []string{acmeDraftRequests, acmeDraftRequests + "/" + id} {
 		if code := h.call(t, http.MethodGet, path, "", nil); code != http.StatusOK {
 			t.Errorf("viewer GET %s = %d, want 200", path, code)
 		}
@@ -192,6 +189,21 @@ func (h *harness) putDraftYAML(t *testing.T, doc string) {
 	if _, err := svc.PutFile(ctx, acmeID, authoring.FileWrite{Path: yamlFile, Content: []byte(doc)}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// seedDraftRequest queues a request of the local user on factory straight in the store, as the
+// route will once a runner is wired, and returns its id.
+func (h *harness) seedDraftRequest(t *testing.T, factory domain.FactoryID, text, agent string) string {
+	t.Helper()
+
+	r, err := h.drafts.Create(domain.WithOrg(t.Context(), testOrg), domain.NewDraftRequest{
+		Factory: factory, Requester: domain.LocalUser, Text: text, Agent: agent,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return string(r.ID)
 }
 
 // finishDraftRequests ends factory's open request done, as the runner does.
