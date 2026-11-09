@@ -12,6 +12,7 @@
       "properties": {
         "stations": {
           "type": "array",
+          "minItems": 2,
           "description": "The line, in <flow> order.",
           "items": { "$ref": "#/$defs/station" }
         },
@@ -27,9 +28,14 @@
       "required": ["id"],
       "properties": {
         "id": { "$ref": "#/$defs/slug", "description": "The station's id." },
-        "wip": { "type": "integer", "default": 2, "description": "Items at once." },
-        "kind": { "enum": ["agent", "human"] }
-      }
+        "wip": { "type": "integer", "minimum": 1, "default": 2, "description": "Items at once." },
+        "kind": { "enum": ["agent", "human"] },
+        "agent": { "type": "string" },
+        "route": { "type": "object", "additionalProperties": { "type": "string" } }
+      },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "agent" } } }, "then": { "oneOf": [ { "required": ["agent"] }, { "required": ["route"] } ] } }
+      ]
     },
     "connection": {
       "if": { "type": "string" },

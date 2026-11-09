@@ -110,10 +110,14 @@ Fields are listed in the schema's order, each nested under the field that holds 
 
 object, required.
 
-- ` + "`stations`" + `: array of object, required. The line, in &lt;flow&gt; order.
+- ` + "`stations`" + `: array of object, at least 2 items, required. The line, in &lt;flow&gt; order.
   - ` + "`id`" + `: string matching ` + "`^[a-z]+$`" + `, required. The station's id.
-  - ` + "`wip`" + `: integer, default ` + "`2`" + `. Items at once.
+  - ` + "`wip`" + `: integer, at least 1, default ` + "`2`" + `. Items at once.
   - ` + "`kind`" + `: one of ` + "`\"agent\"`, `\"human\"`" + `.
+  - ` + "`agent`" + `: string.
+  - ` + "`route`" + `: map of string.
+  - Rules:
+    - When ` + "`kind` is `\"agent\"`, exactly one of `agent` or `route`" + ` is set.
 - ` + "`labels`" + `: map of string.
 - ` + "`connections`" + `: array of string matching ` + "`^[a-z]+$`" + ` or object.
   - ` + "`name`" + `: string matching ` + "`^[a-z]+$`" + `, required.
