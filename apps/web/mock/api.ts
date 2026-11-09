@@ -1483,6 +1483,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
         model_label: null,
         slots,
         busy,
+        kept_slots: 0,
+        kept_busy: 0,
+        shared_slots: slots,
+        shared_busy: busy,
       }));
     }
     if (s.kind === 'human') {
@@ -1495,6 +1499,10 @@ export function createMockApi(options: { live?: boolean } = {}): MockApi {
           model_label: null,
           slots: null,
           busy: here.filter((it) => it.state === 'waiting_human').length,
+          kept_slots: null,
+          kept_busy: null,
+          shared_slots: null,
+          shared_busy: null,
         },
       ];
     }

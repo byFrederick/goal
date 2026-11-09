@@ -630,6 +630,10 @@ describe('board filters and grouping', () => {
     model_label: 'Opus 5.5',
     slots: 2,
     busy: 1,
+    kept_slots: 0,
+    kept_busy: 0,
+    shared_slots: 2,
+    shared_busy: 1,
     ...over,
   });
   const part = (id: string, title: string, n: number, parts: number) => ({
