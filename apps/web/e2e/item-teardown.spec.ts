@@ -51,8 +51,8 @@ test('an item no agent has picked up shows the empty state', async ({ page }) =>
 });
 
 test('a failed read shows an error, and Try again shows the breakdown', async ({ page, request }) => {
-  // The query client tries a 5xx twice more (api/retry.ts), so the fault outlasts the first attempt and both retries.
-  await request.post('/__mock/fail', { data: { path: '/teardown', method: 'GET', status: 503, times: 3 } });
+  // A 502 is goald unreachable (a 503 is Goal restarting, which loads again by itself). The query client tries a 5xx twice more (api/retry.ts), so the fault outlasts the first attempt and both retries.
+  await request.post('/__mock/fail', { data: { path: '/teardown', method: 'GET', status: 502, times: 3 } });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/o/acme/f/goal/items/4?tab=teardown');
 
