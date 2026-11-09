@@ -120,6 +120,10 @@ func TestChecks_CheckRunsOnly(t *testing.T) {
 		{runCompleted, "cancelled", ports.Check{State: ports.CheckFinished, Result: ports.CheckFailed}},
 		{runCompleted, "action_required", ports.Check{State: ports.CheckFinished, Result: ports.CheckFailed}},
 		{runCompleted, "startup_failure", ports.Check{State: ports.CheckFinished, Result: ports.CheckFailed}},
+		// GitHub can answer a conclusion while the status still says the run is not done.
+		{"in_progress", "success", ports.Check{State: ports.CheckFinished, Result: ports.CheckPassed}},
+		{"in_progress", "failure", ports.Check{State: ports.CheckFinished, Result: ports.CheckFailed}},
+		{"queued", "success", ports.Check{State: ports.CheckFinished, Result: ports.CheckPassed}},
 	}
 
 	var (

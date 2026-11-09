@@ -142,15 +142,17 @@ func (cl *Client) checksHead(ctx context.Context, repo domain.CodeRepository, to
 	return p, pj.Head.SHA, nil
 }
 
-// checkRunCheck maps a check run (ADR 0044, decision 6). A status GitHub adds later is pending,
+// checkRunCheck maps a check run (ADR 0044, decision 6). GitHub sets a conclusion only once a
+// run has ended, so a conclusion makes the run finished whatever its status says: GitHub can
+// still answer in_progress for a run that has concluded. A status GitHub adds later is pending,
 // and a conclusion it adds later is failed: neither passes.
 func checkRunCheck(name, status, conclusion, link string) ports.Check {
 	c := ports.Check{Name: name, URL: link}
 
-	switch status {
-	case "in_progress":
+	switch {
+	case conclusion == "" && status == "in_progress":
 		c.State = ports.CheckRunning
-	case runCompleted:
+	case conclusion != "" || status == runCompleted:
 		c.State = ports.CheckFinished
 
 		switch conclusion {
