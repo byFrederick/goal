@@ -120,7 +120,7 @@ const usage = `usage:
                                                   goal factory pull and goal factory push
   goal org list                                   the organizations (* the one commands act in)
   goal org use <slug>                             act in this organization from now on (config file)
-  goal org create <slug> --name N [--mark M]      create an organization (platform admins only)
+  goal org create <slug> --name N [--mark M]      create an organization (any signed-in person)
   goal org update <slug> [--name N] [--slug S] [--mark M] [--max-slots N]
                                                   rename it, or cap the agents running at once
                                                   across its factories (--max-slots 0: no cap)

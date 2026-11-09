@@ -11,7 +11,7 @@ Start with [Getting started](/docs/getting-started/) to set up Goal, or read [Co
 
 The sections are:
 
-- **Getting started**: install Goal and run a first item through a factory.
+- **Getting started**: sign in, create a factory and run a first item.
 - **Concepts**: the factory, its flow, agents, access and secrets, knowledge, Jonah and questions.
 - **Guides**: step-by-step tasks.
 - **Reference**: the CLI, the API and the factory definition.
