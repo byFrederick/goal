@@ -181,10 +181,15 @@ test('the sign-in page says what failed: Goal unreachable, too many tries, Googl
   await page.clock.install();
   await page.goto('/sign-in');
 
-  await fail(request, { path: '/api/auth/email-otp/send-verification-otp', status: 503, code: 'auth-unavailable' });
+  await fail(request, { path: '/api/auth/email-otp/send-verification-otp', status: 502 });
   await emailField(page).fill(owner);
   await sendCode(page).click();
   await expect(page.getByText('Can’t reach Goal. Check your connection and try again.')).toBeVisible();
+
+  // A 503 means goald is starting after a deploy: the page says so instead of blaming the connection.
+  await fail(request, { path: '/api/auth/email-otp/send-verification-otp', status: 503, code: 'goald-starting' });
+  await sendCode(page).click();
+  await expect(page.getByText('Goal is restarting. Try again in a moment.')).toBeVisible();
 
   await fail(request, { path: '/api/auth/email-otp/send-verification-otp', status: 429 });
   await sendCode(page).click();

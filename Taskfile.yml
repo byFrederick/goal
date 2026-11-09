@@ -358,6 +358,84 @@ tasks:
     cmds:
       - docker compose build goald
 
+  goald:coldstart:
+    desc: >-
+      Measure goald's production image and its local cold start: builds cmd/goald/Dockerfile's
+      runtime target, prints its uncompressed and gzip-compressed size and each layer with the
+      instruction that made it, then starts it against compose.yaml's PostgreSQL and RustFS (as
+      task goald, with compose's goald environment) and prints the seconds from docker run to
+      "goald listening". Needs Docker; reports only. CI's "goald image and cold start" job runs it
+    vars:
+      IMAGE: goald:coldstart
+      CONTAINER: goald-coldstart
+      # How long goald may take to log "goald listening" before the task gives up.
+      WAIT_SECONDS: '{{.WAIT_SECONDS | default "180"}}'
+    cmds:
+      - docker build -q -f cmd/goald/Dockerfile --target runtime -t {{.IMAGE}} . >/dev/null
+      - docker compose up -d --wait postgres rustfs
+      # The roles goald runs as and the bucket, as task db:init and task storage:init make them.
+      - task: build
+      - bin/goal db init
+      - bin/goal storage init
+      - |
+        set -eu
+        echo "## goald image {{.IMAGE}}"
+        echo "uncompressed: $(docker image inspect -f '{{"{{"}}.Size{{"}}"}}' {{.IMAGE}}) bytes"
+        echo "compressed (gzip of docker save): $(docker save {{.IMAGE}} | gzip -c | wc -c | tr -d ' ') bytes"
+        echo "layers, newest first:"
+        docker history --no-trunc --format '{{"{{"}}.Size{{"}}"}}\t{{"{{"}}.CreatedBy{{"}}"}}' {{.IMAGE}}
+      # goald shares PostgreSQL's network namespace on compose's network (as the auth service shares
+      # goald's), so it reaches postgres and rustfs by name. It gets the Docker socket because it
+      # pings Docker at start (GOAL_SANDBOX=docker); GOAL_DOCKER_GID as for compose's goald. Like
+      # compose's goald it reads .env when there is one, runs GOAL_AUTH=session (the production path,
+      # with its identity self-check) and blanks the auth service's secrets; the -e flags win over
+      # .env. Without GOAL_AUTH_PROXY_SECRET or GOAL_GATEWAY_KEY (CI has no .env) it gets a throwaway one of each; the identity
+      # service need not run, since goald only watches for it after it listens.
+      - |
+        set -eu
+        docker rm -f {{.CONTAINER}} >/dev/null 2>&1 || true
+        trap 'docker rm -f {{.CONTAINER}} >/dev/null 2>&1 || true' EXIT
+        gid="${GOAL_DOCKER_GID:-$(stat -c %g /var/run/docker.sock 2>/dev/null || echo 0)}"
+        envfile=""
+        if [ -f .env ]; then envfile="--env-file .env"; fi
+        GOAL_AUTH_PROXY_SECRET="${GOAL_AUTH_PROXY_SECRET:-$(openssl rand -hex 32)}"
+        GOAL_GATEWAY_KEY="${GOAL_GATEWAY_KEY:-$(openssl rand -hex 32)}"
+        export GOAL_AUTH_PROXY_SECRET GOAL_GATEWAY_KEY
+        began=$(date +%s.%N)
+        # shellcheck disable=SC2086 # envfile is empty or two words
+        docker run -d --name {{.CONTAINER}} --network "container:$(docker compose ps -q postgres)" \
+          --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true \
+          -v /var/run/docker.sock:/var/run/docker.sock --group-add "$gid" $envfile \
+          -e GOAL_LISTEN=0.0.0.0:8080 -e GOAL_GATEWAY_LISTEN=0.0.0.0:8090 \
+          -e GOAL_GATEWAY_URL=http://goald:8090/mcp -e GOAL_PUBLIC_URL=http://127.0.0.1:8080 \
+          -e GOAL_AUTH=session -e GOAL_AUTH_UPSTREAM=http://127.0.0.1:8081 -e GOAL_AUTH_PROXY_SECRET -e GOAL_GATEWAY_KEY \
+          -e GOAL_SANDBOX_NETWORK="${GOAL_SANDBOX_NETWORK:-goal_agents}" -e GOAL_DOCS_DIR= \
+          -e BETTER_AUTH_SECRET= -e BETTER_AUTH_SECRETS= -e GOAL_PG_PASSWORD= -e GOAL_PG_AUTH_PASSWORD= \
+          -e GOAL_AUTH_DATABASE_URL= -e GOAL_DATABASE_ADMIN_URL= -e GOAL_BOOTSTRAP_OWNER_EMAIL= \
+          -e GOAL_SMTP_URL= -e GOOGLE_CLIENT_SECRET= -e GOAL_API_KEY= \
+          -e GOAL_DATABASE_URL="postgres://goal_app:${GOAL_PG_APP_PASSWORD:-goal-app-dev-only}@postgres:5432/goal?sslmode=disable" \
+          -e GOAL_MIGRATE_DATABASE_URL="postgres://goal_owner:${GOAL_PG_OWNER_PASSWORD:-goal-owner-dev-only}@postgres:5432/goal?sslmode=disable" \
+          -e GOAL_S3_ENDPOINT=http://rustfs:9000 -e GOAL_S3_BUCKET -e GOAL_S3_ACCESS_KEY -e GOAL_S3_SECRET_KEY -e AWS_REGION \
+          -e GOAL_MASTER_KEYS -e GOAL_LOG_FORMAT=text \
+          {{.IMAGE}} >/dev/null
+        while ! docker logs {{.CONTAINER}} 2>&1 | grep -q 'msg="goald listening"'; do
+          if [ "$(docker inspect -f '{{"{{"}}.State.Running{{"}}"}}' {{.CONTAINER}})" != true ]; then
+            echo "goald exited before it listened; its last lines:" >&2
+            docker logs --tail 40 {{.CONTAINER}} >&2
+            exit 1
+          fi
+          if awk -v b="$began" -v n="$(date +%s.%N)" 'BEGIN { exit !(n - b > {{.WAIT_SECONDS}}) }'; then
+            echo "goald did not log \"goald listening\" within {{.WAIT_SECONDS}}s; its last lines:" >&2
+            docker logs --tail 40 {{.CONTAINER}} >&2
+            exit 1
+          fi
+          sleep 0.1
+        done
+        took=$(awk -v b="$began" -v n="$(date +%s.%N)" 'BEGIN { printf "%.1f", n - b }')
+        echo "## goald cold start"
+        docker logs {{.CONTAINER}} 2>&1 | grep -E 'goald starting|took=|goald listening'
+        echo "docker run to \"goald listening\": $took s"
+
   hooks:install:
     desc: Use the versioned git hooks in .githooks (pre-push runs task check)
     cmds:

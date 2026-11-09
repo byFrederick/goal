@@ -29,6 +29,7 @@ const auth = createAuthClient({
  */
 export type AuthFailureKind =
   | 'unreachable'
+  | 'starting'
   | 'rate-limited'
   | 'wrong-code'
   | 'expired'
@@ -44,7 +45,7 @@ export type AuthFailureKind =
 
 export class AuthFailure extends Error {
   readonly kind: AuthFailureKind;
-  /** rate-limited only: how long to wait, from the X-Retry-After header. */
+  /** rate-limited (X-Retry-After) and starting (Retry-After) only: how long to wait. */
   readonly retryAfterSeconds: number | undefined;
 
   constructor(kind: AuthFailureKind, retryAfterSeconds?: number) {
@@ -91,15 +92,23 @@ type Run<T> = (fetchOptions: { onError: (ctx: { response: Response }) => void })
  */
 async function call<T>(run: Run<T>, retried = false): Promise<T> {
   let retryAfter: string | null = null;
+  let restartAfter: string | null = null;
   let result: BetterAuthResult<T>;
   try {
-    result = await run({ onError: ({ response }) => (retryAfter = response.headers.get('X-Retry-After')) });
+    result = await run({
+      onError: ({ response }) => {
+        retryAfter = response.headers.get('X-Retry-After');
+        restartAfter = response.headers.get('Retry-After');
+      },
+    });
   } catch {
     throw new AuthFailure('unreachable');
   }
   if (!result.error) return result.data;
   const { status, code } = result.error;
   if (status === 429) throw new AuthFailure('rate-limited', Number(retryAfter) || 60);
+  if (status === 503)
+    throw new AuthFailure('starting', /^\d+$/.test(restartAfter ?? '') ? Number(restartAfter) : undefined);
   if (status >= 500 || status === 0) throw new AuthFailure('unreachable');
   const kind = (code && codeFailures[code]) || 'refused';
   if (kind === 'reauth-required' && !retried && (await sessionHandlers.reauth())) return call(run, true);

@@ -8,4 +8,4 @@ Its `Dockerfile.dockerignore`; its inputs in `deploy/cloudflare/scripts/images.m
 
 ## Run
 
-`task cloudflare:check`, the image's task (`task goald:image`, `task egress:image`, `task auth:image`, `task worker:image`)
+`task cloudflare:check`, the image's task (`task goald:image`, and `task goald:coldstart` for goald's sizes and cold start; `task egress:image`, `task auth:image`, `task worker:image`)

@@ -72,7 +72,7 @@ Each step names where it happens. A laptop step runs from your checkout with you
 
 1. `task docs:site:build` builds this docs site, which the Worker serves.
 2. `task deploy:worker` builds the goald, auth and goal-agent images, pushes them to Cloudflare's registry and runs `wrangler deploy`.
-3. `task deploy:health` waits until `GET /v1/health` answers `{"status":"ok"}`, and fails after 5 minutes.
+3. `task deploy:health` waits until `GET /v1/health` answers `{"status":"ok"}`, and fails after 5 minutes. While goald starts (it opens the database, applies migrations and loads the definitions), every path answers 503 at once with the code `goald-starting`, a `Retry-After` header in seconds and `Cache-Control: no-store`; the health check keeps waiting through it. The control Worker passes this 503 on, and before goald's container answers at all it gives the same 503 itself, at once. A browser that loads a page meanwhile gets a "Goal is restarting" page that reloads itself after 5 seconds.
 
 Production runs the last dispatched commit until the next dispatch. To roll back, dispatch an earlier commit of main; migrations are forward-only and stay applied.
 

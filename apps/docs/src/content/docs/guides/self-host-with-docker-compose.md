@@ -48,6 +48,8 @@ task up:compose
 
 `task up:compose` runs `goal up --compose`. It starts `goald` and the auth service as Compose services (`goald` and `auth`, in the `stack` profile), and returns once they are healthy. This needs sign-in on (`GOAL_AUTH=session`, the default). The services keep running afterwards, so you do not need to keep the terminal open.
 
+goald binds its port before it opens the database. Until it has started, every path, the API, `/api/auth/*` and the web app alike, answers 503 as problem JSON with the code `goald-starting`, a `Retry-After` header in seconds and `Cache-Control: no-store`. Retry after those seconds. The `goald` service reads as healthy only once `GET /v1/health` answers 200.
+
 Follow their logs, and stop them when you are done:
 
 ```sh
@@ -133,6 +135,8 @@ On a database that was not converted, migration 00135 refuses to run and changes
 Before you upgrade past migration 00138, which drops the columns of the old factory webhook endpoints and the old `source` of items, the database must have run ADR 0040's release (migrations 00113 to 00126), and goald must have started on it once. That release moves each factory's webhook endpoint to the organization, signed by a secret.
 
 On a database that has not, migration 00138 refuses to run and changes nothing. goald does not start, and its error says `run ADR 0040's release first, then this one`. Start that release once, then upgrade again.
+
+While goald starts after an upgrade, it answers every request with 503. The web app says "Goal is restarting" in place of the page and loads the page's data again by itself, after the wait goald asks for. A change that goald refused in that moment is not sent again: the app shows "Goal is restarting. Try again in a moment.", and you send it again.
 
 ## If it does not start
 

@@ -41,6 +41,7 @@ fmt
 gen
 gen:check
 goald
+goald:coldstart
 goald:image
 hooks:install
 layout:check

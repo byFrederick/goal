@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -413,5 +414,96 @@ func TestStopped_NoSignalIsNone(t *testing.T) {
 	attrs := stoppedAttrs(context.Background(), time.Now())
 	if sig, ok := attrs[0].(slog.Attr); !ok || sig.Value.String() != "none" {
 		t.Errorf("signal %v, want none", attrs[0])
+	}
+}
+
+// goald's listeners, the gateway's included, are bound and answer 503 goald-starting before
+// anything else starts, reach the real handlers once ready, and stop when goald is stopped while
+// it is still starting.
+func TestServe_ListenersAnswerStartingUntilReadyAndStopWhileStarting(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	s := settings{Listen: "127.0.0.1:0", GatewayListen: "127.0.0.1:0"}
+
+	f, err := openFront(ctx, s, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(f.listeners) != 2 {
+		t.Fatalf("%d listeners, want the main one and the gateway's", len(f.listeners))
+	}
+
+	get := func(i int) (*http.Response, error) {
+		r, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+f.listeners[i].Addr().String()+"/v1/health", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return http.DefaultClient.Do(r)
+	}
+
+	for i := range f.listeners {
+		res, err := get(i)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_ = res.Body.Close()
+
+		if res.StatusCode != http.StatusServiceUnavailable || res.Header.Get("Retry-After") == "" {
+			t.Errorf("listener %d while starting: status %d, Retry-After %q; want 503 with Retry-After", i, res.StatusCode, res.Header.Get("Retry-After"))
+		}
+	}
+
+	teapot := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) })
+	f.ready([]*http.Server{httpServer(s.Listen, teapot), httpServer(s.GatewayListen, teapot)})
+
+	res, err := get(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_ = res.Body.Close()
+
+	if res.StatusCode != http.StatusTeapot {
+		t.Errorf("after ready: status %d, want the real handler's", res.StatusCode)
+	}
+
+	cancel()
+
+	select {
+	case <-f.stopped:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the listeners still serve after goald was stopped")
+	}
+
+	if res, err := get(1); err == nil {
+		_ = res.Body.Close()
+
+		t.Error("the gateway listener still accepts connections after goald was stopped")
+	}
+}
+
+// A listener that cannot bind fails goald's start.
+func TestServe_AListenerThatCannotBindFailsTheStart(t *testing.T) {
+	t.Parallel()
+
+	var lc net.ListenConfig
+
+	taken, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = taken.Close() })
+
+	s := settings{Listen: "127.0.0.1:0", GatewayListen: taken.Addr().String()}
+
+	if _, err := openFront(t.Context(), s, slog.New(slog.DiscardHandler)); err == nil {
+		t.Fatal("open with the gateway's address taken: no error")
 	}
 }

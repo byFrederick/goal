@@ -2,6 +2,7 @@ import { isCancelledError, useQueryErrorResetBoundary } from '@tanstack/react-qu
 import { type ErrorComponentProps, Link, useRouter } from '@tanstack/react-router';
 import { useEffect, useRef } from 'react';
 import { ApiError, NetworkError } from '../api/client';
+import { isStarting, noteRestartRetry, restartAttempt, restartDelay } from '../api/retry';
 import { InfoTip } from '../features/jonah/info-tip';
 import { Button } from '../ui/button';
 import { PageShape, PendingSkeleton } from './route-skeletons';
@@ -16,13 +17,13 @@ export function PendingScreen() {
 }
 
 /**
- * Why a load failed: goald is unreachable (the request got no answer, or a gateway answered 502, 503
- * or 504), goald refused it (another ApiError), it was cancelled (the page that started the fetch was
+ * Why a load failed: goald is unreachable (the request got no answer, or a gateway answered 502 or 504), restarting (a 503 that is not a missing feature), goald refused it (another ApiError), it was cancelled (the page that started the fetch was
  * left while it ran: that one is loaded again), or the page's own code crashed.
  */
-export function loadFailure(error: unknown): 'refused' | 'unreachable' | 'interrupted' | 'crashed' {
+export function loadFailure(error: unknown): 'refused' | 'unreachable' | 'starting' | 'interrupted' | 'crashed' {
   if (isCancelledError(error)) return 'interrupted';
   if (error instanceof NetworkError) return 'unreachable';
+  if (isStarting(error)) return 'starting';
   if (error instanceof ApiError) return [502, 503, 504].includes(error.status) ? 'unreachable' : 'refused';
   return 'crashed';
 }
@@ -45,6 +46,23 @@ export function ErrorScreen({ error, reset }: ErrorComponentProps) {
 
   useEffect(() => queryReset.reset(), [queryReset]);
 
+  // A restarting goald is asked again by itself, after Retry-After; a still-failing answer waits the next delay.
+  useEffect(() => {
+    if (kind !== 'starting') return;
+    const wait = error instanceof ApiError ? error.retryAfterSeconds : undefined;
+    const path = router.state.location.pathname;
+    const attempt = restartAttempt(path);
+    const timer = window.setTimeout(
+      () => {
+        noteRestartRetry(path, attempt);
+        reset();
+        router.invalidate();
+      },
+      restartDelay(attempt, wait),
+    );
+    return () => window.clearTimeout(timer);
+  }, [kind, error, reset, router]);
+
   const retry = () => {
     reset();
     router.invalidate();
@@ -57,6 +75,19 @@ export function ErrorScreen({ error, reset }: ErrorComponentProps) {
     router.invalidate();
   }, [kind, reset, router]);
 
+  if (kind === 'starting') {
+    return (
+      <div role="status" className="flex max-w-xl flex-col gap-3 rounded-card border border-line bg-card p-5">
+        <h1 className="m-0 text-xl font-medium text-ink">Goal is restarting</h1>
+        <p className="m-0 text-body text-muted">This page loads again by itself.</p>
+        <div>
+          <Button variant="primary" onClick={retry}>
+            Try again
+          </Button>
+        </div>
+      </div>
+    );
+  }
   const text =
     kind === 'interrupted'
       ? failureText.interrupted

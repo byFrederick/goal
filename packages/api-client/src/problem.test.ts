@@ -25,6 +25,26 @@ describe("unwrap", () => {
     expect(requests[0]?.url).toBe("http://goald.example.com/v1/orgs/acme/factories");
   });
 
+  test("carries the Retry-After seconds of a goald-starting 503", async () => {
+    const starting = new Response(JSON.stringify({ title: "Goal is starting", status: 503, code: "goald-starting" }), {
+      status: 503,
+      headers: { "Content-Type": "application/problem+json", "Retry-After": "3" },
+    });
+    const { goal } = goaldAnswering(starting);
+    const error = await unwrap(goal.GET(orgPath("/factories"), { params: { path: { org: "acme" } } })).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).retryAfterSeconds).toBe(3);
+    expect((error as ApiError).code).toBe("goald-starting");
+  });
+
+  test("leaves retryAfterSeconds undefined when the header is absent or not a number", async () => {
+    for (const headers of [{}, { "Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT" }]) {
+      const { goal } = goaldAnswering(new Response("{}", { status: 503, headers }));
+      const error = await unwrap(goal.GET(orgPath("/factories"), { params: { path: { org: "acme" } } })).catch((e: unknown) => e);
+      expect((error as ApiError).retryAfterSeconds).toBeUndefined();
+    }
+  });
+
   test("throws the Problem goald answered with", async () => {
     const { goal } = goaldAnswering(problemJson(409, { title: "Item is not blocked", status: 409, detail: "goal#2 is done" }));
     const call = unwrap(goal.POST(orgPath("/items/{item}/retry"), { params: { path: { org: "acme", item: "goal#2" } } }));

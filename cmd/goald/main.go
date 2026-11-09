@@ -17,10 +17,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -106,34 +109,39 @@ const notifyEvery = 10 * time.Second
 // runs it, under the digest lock, and the others skip it.
 const digestEvery = 5 * time.Minute
 
-func main() { os.Exit(goald()) }
+func main() { os.Exit(start(os.Stdout, os.Stderr, os.Getenv, debug.ReadBuildInfo)) }
 
-// goald runs the daemon and returns its exit code: 2 for bad configuration, 1 for a failure.
-func goald() int {
-	started := time.Now()
+// start runs the daemon and returns its exit code: 2 for bad configuration, 1 for a failure. Its
+// first line, "goald starting" with the version, goes out before the settings are read, so it is
+// JSON at Info whatever GOAL_LOG_FORMAT and GOAL_LOG_LEVEL say, and it shows even when they fail.
+func start(stdout, stderr io.Writer, getenv func(string) string, readBuildInfo func() (*debug.BuildInfo, bool)) int {
+	st := newStartup(time.Now)
+
+	slog.New(slog.NewJSONHandler(stdout, nil)).Info("goald starting", slog.String("version", buildVersion(version, readBuildInfo)))
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	s, err := settingsFrom(os.Getenv)
+	s, err := settingsFrom(getenv)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "goald:", err)
+		_, _ = fmt.Fprintln(stderr, "goald:", err)
 		return 2
 	}
 
-	log := newLogger(s)
+	log := newLogger(stdout, s)
 
 	for _, r := range s.Ignored {
 		log.Warn("setting ignored: it was removed (spec 4 §5.13); remove it from the environment",
 			slog.String("variable", r.name), slog.String("instead", r.instead))
 	}
 
-	if err := run(ctx, s, log); err != nil {
-		log.Error("goald stopped", append(stoppedAttrs(ctx, started), slog.Any("error", err))...)
+	// A signal while goald starts ends the startup step it was in with ctx's error: a stop, not a failure.
+	if err := run(ctx, s, log, st); err != nil && (ctx.Err() == nil || !errors.Is(err, context.Canceled)) {
+		log.Error("goald stopped", append(stoppedAttrs(ctx, st.started), slog.Any("error", err))...)
 		return 1
 	}
 
-	log.Info("goald stopped", stoppedAttrs(ctx, started)...)
+	log.Info("goald stopped", stoppedAttrs(ctx, st.started)...)
 
 	return 0
 }
@@ -151,18 +159,27 @@ func stoppedAttrs(ctx context.Context, started time.Time) []any {
 	return []any{slog.String("signal", sig), slog.Duration("uptime", time.Since(started))}
 }
 
-func newLogger(s settings) *slog.Logger {
+func newLogger(out io.Writer, s settings) *slog.Logger {
 	opts := &slog.HandlerOptions{Level: s.LogLevel}
 	if s.LogFormat == "text" {
-		return slog.New(slog.NewTextHandler(os.Stdout, opts))
+		return slog.New(slog.NewTextHandler(out, opts))
 	}
 
-	return slog.New(slog.NewJSONHandler(os.Stdout, opts))
+	return slog.New(slog.NewJSONHandler(out, opts))
 }
 
-func run(ctx context.Context, s settings, log *slog.Logger) error {
+// run wires goald and serves until ctx ends. st times its startup phases: the database's in
+// openDatabase, the master keys, the definitions and factories, and the rest up to listening.
+func run(ctx context.Context, s settings, log *slog.Logger, st *startup) error {
 	secrets := env.New(os.LookupEnv)
 	clock := sys.Clock{}
+
+	// The listeners answer 503 goald-starting until ready (front), and stop when ctx ends or run returns.
+	front, err := openFront(ctx, s, log)
+	if err != nil {
+		return err
+	}
+	defer front.shutdown(log)
 
 	key, err := gatewayKey(ctx, s, secrets)
 	if err != nil {
@@ -171,7 +188,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	// One value is the Store, Tenancy and Audit. Each binds its transactions to the organization
 	// in ctx: the engine takes it from each line, the API from the request.
-	pool, store, err := openDatabase(ctx, s, clock, log)
+	pool, store, err := openDatabase(ctx, s, clock, log, st)
 	if err != nil {
 		return err
 	}
@@ -185,17 +202,12 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 
 	// Credentials (ADR 0017) and the organizations' secrets (ADR 0037, the same table) are sealed
 	// under the platform's master keys, and so are webhook endpoints' signing secrets (ADR 0026).
-	credentials, orgSecrets, intake, err := openSealed(ctx, store, os.Getenv, log)
+	credentials, orgSecrets, intake, err := openSealed(ctx, store, os.Getenv, log, st.begin("master_keys"))
 	if err != nil {
 		return err
 	}
 
-	s3cfg, err := s3.ConfigFromEnv(os.Getenv)
-	if err != nil {
-		return err
-	}
-
-	objects, err := s3.New(ctx, s3cfg)
+	objects, err := openObjects(ctx)
 	if err != nil {
 		return err
 	}
@@ -258,12 +270,11 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	loaded, err := defs.Refresh(ctx)
-	if err != nil {
+	if err := loadFactories(ctx, log, defs, objects.Bucket(), st.begin("factories")); err != nil {
 		return err
 	}
 
-	log.InfoContext(ctx, "factories loaded", slog.Int("count", len(loaded)), slog.String("bucket", objects.Bucket()))
+	listening := st.begin("listening")
 
 	definitionNotices := postgres.NewDefinitionNotices(store, log)
 	feed := newFeed(s, store, eng, log)
@@ -303,7 +314,32 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	return serve(ctx, log, s, servers, eng, defs, definitionNotices, feed, j)
+	front.ready(servers) // every handler's dependency is built and the definitions are loaded
+
+	return serve(ctx, log, s, front, eng, defs, definitionNotices, feed, j, append(listening.done(), st.total()))
+}
+
+// openObjects opens the bucket that GOAL_S3_* names.
+func openObjects(ctx context.Context) (*s3.Store, error) {
+	cfg, err := s3.ConfigFromEnv(os.Getenv)
+	if err != nil {
+		return nil, err
+	}
+
+	return s3.New(ctx, cfg)
+}
+
+// loadFactories loads every factory's current definition version (defs.Refresh) and logs
+// "factories loaded" with the factories phase.
+func loadFactories(ctx context.Context, log *slog.Logger, defs *definitions.Cache, bucket string, phase startupPhase) error {
+	loaded, err := defs.Refresh(ctx)
+	if err != nil {
+		return err
+	}
+
+	log.InfoContext(ctx, "factories loaded", append(phase.done(), slog.Int("count", len(loaded)), slog.String("bucket", bucket))...)
+
+	return nil
 }
 
 // newJobs builds goald's scheduled jobs: the purge, the identity watch, the knowledge base's
@@ -427,7 +463,7 @@ func openKnowledge(s settings, store *postgres.Store, secrets *postgres.Secrets,
 // lack (spec 4 §5.2, threat row 12, ADR 0017, ADR 0037 decision 1), and returns the credentials,
 // the secrets and the intake state sealed with those keys. Without a master key goald serves
 // everything but secrets' and credentials' values, and says so.
-func openSealed(ctx context.Context, store *postgres.Store, getenv func(string) string, log *slog.Logger,
+func openSealed(ctx context.Context, store *postgres.Store, getenv func(string) string, log *slog.Logger, phase startupPhase,
 ) (*postgres.Credentials, *postgres.Secrets, *postgres.Intake, error) {
 	keys, err := masterkey.Load(getenv)
 	if err != nil {
@@ -449,9 +485,9 @@ func openSealed(ctx context.Context, store *postgres.Store, getenv func(string) 
 
 	if len(have) == 0 {
 		log.WarnContext(ctx, "no master key: secrets and credentials are unavailable until one is set; add "+
-			masterkey.KeysEnv+"=k1:<the output of openssl rand -base64 32> to .env and keep a copy offline")
+			masterkey.KeysEnv+"=k1:<the output of openssl rand -base64 32> to .env and keep a copy offline", phase.done()...)
 	} else {
-		log.InfoContext(ctx, "master keys loaded", slog.String("active", keys.Active()), slog.Int("count", len(have)))
+		log.InfoContext(ctx, "master keys loaded", append(phase.done(), slog.String("active", keys.Active()), slog.Int("count", len(have)))...)
 	}
 
 	return postgres.NewCredentials(store, keys), postgres.NewSecrets(store, keys), postgres.NewIntake(store), nil
@@ -687,11 +723,12 @@ type jobs struct {
 	scheduleLock scheduleLock
 }
 
-// serve runs the HTTP servers, the engine, the stream feed, the definitions reloads and the
+// serve watches the HTTP servers and runs the engine, the stream feed, the definitions reloads and the
 // scheduled jobs until ctx ends, then shuts them down: the feed ends every stream, HTTP drains,
-// then the engine releases the items its runs held.
-func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Server, eng *engine.Engine, defs *definitions.Cache,
-	notices ports.DefinitionNotices, feed *api.Feed, j jobs,
+// then the engine releases the items its runs held. ready are the startup attrs "goald listening"
+// carries once the real handlers serve: the listening phase and the startup total.
+func serve(ctx context.Context, log *slog.Logger, s settings, front *front, eng *engine.Engine, defs *definitions.Cache,
+	notices ports.DefinitionNotices, feed *api.Feed, j jobs, ready []any,
 ) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -707,16 +744,16 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 		cancel()
 	}
 
-	log.InfoContext(ctx, "goald listening", slog.String("addr", s.Listen), slog.String("gateway_listen", cmp.Or(s.GatewayListen, s.Listen)),
-		slog.String("gateway", s.GatewayURL))
+	log.InfoContext(ctx, "goald listening", append(ready, slog.String("addr", s.Listen), slog.String("gateway_listen", cmp.Or(s.GatewayListen, s.Listen)),
+		slog.String("gateway", s.GatewayURL))...)
 
-	for _, srv := range servers {
-		wg.Go(func() {
-			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				fail(fmt.Errorf("http %s: %w", srv.Addr, err))
-			}
-		})
-	}
+	wg.Go(func() {
+		select {
+		case err := <-front.failed:
+			fail(err)
+		case <-ctx.Done():
+		}
+	})
 
 	wg.Go(func() {
 		if err := eng.Run(ctx); err != nil {
@@ -763,15 +800,7 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 	<-ctx.Done()
 	log.Info("goald shutting down")
 
-	shutdownCtx, done := context.WithTimeout(context.WithoutCancel(ctx), shutdownGrace)
-	defer done()
-
-	for _, srv := range servers {
-		if err := srv.Shutdown(shutdownCtx); err != nil {
-			log.Warn("http shutdown", slog.String("addr", srv.Addr), slog.Any("error", err))
-		}
-	}
-
+	front.shutdown(log)
 	wg.Wait()
 
 	return srvErr
@@ -782,12 +811,18 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 // would not bind. It returns the pool and the store on it, whose lock connection, which the
 // minute loops' session locks share outside the pool, it dials so goald fails at start without
 // one. It logs the "db pool" line once a minute until ctx ends, so pool starvation shows in the
-// logs. The caller closes the store, then the pool.
-func openDatabase(ctx context.Context, s settings, clock ports.Clock, log *slog.Logger) (*pgxpool.Pool, *postgres.Store, error) {
+// logs. It logs each phase's duration through st: owner_pool, migrate, app_pool (on "database
+// ready") and lock_conn. The caller closes the store, then the pool.
+func openDatabase(ctx context.Context, s settings, clock ports.Clock, log *slog.Logger, st *startup) (*pgxpool.Pool, *postgres.Store, error) {
+	phase := st.begin("owner_pool")
+
 	owner, err := postgres.Open(ctx, s.MigrateDatabaseURL)
 	if err != nil {
 		return nil, nil, fmt.Errorf("GOAL_MIGRATE_DATABASE_URL: %w (goal db init creates the roles)", err)
 	}
+
+	log.InfoContext(ctx, "startup phase", phase.done()...)
+	phase = st.begin("migrate")
 
 	err = postgres.Migrate(ctx, owner)
 	owner.Close()
@@ -795,6 +830,9 @@ func openDatabase(ctx context.Context, s settings, clock ports.Clock, log *slog.
 	if err != nil {
 		return nil, nil, err
 	}
+
+	log.InfoContext(ctx, "startup phase", phase.done()...)
+	phase = st.begin("app_pool")
 
 	pool, err := postgres.Open(ctx, s.DatabaseURL)
 	if err != nil {
@@ -807,7 +845,8 @@ func openDatabase(ctx context.Context, s settings, clock ports.Clock, log *slog.
 		return nil, nil, fmt.Errorf("GOAL_DATABASE_URL: %w", err)
 	}
 
-	log.InfoContext(ctx, "database ready", slog.String("role_check", "passed"))
+	log.InfoContext(ctx, "database ready", append(phase.done(), slog.String("role_check", "passed"))...)
+	phase = st.begin("lock_conn")
 
 	store := postgres.New(pool)
 	if err := store.OpenLockConn(ctx); err != nil {
@@ -815,6 +854,8 @@ func openDatabase(ctx context.Context, s settings, clock ports.Clock, log *slog.
 
 		return nil, nil, err
 	}
+
+	log.InfoContext(ctx, "startup phase", phase.done()...)
 
 	go postgres.LogPoolStats(ctx, store.PoolStats, clock, postgres.PoolStatsInterval, log)
 
@@ -836,6 +877,102 @@ func httpServer(addr string, h http.Handler) *http.Server {
 	return &http.Server{
 		Addr: addr, Handler: h, ReadHeaderTimeout: readHeaderTimeout, ReadTimeout: readTimeout, IdleTimeout: idleTimeout,
 	}
+}
+
+// front is goald's HTTP servers, bound before anything else starts. Each serves through its own
+// api.Starting, which answers 503 goald-starting until ready hands it the real handler.
+type front struct {
+	listeners []net.Listener
+	servers   []*http.Server
+	gates     []*api.Starting
+	// failed receives a server's error other than its shutdown; stopped closes once every
+	// server's Serve has returned.
+	failed  chan error
+	stopped chan struct{}
+	once    sync.Once
+}
+
+// openFront binds the main listener and, with GOAL_GATEWAY_LISTEN, the gateway's, and serves them.
+// They shut down when ctx ends or shutdown is called, and log "goald bound". A listener that
+// cannot bind closes the ones already bound.
+func openFront(ctx context.Context, s settings, log *slog.Logger) (*front, error) {
+	addrs := []string{s.Listen}
+	if s.GatewayListen != "" {
+		addrs = append(addrs, s.GatewayListen)
+	}
+
+	f := &front{failed: make(chan error, len(addrs)), stopped: make(chan struct{})}
+
+	var lc net.ListenConfig
+
+	for _, addr := range addrs {
+		ln, err := lc.Listen(ctx, "tcp", addr)
+		if err != nil {
+			for _, l := range f.listeners {
+				_ = l.Close() // nothing was served on it yet
+			}
+
+			return nil, fmt.Errorf("listen %s: %w", addr, err)
+		}
+
+		gate := api.NewStarting()
+
+		f.listeners = append(f.listeners, ln)
+		f.gates = append(f.gates, gate)
+		f.servers = append(f.servers, httpServer(addr, gate))
+	}
+
+	var wg sync.WaitGroup
+
+	for i, srv := range f.servers {
+		wg.Go(func() {
+			if err := srv.Serve(f.listeners[i]); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				f.failed <- fmt.Errorf("http %s: %w", srv.Addr, err)
+			}
+		})
+	}
+
+	go func() {
+		wg.Wait()
+		close(f.stopped)
+	}()
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			f.shutdown(log)
+		case <-f.stopped:
+		}
+	}()
+
+	// "goald listening", with the startup phases, follows once the real handlers serve (serve).
+	log.InfoContext(ctx, "goald bound", slog.String("addr", s.Listen), slog.String("gateway_listen", cmp.Or(s.GatewayListen, s.Listen)))
+
+	return f, nil
+}
+
+// ready hands each listener the handler of its server in servers, in httpServers' order.
+func (f *front) ready(servers []*http.Server) {
+	for i, gate := range f.gates {
+		gate.Ready(servers[i].Handler)
+	}
+}
+
+// shutdown drains the servers for at most shutdownGrace and waits until every Serve has returned.
+// Only the first call shuts them down; the others wait for it.
+func (f *front) shutdown(log *slog.Logger) {
+	f.once.Do(func() {
+		ctx, done := context.WithTimeout(context.Background(), shutdownGrace)
+		defer done()
+
+		for _, srv := range f.servers {
+			if err := srv.Shutdown(ctx); err != nil {
+				log.Warn("http shutdown", slog.String("addr", srv.Addr), slog.Any("error", err))
+			}
+		}
+
+		<-f.stopped
+	})
 }
 
 // refresh reconciles the current definition versions with PostgreSQL until ctx ends, behind the
