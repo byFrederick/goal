@@ -40,8 +40,8 @@ The **Tool policy** card has four settings. Each is a default that narrows what 
 
 - **Read the web and docs** (`read_web`): `off`, `ask` or `allowed`. With `off` or `ask`, the engine denies the `WebFetch` and `WebSearch` tools. `ask` behaves as `off`, because no tool approval is enforced for these tools.
 - **Merge a pull request** (`merge_pull_request`): `off` or `review_approval`. With `off`, an approving gate whose action is merge does not merge, and the item waits at the gate for a person to merge. With `review_approval`, only a review station with merge on approval merges, as its definition says.
-- **Use secrets** (`use_credentials`): `off` or `environment`. With `off`, the agent gets no connections, environment `env`, `files` or MCP servers. The model key and the repository access still reach the run, which cannot start without them. With `environment`, the agent gets what its environment names; see [access and secrets](/docs/concepts/access-and-secrets/).
-- **Write outside the item's branch** (`write_outside_branch`): `off`, `ask` or `allowed`. The policy stores it and the screen shows it, but the engine does not apply it yet: comments, issues, tickets and messages go through connections, and no step can ask a person for them, refuse them or allow them.
+- **Use secrets** (`use_credentials`): `off` or `environment`. With `off`, the agent gets no environment `env`, `files` or MCP servers. The model key and the repository access still reach the run, which cannot start without them. With `environment`, the agent gets what its environment names; see [access and secrets](/docs/concepts/access-and-secrets/).
+- **Write outside the item's branch** (`write_outside_branch`): `off`, `ask` or `allowed`. The policy stores it and the screen shows it, but the engine does not apply it yet: no step can ask a person for such writes, refuse them or allow them.
 
 ## MCP tool mode cap
 
