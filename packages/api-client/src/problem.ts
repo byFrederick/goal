@@ -8,11 +8,14 @@ export type Problem = components["schemas"]["Problem"];
 /** ApiError is thrown for every response that is not a success; it carries the Problem. */
 export class ApiError extends Error {
   readonly problem: Problem;
+  /** Whole seconds from the Retry-After header (goald-starting sends one); undefined when absent or not a number. */
+  readonly retryAfterSeconds: number | undefined;
 
-  constructor(problem: Problem) {
+  constructor(problem: Problem, retryAfterSeconds?: number) {
     super(problem.detail ? `${problem.title}: ${problem.detail}` : problem.title);
     this.name = "ApiError";
     this.problem = problem;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 
   get status(): number {
@@ -55,6 +58,12 @@ export function problemOf(response: Response, body: unknown): Problem {
   return { title: response.statusText || "Request failed", status: response.status };
 }
 
+/** The seconds a response's Retry-After header asks to wait; undefined when it is absent or not whole seconds. */
+export function retryAfterOf(response: Response): number | undefined {
+  const value = response.headers.get("Retry-After")?.trim();
+  return value && /^\d+$/.test(value) ? Number(value) : undefined;
+}
+
 /** What an openapi-fetch call resolves to: data on success, the parsed error body otherwise. */
 export type Result<T> = { data: T; error?: never; response: Response } | { data?: never; error: unknown; response: Response };
 
@@ -65,6 +74,6 @@ export type Result<T> = { data: T; error?: never; response: Response } | { data?
  */
 export async function unwrap<T>(call: Promise<Result<T>>): Promise<T> {
   const result = await call;
-  if (!result.response.ok) throw new ApiError(problemOf(result.response, result.error));
+  if (!result.response.ok) throw new ApiError(problemOf(result.response, result.error), retryAfterOf(result.response));
   return result.data as T;
 }
