@@ -1,6 +1,7 @@
 import { createScheduledController, env } from 'cloudflare:test';
 import { exports } from 'cloudflare:workers';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import worker from '../src/index.js';
 import { fakeFor } from './fake.js';
 
 const goald = () => fakeFor(env.GOALD.idFromName('goald'));
@@ -16,6 +17,12 @@ function echo(c: ReturnType<typeof fakeFor>): void {
       forwardedFor: request.headers.get('x-forwarded-for'),
     });
 }
+
+// A request during goald's boot answers 503 at once (failure.test.ts), so each test starts with
+// goald running, as the cron keeps it.
+beforeEach(async () => {
+  if (!goald().running) await worker.scheduled(createScheduledController(), env);
+});
 
 describe('routing', () => {
   it('sends every public request to goald, naming the client as Cloudflare saw it', async () => {
@@ -95,7 +102,6 @@ describe('routing', () => {
     const c = goald();
     await c.destroy();
     echo(c);
-    const worker = (await import('../src/index.js')).default;
     await worker.scheduled(createScheduledController(), env);
     expect(c.running).toBe(true);
   });

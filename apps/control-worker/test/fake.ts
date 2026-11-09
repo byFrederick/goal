@@ -38,6 +38,8 @@ export class FakeContainer {
   port: (port: number, request: Request) => Response | Promise<Response> = () => new Response('ok');
   /** startFailures are thrown by the next starts, one each, as Cloudflare does while it has no instance. */
   startFailures: Error[] = [];
+  /** bootMs, when set, shortens its service's boot (test/worker.ts), so a test sees a boot fail. */
+  bootMs: number | undefined;
   /** monitors counts the monitor() calls. */
   monitors = 0;
   private readonly live = new Set<() => void>();

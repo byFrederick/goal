@@ -122,35 +122,138 @@ describe('retries', () => {
     };
     c.started = [];
     const res = await exports.default.fetch('https://goal.example.com/o/acme/needs-you', page);
-    expect(res.status).toBe(200);
-    expect(c.started).toHaveLength(1);
+    // The retry finds a start in progress, which it answers at once.
+    expect(res.status).toBe(503);
+    await vi.waitFor(() => expect(c.started).toHaveLength(1));
+    await vi.waitFor(async () => expect((await fetchPage()).status).toBe(200));
   });
 });
 
+/** fetchPage loads a page of the app, as a browser does. */
+const fetchPage = () => exports.default.fetch('https://goal.example.com/o/acme/needs-you', page);
+
+/** stopped stops goald's container and forgets its starts. */
+async function stopped(): Promise<FakeContainer> {
+  const c = goald();
+  await c.destroy();
+  c.started = [];
+  return c;
+}
+
 describe('booting goald', () => {
-  it('starts a stopped goald once when the cron and a page load arrive together', async () => {
-    const c = goald();
-    await c.destroy();
-    c.started = [];
-    const [, res] = await Promise.all([
+  it('answers a page load during a boot with the restarting page at once', async () => {
+    const c = await stopped();
+    const res = await fetchPage();
+
+    expect(res.status).toBe(503);
+    expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8');
+    expect(res.headers.get('retry-after')).toBe('5');
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    const html = await res.text();
+    expect(html).toContain('<title>Goal is restarting</title>');
+    expect(html).toContain('<h1>Goal is restarting</h1>');
+    expect(html).toContain('<meta http-equiv="refresh" content="5">');
+    expect(html).not.toMatch(/<script|<link|src=|url\(|@import/i);
+
+    // The boot went on without the request.
+    await vi.waitFor(() => expect(c.started).toHaveLength(1));
+    await vi.waitFor(async () => expect((await fetchPage()).status).toBe(200));
+    expect(logged).not.toHaveBeenCalled();
+  });
+
+  it('answers an API call during a boot with goald’s own 503 goald-starting', async () => {
+    const c = await stopped();
+    // The port refuses connections until the end, so every call arrives during the boot.
+    c.port = async () => {
+      throw new Error('connection refused');
+    };
+    const calls: [string, RequestInit][] = [
+      ['/v1/orgs', page],
+      ['/api/auth/get-session', page],
+      ['/v1/orgs', { method: 'POST', body: '{}' }],
+      ['/o/acme/needs-you', {}],
+    ];
+    for (const [path, init] of calls) {
+      const res = await exports.default.fetch(`https://goal.example.com${path}`, init);
+      expect(res.status).toBe(503);
+      expect(res.headers.get('content-type')).toBe('application/problem+json');
+      expect(res.headers.get('retry-after')).toBe('5');
+      expect(res.headers.get('cache-control')).toBe('no-store');
+      expect(await res.json()).toEqual({
+        title: 'Service Unavailable',
+        status: 503,
+        detail: 'goald is starting; retry in a few seconds',
+        code: 'goald-starting',
+      });
+    }
+    c.port = () => new Response('ok');
+    await vi.waitFor(async () => expect((await fetchPage()).status).toBe(200), { timeout: 3_000 });
+  });
+
+  it('starts a stopped goald once when the cron and page loads arrive together', async () => {
+    const c = await stopped();
+    const [, first, second] = await Promise.all([
       worker.scheduled(createScheduledController(), env),
-      exports.default.fetch('https://goal.example.com/o/acme/needs-you', page),
+      fetchPage(),
+      fetchPage(),
     ]);
-    expect(res.status).toBe(200);
+    expect(first.status).toBe(503);
+    expect(second.status).toBe(503);
+    expect(c.started).toHaveLength(1);
+    expect((await fetchPage()).status).toBe(200);
     expect(c.started).toHaveLength(1);
     expect(logged).not.toHaveBeenCalled();
   });
 
   it('tries the start again while Cloudflare has no container instance yet', async () => {
-    const c = goald();
-    await c.destroy();
-    c.started = [];
+    const c = await stopped();
     c.startFailures = [
       new Error('There is no container instance that can be provided to this Durable Object, try again later'),
     ];
-    const res = await exports.default.fetch('https://goal.example.com/o/acme/needs-you', page);
-    expect(res.status).toBe(200);
+    expect((await fetchPage()).status).toBe(503);
+    await vi.waitFor(async () => expect((await fetchPage()).status).toBe(200), { timeout: 3_000 });
     expect(c.started).toHaveLength(1);
+    expect(logged).not.toHaveBeenCalled();
+  });
+
+  it('forwards goald’s own 503 once its port answers, and its 200 once it is ready', async () => {
+    const c = await stopped();
+    const fromGoald = JSON.stringify({ status: 503, code: 'goald-starting', detail: 'from goald' });
+    c.port = () => new Response(fromGoald, { status: 503, headers: { 'content-type': 'application/problem+json' } });
+
+    await vi.waitFor(async () => {
+      const res = await fetchPage();
+      expect(res.status).toBe(503);
+      expect(await res.text()).toBe(fromGoald);
+    });
+
+    c.port = () => new Response('ok');
+    const res = await fetchPage();
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('ok');
+    expect(c.started).toHaveLength(1);
+  });
+
+  it('answers the 502 once a boot gets no answer within bootMs, then boots again', { timeout: 10_000 }, async () => {
+    const c = await stopped();
+    c.bootMs = 100;
+    c.port = async () => {
+      throw new Error('connection refused');
+    };
+    try {
+      expect((await fetchPage()).status).toBe(503);
+      await vi.waitFor(async () => expect((await fetchPage()).status).toBe(502), { timeout: 5_000, interval: 100 });
+      expect(logged).toHaveBeenCalledTimes(1);
+      expect(String(logged.mock.calls[0]?.[0])).toContain('did not answer /v1/health within 0.1s: connection refused');
+
+      // The next request starts a new boot, which ends once the port answers.
+      c.port = () => new Response('ok');
+      expect((await fetchPage()).status).toBe(503);
+      await vi.waitFor(async () => expect((await fetchPage()).status).toBe(200), { timeout: 3_000 });
+      expect(c.started).toHaveLength(1);
+    } finally {
+      c.bootMs = undefined;
+    }
   });
 });
 
@@ -277,14 +380,19 @@ describe('when a container stops', () => {
     }
   });
 
-  it('logs a line when it starts a container, and none carries a setting', async () => {
+  it('logs a line when it starts a container and when it first answers, and none carries a setting', async () => {
     const c = goald();
     await c.destroy();
     await vi.waitFor(() => expect(warned).toHaveBeenCalled());
 
     await exports.default.fetch('https://goal.example.com/o/acme/needs-you?tab=all', page);
 
+    await vi.waitFor(() => expect(lines(info).map((l) => l.msg)).toContain('container ready'));
     expect(lines(info)).toContainEqual({ msg: 'container started', service: 'goald' });
+    const ready = lines(info).filter((l) => l.msg === 'container ready');
+    expect(ready).toHaveLength(1);
+    expect(ready[0]).toEqual({ msg: 'container ready', service: 'goald', ms: expect.any(Number) });
+    expect(ready[0]?.ms).toBeGreaterThanOrEqual(0);
     for (const spy of [info, warned]) {
       const text = JSON.stringify(spy.mock.calls);
       for (const secret of ['master-key-for-tests', 'test-token', 'app-password-for-tests', 'tab=all']) {
