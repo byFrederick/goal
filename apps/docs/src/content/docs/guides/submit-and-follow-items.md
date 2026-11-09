@@ -91,9 +91,9 @@ An item is `<factory>#<number>`, its id, or a bare number when only one factory 
 
 ## Submit from the web app
 
-Open the factory's Board and choose New item. The sidebar's New item does the same from any page, and the keyboard shortcut is `C` (every shortcut is listed in [Navigate and use shortcuts](../navigate-and-shortcuts/)). Choose the factory, fill in the brief and choose Create item. When the factory's running version has `runtime.repositories` entries, New item also has a Repositories field. It starts with the default entry's repository; choose Add to pick another, or to type `owner/name` under an entry that covers all of an owner's repositories, and Remove to drop one. An item takes up to 10. A repository no entry covers is refused on the field. Create item opens the new item's page with the toast "Created <ref>. It waits at <station>." An item can also wait to start; the Start control below sets it, as [Start an item later](#start-an-item-later) shows.
+Open the factory's Board and choose New item. The sidebar's New item does the same from any page, and the keyboard shortcut is `C` (every shortcut is listed in [Navigate and use shortcuts](/docs/guides/navigate-and-shortcuts/)). Choose the factory, fill in the brief and choose Create item. When the factory's running version has `runtime.repositories` entries, New item also has a Repositories field. It starts with the default entry's repository; choose Add to pick another, or to type `owner/name` under an entry that covers all of an owner's repositories, and Remove to drop one. An item takes up to 10. A repository no entry covers is refused on the field. Create item opens the new item's page with the toast "Created <ref>. It waits at <station>." An item can also wait to start; the Start control below sets it, as [Start an item later](#start-an-item-later) shows.
 
-Agents can leave work for later too; see [Let agents leave follow-ups](../follow-ups/).
+Agents can leave work for later too; see [Let agents leave follow-ups](/docs/guides/follow-ups/).
 
 The Start control sets when the item may start:
 
@@ -109,7 +109,7 @@ An item with a start time or after items waits at the first station and is marke
 
 - The Board's first column lists it under **Later**, below the items that can start, soonest first, with its start date where the others show their age.
 - Items shows "Starts Nov 19" in its status column.
-- Intake lists it under **Coming up**, soonest first, with where it came from. **Start now** there, or in the item's banner, clears the start time; the item is released on the next tick. An item that waits only for other items has no Start now, because those items still hold it. See [Intake](../intake/).
+- Intake lists it under **Coming up**, soonest first, with where it came from. **Start now** there, or in the item's banner, clears the start time; the item is released on the next tick. An item that waits only for other items has no Start now, because those items still hold it. See [Intake](/docs/guides/intake/).
 - The item's page shows a banner, "Starts Thu, Nov 19 at 09:00", with **Start now** and **Change**. Change sets another time or other items; choosing Now in it starts the item.
 
 Once the item has left the first station, its start cannot change, and the banner is gone.
@@ -132,7 +132,7 @@ The rest of the page tells how the item came to be:
 
 ## Create items from events and schedules
 
-A factory can also create items on its own, from an event or a schedule. Those triggers are set in the factory definition (`board.triggers`) and listed on the factory's Intake page at `/o/<org>/f/<factory>/intake`, which [Intake](../intake/) describes.
+A factory can also create items on its own, from an event or a schedule. Those triggers are set in the factory definition (`board.triggers`) and listed on the factory's Intake page at `/o/<org>/f/<factory>/intake`, which [Intake](/docs/guides/intake/) describes.
 
 On that page you can:
 
@@ -147,8 +147,8 @@ goal triggers list acme-line
 goal triggers show acme-line <trigger>
 ```
 
-Webhooks feed triggers from outside Goal; see [Receive events with organization webhooks](../webhooks/). For what the Intake page and `goal intake` show, read [Review what enters a factory](../intake/). A trigger can also ask an agent what to file; see [Ask an agent what to file](../checks/).
+Webhooks feed triggers from outside Goal; see [Receive events with organization webhooks](/docs/guides/webhooks/). For what the Intake page and `goal intake` show, read [Review what enters a factory](/docs/guides/intake/). A trigger can also ask an agent what to file; see [Ask an agent what to file](/docs/guides/checks/).
 
 ## What comes next
 
-When the item reaches a station that needs a person, it waits. To find those items, read [Read the Board, the item Timeline and Runs](../read-the-board-timeline-and-runs/). To act on one, read [Act on an item](../act-on-an-item/).
+When the item reaches a station that needs a person, it waits. To find those items, read [Read the Board, the item Timeline and Runs](/docs/guides/read-the-board-timeline-and-runs/). To act on one, read [Act on an item](/docs/guides/act-on-an-item/).

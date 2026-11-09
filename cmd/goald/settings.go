@@ -53,7 +53,7 @@ type settings struct {
 	// besides the loopback names and the listen host that the Host check accepts (api.CheckHost),
 	// and over https the UI is served with Strict-Transport-Security.
 	PublicURL string
-	// Auth is how requests are authenticated (GOAL_AUTH, default none): none, every request is
+	// Auth is how requests are authenticated (GOAL_AUTH, default session): none, every request is
 	// the local user (one developer's laptop, loopback only); session, people sign in and every
 	// request's session or API key is checked in the database. Any other value refuses to start.
 	Auth authMode
