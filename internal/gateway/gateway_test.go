@@ -146,9 +146,12 @@ func (d withFiles) VersionFiles(ctx context.Context, id domain.DefinitionVersion
 }
 
 type harness struct {
-	url   string
-	gw    *Gateway
-	store *porttest.Store
+	url string
+	// client is the gateway server's own client: another test's server Close cannot reach its
+	// connections, as it can those of http.DefaultTransport.
+	client *http.Client
+	gw     *Gateway
+	store  *porttest.Store
 	// org is the organization of the tasks, with its secrets (newOrg, bundle_test.go).
 	org domain.OrgID
 	// rules are the organization's standing rules.
@@ -346,7 +349,7 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 
 	ts := httptest.NewServer(h.gw)
 	t.Cleanup(ts.Close)
-	h.url = ts.URL
+	h.url, h.client = ts.URL, ts.Client()
 
 	return h
 }
@@ -424,14 +427,34 @@ func (h *harness) tokenFor(t *testing.T, c domain.TaskClaims, aud string) string
 	return enc.EncodeToString(payload) + "." + enc.EncodeToString(mac.Sum(nil))
 }
 
-// bearer adds an agent's task token, as the worker does.
-type bearer string
+// bearer adds an agent's task token, as the worker does, and sends through base.
+type bearer struct {
+	token string
+	base  http.RoundTripper
+}
 
 func (b bearer) RoundTrip(r *http.Request) (*http.Response, error) {
 	r = r.Clone(r.Context())
-	r.Header.Set("Authorization", "Bearer "+string(b))
+	r.Header.Set("Authorization", "Bearer "+b.token)
 
-	return http.DefaultTransport.RoundTrip(r)
+	return b.base.RoundTrip(r)
+}
+
+// ownClient is a client with its own transport, for a helper given only a URL. httptest's
+// Server.Close closes the idle connections of http.DefaultTransport, which would break another
+// parallel test's request in flight.
+func ownClient(t *testing.T) *http.Client {
+	t.Helper()
+
+	def, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		t.Fatalf("http.DefaultTransport is a %T, not an *http.Transport", http.DefaultTransport)
+	}
+
+	tr := def.Clone()
+	t.Cleanup(tr.CloseIdleConnections)
+
+	return &http.Client{Transport: tr}
 }
 
 // legacyProtocol is a version the worker's TypeScript SDK negotiates with an initialize
@@ -457,7 +480,7 @@ func (h *harness) connectAs(t *testing.T, protocol string, c domain.TaskClaims) 
 	cs, err := mcp.NewClient(&mcp.Implementation{Name: "acme-agent", Version: "1"}, nil).Connect(t.Context(),
 		&mcp.StreamableClientTransport{
 			Endpoint:             h.url,
-			HTTPClient:           &http.Client{Transport: bearer(h.token(t, c))},
+			HTTPClient:           &http.Client{Transport: bearer{token: h.token(t, c), base: h.client.Transport}},
 			DisableStandaloneSSE: true,
 		}, &mcp.ClientSessionOptions{ProtocolVersion: protocol})
 	if err != nil {
@@ -655,7 +678,7 @@ func TestGateway_RejectsRequestsWithoutAValidToken(t *testing.T) {
 				req.Header.Set("Authorization", tt.header)
 			}
 
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := h.client.Do(req)
 			if err != nil {
 				t.Fatal(err)
 			}

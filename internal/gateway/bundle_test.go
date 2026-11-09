@@ -149,7 +149,7 @@ func request(t *testing.T, method, url, token string) (int, http.Header, []byte)
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := ownClient(t).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
