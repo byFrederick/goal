@@ -190,7 +190,7 @@ func dbRekey(ctx context.Context, out *printer, getenv func(string) string) erro
 		return fmt.Errorf("%w (%d resealed before it stopped; run it again once fixed)", err, n)
 	}
 
-	out.printf("✓ %d connections and credentials resealed under master key %s; the other keys can go once every goald runs with it first\n", n, keys.Active())
+	out.printf("✓ %d secrets resealed under master key %s; the other keys can go once every goald runs with it first\n", n, keys.Active())
 
 	return nil
 }
