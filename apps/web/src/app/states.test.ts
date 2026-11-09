@@ -13,8 +13,16 @@ describe('the error screen', () => {
     expect(loadFailure(new NetworkError(new TypeError('Failed to fetch')))).toBe('unreachable');
   });
 
-  it.each([502, 503, 504])('says goald is not answering on a %i', (status) => {
+  it.each([502, 504])('says goald is not answering on a %i', (status) => {
     expect(loadFailure(new ApiError({ title: 'Bad Gateway', status }))).toBe('unreachable');
+  });
+
+  it('says Goal is restarting on a goald-starting 503 and on a bare 503', () => {
+    expect(loadFailure(new ApiError({ title: 'Starting', status: 503, code: 'goald-starting' }, 3))).toBe('starting');
+    expect(loadFailure(new ApiError({ title: 'Service Unavailable', status: 503 }))).toBe('starting');
+    expect(loadFailure(new ApiError({ title: 'No Jonah', status: 503, code: 'jonah-unavailable' }))).toBe(
+      'unreachable',
+    );
   });
 
   it('does not blame goald for a crash in the page', () => {

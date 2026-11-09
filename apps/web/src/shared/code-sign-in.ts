@@ -20,6 +20,9 @@ export interface SignInMessage {
 
 const unreachable = 'Can’t reach Goal. Check your connection and try again.';
 
+/** What every call says while goald starts (also the toast of a refused change). */
+export const restarting = 'Goal is restarting. Try again in a moment.';
+
 /** "Too many tries. Try again in 2 minutes." */
 export function rateLimitText(seconds: number | undefined): string {
   const minutes = Math.max(1, Math.ceil((seconds ?? 60) / 60));
@@ -29,6 +32,7 @@ export function rateLimitText(seconds: number | undefined): string {
 /** What a failed request for a code says. */
 export function sendFailureText(err: unknown): string {
   if (err instanceof AuthFailure && err.kind === 'rate-limited') return rateLimitText(err.retryAfterSeconds);
+  if (err instanceof AuthFailure && err.kind === 'starting') return restarting;
   if (err instanceof AuthFailure && err.kind === 'refused') {
     return 'Goal couldn’t send a code to that address. Check it and try again.';
   }
@@ -69,6 +73,8 @@ export function useCodeSignIn(email: string, onSignedIn: () => unknown) {
           tone: 'rework',
           text: rateLimitText(err instanceof AuthFailure ? err.retryAfterSeconds : undefined),
         });
+      } else if (kind === 'starting') {
+        setMessage({ tone: 'rework', text: restarting });
       } else {
         setMessage({ tone: 'rework', text: unreachable });
       }

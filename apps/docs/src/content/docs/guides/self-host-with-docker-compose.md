@@ -136,6 +136,8 @@ Before you upgrade past migration 00138, which drops the columns of the old fact
 
 On a database that has not, migration 00138 refuses to run and changes nothing. goald does not start, and its error says `run ADR 0040's release first, then this one`. Start that release once, then upgrade again.
 
+While goald starts after an upgrade, it answers every request with 503. The web app says "Goal is restarting" in place of the page and loads the page's data again by itself, after the wait goald asks for. A change that goald refused in that moment is not sent again: the app shows "Goal is restarting. Try again in a moment.", and you send it again.
+
 ## If it does not start
 
 - A refusal that names `GOAL_AUTH=none` means the sign-in settings are missing. Set the variables in step 1, or use `GOAL_AUTH=none`.

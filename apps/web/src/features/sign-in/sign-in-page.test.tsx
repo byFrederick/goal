@@ -135,6 +135,20 @@ describe('the sign-in page', () => {
     expect((screen.getByRole('button', { name: 'Email me a sign-in code' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('says Goal is restarting on a 503 and lets the person send again', async () => {
+    sendCode.mockRejectedValue(new AuthFailure('starting', 3));
+    renderSignIn(both);
+    await typeEmail('you@example.com');
+    fireEvent.click(await screen.findByRole('button', { name: 'Email me a sign-in code' }));
+
+    expect(await screen.findByText('Goal is restarting. Try again in a moment.')).toBeTruthy();
+    expect(screen.queryByText(/Can’t reach Goal/)).toBeNull();
+    const button = screen.getByRole('button', { name: 'Email me a sign-in code' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    await waitFor(() => expect(sendCode).toHaveBeenCalledTimes(2));
+  });
+
   it('shows what went wrong when Google sent the person back without signing them in', async () => {
     renderSignIn(both, 'SIGN_UP_NOT_ALLOWED');
 

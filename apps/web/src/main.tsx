@@ -1,9 +1,10 @@
 import './styles.css';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createRouter, RouterProvider } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { keys } from './api/queries';
+import { notifyRestarting } from './api/restarting';
 import { shouldRetry } from './api/retry';
 import { safeNext, setSessionHandlers } from './api/session';
 import { routerOptions } from './app/router-options';
@@ -12,6 +13,7 @@ import { registerServiceWorker } from './pwa/register';
 import { routeTree } from './routeTree.gen';
 
 const queryClient = new QueryClient({
+  mutationCache: new MutationCache({ onError: notifyRestarting }),
   defaultOptions: {
     queries: {
       staleTime: 10_000,
