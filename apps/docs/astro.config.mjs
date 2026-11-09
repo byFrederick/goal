@@ -51,6 +51,8 @@ export default defineConfig({
             { slug: 'reference' },
             { slug: 'reference/cli' },
             { slug: 'reference/definition' },
+            { slug: 'reference/environment-file' },
+            { slug: 'reference/memory-file' },
             { slug: 'reference/environment' },
             { slug: 'reference/glossary' },
             ...openAPISidebarGroups,
