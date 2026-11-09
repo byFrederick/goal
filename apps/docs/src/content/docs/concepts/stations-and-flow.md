@@ -64,15 +64,17 @@ A station's `merges` field sets this:
 
 ## Wait for CI
 
-A station's `waitFor` makes goald wait for CI on the commits an item's runs pushed: a run at the station starts only once CI on the item's current commits has finished. goald polls the code host itself, so the agent never polls for CI and no run box waits. The setting names no host, CI system, workflow or check: goald reads every check the code host reports for the commit.
+A station's `waitFor` makes goald wait for CI on the commits an item's runs pushed and on the heads of its open pull requests: a run at the station starts only once CI on the item's current commits has finished. goald polls the code host itself, so the agent never polls for CI and no run box waits. The setting names no host, CI system, workflow or check: goald reads every check the code host reports for the commit.
 
-The commits are the latest each repository was pushed to. For each repository the item's runs pushed a change to, goald takes the head of the latest push. When one of the item's pull requests is in that repository, it takes the pull request's current head instead, since someone else may have pushed to it. An item no run pushed to has nothing to wait for, so a new item starts its run at once.
+The commits are the latest each repository was pushed to. For each repository the item's runs pushed a change to, goald takes the head of the latest push. When one of the item's pull requests is in that repository, it takes the pull request's current head instead, since someone else may have pushed to it. For an open pull request of the item in a repository no run pushed to, goald waits on the pull request's current head. An item no run pushed to and with no open pull request has nothing to wait for, so a new item starts its run at once.
 
 When the item comes up for a claim and CI has not finished on one of its commits, goald starts a wait on that commit and puts the item back in the station's queue without starting a run. The item is not claimed again until every wait has ended. A wait ends when every check finished, when no check appeared within `grace`, or when `max` passed. The run then starts, and its brief opens with a `## CI` section: for each repository, the commit, how CI ended, and each check's name and result with its link and failed jobs. A failed check does not stop the run; the agent reads it in that section.
 
 ### After a run pushes
 
 When a run at the station pushed commits and its output would move the item forward (a gate's approval, or a station without a gate finishing), goald holds that move until CI on what the run pushed has finished. The item goes back to the station's queue with one wait per repository the run pushed to, and the output is not applied yet. At an `action: merge` station nothing is merged while CI runs.
+
+At an `action: merge` station, an approval whose run pushed nothing is held the same way, on the current head of each pull request the merge takes, including one named only in that run's output. So a merge never starts while CI on the pull request is still running. At a station without `action: merge`, an output whose run pushed nothing moves the item on at once.
 
 When the wait ends, the item's next claim acts on it:
 
