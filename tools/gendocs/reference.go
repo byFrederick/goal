@@ -40,12 +40,18 @@ type schemaPage struct{ page, source, title, description string }
 
 // schemaPages are the pages rendered from the definition's schemas.
 var schemaPages = []schemaPage{
-	{definitionPage, definitionSource, "Factory definition reference",
-		"Every field of a factory definition, with its type, whether it is required, its default and what it means."},
-	{environmentFilePage, environmentFileSource, "Environment file reference",
-		"Every field of an environment file, environments/<name>.yaml, with its type, whether it is required, its default and what it means."},
-	{memoryFilePage, memoryFileSource, "Memory file reference",
-		"Every field of memory.yaml, the factory memory, with its type, whether it is required and what it means."},
+	{
+		definitionPage, definitionSource, "Factory definition reference",
+		"Every field of a factory definition, with its type, whether it is required, its default and what it means.",
+	},
+	{
+		environmentFilePage, environmentFileSource, "Environment file reference",
+		"Every field of an environment file, environments/<name>.yaml, with its type, whether it is required, its default and what it means.",
+	},
+	{
+		memoryFilePage, memoryFileSource, "Memory file reference",
+		"Every field of memory.yaml, the factory memory, with its type, whether it is required and what it means.",
+	},
 }
 
 // copiedPages are the pages whose body is a docs/reference file's, without its H1.
