@@ -22,7 +22,7 @@ Values come in only by pasting them, through standard input or from an import fi
 
 ## Environment files
 
-An environment is a file in the factory's definition, `environments/<name>.yaml`. It says what an agent's box installs and what it can reach. Every factory has `environments/default.yaml`. An agent names another with `environment: <name>` in its definition, and an agent without one gets `default`. On an agent's page, the Environment select does that.
+An environment is a file ([reference](/docs/reference/environment-file/)) in the factory's definition, `environments/<name>.yaml`. It says what an agent's box installs and what it can reach. Every factory has `environments/default.yaml`. An agent names another with `environment: <name>` in its definition, and an agent without one gets `default`. On an agent's page, the Environment select does that.
 
 ```yaml
 apiVersion: goal/v1

@@ -215,7 +215,7 @@ With `board.flow.assemblies.changedSince: true` (default false), plans bind late
 | Key | Values | Default | Meaning |
 | --- | --- | --- | --- |
 | `mode` | `trunk`, `branch` | `trunk` | `trunk`: each part merges into the default branch. `branch`: the parts merge into the assembly's integration branch. |
-| `refresh` | `onLand`, `eachPart` | `onLand` | When the integration branch takes in the default branch: when it lands, or before each part. |
+| `refresh` | `onLand`, `eachPart` | `onLand` | When the integration branch takes in the default branch. `onLand`: when the assembly lands. `eachPart`: each part's brief also tells the agent to bring the integration branch up to date first; goald does not update the branch itself. |
 | `minParts` | integer, 0 or more | `0` | An assembly with fewer parts stays on trunk. |
 | `landAt` | a station id | the first station with `action: merge` after the station whose plan made the assembly | Where the integration branch lands. |
 

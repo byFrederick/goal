@@ -5,7 +5,7 @@ description: Answer a question, approve, deny, send back, merge, retry, move, no
 
 You end with an item moved on, held, or closed as you meant, and a record of who did it. Each action has a CLI command and, where the item page shows the button, a control in the web app. The CLI form is shown first.
 
-Items are named `<factory>#<number>`, as in [Submit and follow items](../submit-and-follow-items/#read-an-item). A person needs the matching permission for each action; without it, the web app disables the control and says who decides.
+Items are named `<factory>#<number>`, as in [Submit and follow items](/docs/guides/submit-and-follow-items/#read-an-item). A person needs the matching permission for each action; without it, the web app disables the control and says who decides.
 
 ## Answer a question
 
@@ -165,6 +165,6 @@ Drop answers `409 follow-up-state` for a follow-up that isn't waiting, and File 
 
 ## Related
 
-- [Read the Board, the item Timeline and Runs](../read-the-board-timeline-and-runs/) to see where an item waits.
+- [Read the Board, the item Timeline and Runs](/docs/guides/read-the-board-timeline-and-runs/) to see where an item waits.
 - [Concepts](/docs/concepts/) for stations, gates, leases and human touches.
 - [CLI reference](/docs/reference/cli/) for every flag.

@@ -158,7 +158,8 @@ type IntegrationRefresh string
 const (
 	// RefreshOnLand is the default: the branch is brought up to date when it lands.
 	RefreshOnLand IntegrationRefresh = "onLand"
-	// RefreshEachPart brings the branch up to date before each part runs.
+	// RefreshEachPart words each part's brief to tell the agent to bring the branch
+	// up to date first; goald does not update the branch itself.
 	RefreshEachPart IntegrationRefresh = "eachPart"
 )
 
