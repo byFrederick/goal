@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -128,7 +129,8 @@ func goald() int {
 			slog.String("variable", r.name), slog.String("instead", r.instead))
 	}
 
-	if err := run(ctx, s, log); err != nil {
+	// A signal while goald starts ends the startup step it was in with ctx's error: a stop, not a failure.
+	if err := run(ctx, s, log); err != nil && (ctx.Err() == nil || !errors.Is(err, context.Canceled)) {
 		log.Error("goald stopped", append(stoppedAttrs(ctx, started), slog.Any("error", err))...)
 		return 1
 	}
@@ -164,6 +166,13 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	secrets := env.New(os.LookupEnv)
 	clock := sys.Clock{}
 
+	// The listeners answer 503 goald-starting until ready (front), and stop when ctx ends or run returns.
+	front, err := openFront(ctx, s, log)
+	if err != nil {
+		return err
+	}
+	defer front.shutdown(log)
+
 	key, err := gatewayKey(ctx, s, secrets)
 	if err != nil {
 		return err
@@ -190,12 +199,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	s3cfg, err := s3.ConfigFromEnv(os.Getenv)
-	if err != nil {
-		return err
-	}
-
-	objects, err := s3.New(ctx, s3cfg)
+	objects, err := openObjects(ctx)
 	if err != nil {
 		return err
 	}
@@ -303,7 +307,19 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	return serve(ctx, log, s, servers, eng, defs, definitionNotices, feed, j)
+	front.ready(servers) // every handler's dependency is built and the definitions are loaded
+
+	return serve(ctx, log, s, front, eng, defs, definitionNotices, feed, j)
+}
+
+// openObjects opens the bucket that GOAL_S3_* names.
+func openObjects(ctx context.Context) (*s3.Store, error) {
+	cfg, err := s3.ConfigFromEnv(os.Getenv)
+	if err != nil {
+		return nil, err
+	}
+
+	return s3.New(ctx, cfg)
 }
 
 // newJobs builds goald's scheduled jobs: the purge, the identity watch, the knowledge base's
@@ -687,10 +703,10 @@ type jobs struct {
 	scheduleLock scheduleLock
 }
 
-// serve runs the HTTP servers, the engine, the stream feed, the definitions reloads and the
+// serve watches the HTTP servers and runs the engine, the stream feed, the definitions reloads and the
 // scheduled jobs until ctx ends, then shuts them down: the feed ends every stream, HTTP drains,
 // then the engine releases the items its runs held.
-func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Server, eng *engine.Engine, defs *definitions.Cache,
+func serve(ctx context.Context, log *slog.Logger, s settings, front *front, eng *engine.Engine, defs *definitions.Cache,
 	notices ports.DefinitionNotices, feed *api.Feed, j jobs,
 ) error {
 	ctx, cancel := context.WithCancel(ctx)
@@ -707,16 +723,13 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 		cancel()
 	}
 
-	log.InfoContext(ctx, "goald listening", slog.String("addr", s.Listen), slog.String("gateway_listen", cmp.Or(s.GatewayListen, s.Listen)),
-		slog.String("gateway", s.GatewayURL))
-
-	for _, srv := range servers {
-		wg.Go(func() {
-			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				fail(fmt.Errorf("http %s: %w", srv.Addr, err))
-			}
-		})
-	}
+	wg.Go(func() {
+		select {
+		case err := <-front.failed:
+			fail(err)
+		case <-ctx.Done():
+		}
+	})
 
 	wg.Go(func() {
 		if err := eng.Run(ctx); err != nil {
@@ -763,15 +776,7 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 	<-ctx.Done()
 	log.Info("goald shutting down")
 
-	shutdownCtx, done := context.WithTimeout(context.WithoutCancel(ctx), shutdownGrace)
-	defer done()
-
-	for _, srv := range servers {
-		if err := srv.Shutdown(shutdownCtx); err != nil {
-			log.Warn("http shutdown", slog.String("addr", srv.Addr), slog.Any("error", err))
-		}
-	}
-
+	front.shutdown(log)
 	wg.Wait()
 
 	return srvErr
@@ -836,6 +841,102 @@ func httpServer(addr string, h http.Handler) *http.Server {
 	return &http.Server{
 		Addr: addr, Handler: h, ReadHeaderTimeout: readHeaderTimeout, ReadTimeout: readTimeout, IdleTimeout: idleTimeout,
 	}
+}
+
+// front is goald's HTTP servers, bound before anything else starts. Each serves through its own
+// api.Starting, which answers 503 goald-starting until ready hands it the real handler.
+type front struct {
+	listeners []net.Listener
+	servers   []*http.Server
+	gates     []*api.Starting
+	// failed receives a server's error other than its shutdown; stopped closes once every
+	// server's Serve has returned.
+	failed  chan error
+	stopped chan struct{}
+	once    sync.Once
+}
+
+// openFront binds the main listener and, with GOAL_GATEWAY_LISTEN, the gateway's, and serves them.
+// They shut down when ctx ends or shutdown is called. A listener that cannot bind closes the ones
+// already bound.
+func openFront(ctx context.Context, s settings, log *slog.Logger) (*front, error) {
+	addrs := []string{s.Listen}
+	if s.GatewayListen != "" {
+		addrs = append(addrs, s.GatewayListen)
+	}
+
+	f := &front{failed: make(chan error, len(addrs)), stopped: make(chan struct{})}
+
+	var lc net.ListenConfig
+
+	for _, addr := range addrs {
+		ln, err := lc.Listen(ctx, "tcp", addr)
+		if err != nil {
+			for _, l := range f.listeners {
+				_ = l.Close() // nothing was served on it yet
+			}
+
+			return nil, fmt.Errorf("listen %s: %w", addr, err)
+		}
+
+		gate := api.NewStarting()
+
+		f.listeners = append(f.listeners, ln)
+		f.gates = append(f.gates, gate)
+		f.servers = append(f.servers, httpServer(addr, gate))
+	}
+
+	var wg sync.WaitGroup
+
+	for i, srv := range f.servers {
+		wg.Go(func() {
+			if err := srv.Serve(f.listeners[i]); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				f.failed <- fmt.Errorf("http %s: %w", srv.Addr, err)
+			}
+		})
+	}
+
+	go func() {
+		wg.Wait()
+		close(f.stopped)
+	}()
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			f.shutdown(log)
+		case <-f.stopped:
+		}
+	}()
+
+	log.InfoContext(ctx, "goald listening", slog.String("addr", s.Listen), slog.String("gateway_listen", cmp.Or(s.GatewayListen, s.Listen)),
+		slog.String("gateway", s.GatewayURL))
+
+	return f, nil
+}
+
+// ready hands each listener the handler of its server in servers, in httpServers' order.
+func (f *front) ready(servers []*http.Server) {
+	for i, gate := range f.gates {
+		gate.Ready(servers[i].Handler)
+	}
+}
+
+// shutdown drains the servers for at most shutdownGrace and waits until every Serve has returned.
+// Only the first call shuts them down; the others wait for it.
+func (f *front) shutdown(log *slog.Logger) {
+	f.once.Do(func() {
+		ctx, done := context.WithTimeout(context.Background(), shutdownGrace)
+		defer done()
+
+		for _, srv := range f.servers {
+			if err := srv.Shutdown(ctx); err != nil {
+				log.Warn("http shutdown", slog.String("addr", srv.Addr), slog.Any("error", err))
+			}
+		}
+
+		<-f.stopped
+	})
 }
 
 // refresh reconciles the current definition versions with PostgreSQL until ctx ends, behind the
