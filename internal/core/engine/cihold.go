@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -31,9 +32,9 @@ type ciHeld struct {
 }
 
 // holdForCI is the hold after a push at a station with waitFor: ci (ADR 0044 decision 3). When
-// the run pushed (its own repositories with Wrote and a pushed head) and its checked output would
-// move the item forward (movesForward), it opens an after wait per pushed repository, holding the
-// run, and returns the item to its station's queue with the lease released, as deferMerge does;
+// the run pushed (its own repositories with Wrote and a pushed head), or its approval would merge
+// pull requests (heldCommits), and its checked output would move the item forward
+// (movesForward), it opens an after wait per commit, holding the run, and returns the item to its station's queue with the lease released, as deferMerge does;
 // the output is not accepted yet. Once the visit has had the station's rounds of CI, the item
 // blocks for a person instead, naming the checks that failed last. It reports whether it held or
 // blocked the item; false leaves the outcome to finish.
@@ -48,7 +49,7 @@ func (e *Engine) holdForCI(ctx context.Context, log *slog.Logger, c claimed, run
 		return true
 	}
 
-	commits := e.withPullRequests(ctx, log, c.line, c.item, pushedHeads([]domain.Run{r}))
+	commits := e.heldCommits(ctx, log, c, r)
 	if len(commits) == 0 {
 		return false
 	}
@@ -105,6 +106,29 @@ func (e *Engine) holdForCI(ctx context.Context, log *slog.Logger, c claimed, run
 	})
 
 	return true
+}
+
+// heldCommits are the commits holdForCI waits on for run r: the heads r pushed, each on its pull
+// request's head when one of the item's pull requests is in its repository (withPullRequests).
+// At an action: merge station, the head of each open pull request the merge takes, in a
+// repository r did not push to, is added (ADR 0044 decision 4, amended 2026-11-09): those are
+// the item's outputs with the station's replaced by r's, as mergeOnApproval reads them.
+func (e *Engine) heldCommits(ctx context.Context, log *slog.Logger, c claimed, r domain.Run) []ciCommit {
+	pushed := pushedHeads([]domain.Run{r})
+	if c.station.Action != domain.ActionMerge {
+		return e.withPullRequests(ctx, log, c.line, c.item.PullRequests(c.line), pushed, false)
+	}
+
+	it := c.item
+	it.Outputs = maps.Clone(it.Outputs)
+
+	if it.Outputs == nil {
+		it.Outputs = map[string]json.RawMessage{}
+	}
+
+	it.Outputs[c.station.ID] = r.Result.Output
+
+	return e.withPullRequests(ctx, log, c.line, it.PullRequests(c.line), pushed, true)
 }
 
 // movesForward reports whether finish would move the item forward on chk: an approval (the

@@ -329,9 +329,18 @@ func TestEngine_TurnCIHeldHolderKeepsItsTurn(t *testing.T) {
 	}
 
 	// The held approval is applied in the claim without an agent run, so a can merge and leave
-	// while the tick still claims: b finishes in that step or the next.
+	// while the tick still claims: b, whose run pushed nothing, is then held on its pull
+	// request's head (ADR 0044 decision 4) and finishes once CI on it passed too.
 	h.endCI(t, pushSHA1, checksOf(ports.CheckPassed, ports.CheckFinished))
-	h.stepUntil(t, b.ID, isDone, 3)
+	h.codehost.SetChecks(appRepo, headSHA, checksOf(ports.CheckPassed, ports.CheckFinished))
+
+	for range 3 {
+		h.step(t)
+		h.clock.Advance(domain.CIPollMinInterval)
+		pollCI(t, h.e)
+	}
+
+	h.stepUntil(t, b.ID, isDone, 1)
 
 	h.expectPosition(t, a.ID, isDone)
 
