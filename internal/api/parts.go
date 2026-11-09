@@ -144,7 +144,10 @@ func (s *server) assemblyParts(ctx context.Context, it domain.Item, parts domain
 		return gen.AssemblyParts{}, err
 	}
 
-	waiting, err := s.waiting(ctx, it.FactoryID, l, parts.Items, func(n int64) string { return s.ref(ctx, it.FactoryID, n) })
+	// Every part's root is it.
+	root := func(context.Context, domain.ItemID) (string, error) { return it.IntegrationBranch, nil }
+
+	waiting, err := s.waiting(ctx, it.FactoryID, l, parts.Items, root, func(n int64) string { return s.ref(ctx, it.FactoryID, n) })
 	if err != nil {
 		return gen.AssemblyParts{}, err
 	}
@@ -299,4 +302,14 @@ func (s *server) assemblyOf(ctx context.Context, it domain.Item) (*gen.PartOf, e
 		Part:  slices.IndexFunc(parts.Items, func(p domain.Item) bool { return p.ID == it.ID }) + 1,
 		Parts: parts.Total,
 	}, nil
+}
+
+// readRootBranch reads the integration branch of the assembly root.
+func (s *server) readRootBranch(ctx context.Context, root domain.ItemID) (string, error) {
+	it, err := s.items.Item(ctx, root)
+	if err != nil {
+		return "", err
+	}
+
+	return it.IntegrationBranch, nil
 }

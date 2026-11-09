@@ -5,7 +5,7 @@ sidebar:
   order: 25
 ---
 
-When an agent cannot decide something on its own, it asks a person a question. The run ends, and the item waits until someone answers. The answer is recorded on the item and the item goes back to its station's queue, so the next run starts with the answer in hand. Questions are the way an agent stops for a person; a tool that needs approval works the same way, as described in [skills and rules](../skills-and-rules/#tools-that-ask-first).
+When an agent cannot decide something on its own, it asks a person a question. The run ends, and the item waits until someone answers. The answer is recorded on the item and the item goes back to its station's queue, so the next run starts with the answer in hand. Questions are the way an agent stops for a person; a tool that needs approval works the same way, as described in [skills and rules](/docs/concepts/skills-and-rules/#tools-that-ask-first).
 
 ## Asking
 
@@ -27,6 +27,14 @@ goal answer <item> --choice 2
 
 The first form gives a free answer. The second picks one of the offered choices by its number. Either way the answer is recorded as `question_answered`, with the person who gave it, and the item returns to its station's queue.
 
+## Where to answer
+
+- In the web app, answer on the item's page, or on the question card in Needs you. Pick a choice or write your own.
+- With the API, send `POST /v1/orgs/{org}/items/{item}/answer` (`answerItem`).
+- With the CLI, use `goal answer`, as above.
+
+A free answer is 1 to 2,000 characters.
+
 ## When a question is withdrawn
 
 Moving, pausing, rejecting or cancelling an item withdraws its open question without an answer. The question is no longer open, and no answer is recorded.
@@ -37,4 +45,4 @@ Moving, pausing, rejecting or cancelling an item withdraws its open question wit
 - `goal answer` answers it from the command line.
 - The question and its answer are events on the item, so they appear in its history.
 
-The flags are in the [CLI reference](../../reference/).
+The flags are in the [CLI reference](/docs/reference/cli/#goal-answer).

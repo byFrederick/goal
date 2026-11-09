@@ -254,6 +254,28 @@ func (s *Store) CIWaits(ctx context.Context, item domain.ItemID, station string)
 	return out, nil
 }
 
+// CIWaitsOf implements ports.Store.
+func (s *Store) CIWaitsOf(ctx context.Context, keys []domain.CIWaitKey) (map[domain.CIWaitKey][]domain.CIWaitRecord, error) {
+	out := map[domain.CIWaitKey][]domain.CIWaitRecord{}
+
+	for _, k := range keys {
+		if _, ok := out[k]; ok {
+			continue
+		}
+
+		ws, err := s.CIWaits(ctx, k.Item, k.Station)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(ws) > 0 {
+			out[k] = ws
+		}
+	}
+
+	return out, nil
+}
+
 // heldByCI reports whether it has an open CI wait at its station, whatever its phase, which the
 // claim skips (ADR 0044 decisions 2 and 3). Callers hold s.mu.
 func (c *ciRows) heldByCI(org domain.OrgID, it *domain.Item) bool {

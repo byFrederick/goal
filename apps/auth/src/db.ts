@@ -1,8 +1,14 @@
 import pg from 'pg';
 
+/**
+ * poolMax is the most connections the auth service holds: its 4 of the 22 PS-5 leaves to Goal,
+ * beside goald's 16 and migrations' 2 (docs/engineering/cloudflare-operations.md, Connection budget).
+ */
+export const poolMax = 4;
+
 /** openPool connects to url (the database as goal_auth); the caller ends it. */
 export function openPool(url: string): pg.Pool {
-  return new pg.Pool({ connectionString: url, max: 10, application_name: 'goal-auth' });
+  return new pg.Pool({ connectionString: url, max: poolMax, application_name: 'goal-auth' });
 }
 
 /** RoleError says why the service refuses the role it connected as. */

@@ -23,7 +23,10 @@ The cord is one of three things that can stop a line. A pause on the line and a 
 ## Where the cord shows up
 
 - The API has the pull (`pullAndon`), the clear (`clearAndon`) and a read of the open pull and its recent pulls (`getAndon`).
-- An open pull appears in the **Inbox**, as an entry that needs a person.
+- The Board and Floor headers show the line's status and an **Andon** button, which pulls or clears the cord.
+- `goal andon <factory>` shows the cord, `goal andon pull <factory> --reason "…"` pulls it and `goal andon clear <factory> --note "…"` clears it (the note is optional). See the [CLI reference](/docs/reference/cli/).
+- An open pull appears in **Needs you**, as an entry that needs a person.
+- The gate counts in the andon read start at the last clear.
 
 ## The rework-rate warning
 

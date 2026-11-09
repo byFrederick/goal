@@ -33,9 +33,17 @@ import (
 )
 
 // Open connects a pool to the database at url (a postgres:// URL or key=value DSN; pool
-// settings such as pool_max_conns go in the URL) and checks that it answers.
+// settings such as pool_max_conns go in the URL) and checks that it answers. The pool's tracer
+// counts the queries and acquire waits of every context that carries a ports.DBMeter.
 func Open(ctx context.Context, url string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, url)
+	cfg, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		return nil, fmt.Errorf("postgres: open: %w", err)
+	}
+
+	cfg.ConnConfig.Tracer = meterTracer{now: time.Now}
+
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: open: %w", err)
 	}

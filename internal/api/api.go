@@ -104,6 +104,7 @@ type Items interface {
 	ItemRepositories(ctx context.Context, item domain.ItemID) ([]domain.ItemRepository, error)
 	ItemsRepositories(ctx context.Context, items []domain.ItemID) (map[domain.ItemID][]domain.ItemRepository, error)
 	ItemEvents(ctx context.Context, id domain.ItemID, after int64, limit int) ([]domain.Event, error)
+	AskEvents(ctx context.Context, ids []domain.ItemID) (map[domain.ItemID][]domain.Event, error)
 	FactoryActivity(ctx context.Context, factory domain.FactoryID, limit int) ([]domain.ActivityEvent, error)
 	Runs(ctx context.Context, item domain.ItemID, limit int) ([]domain.Run, error)
 	Run(ctx context.Context, id domain.RunID) (domain.Run, error)
@@ -113,6 +114,7 @@ type Items interface {
 	SearchItems(ctx context.Context, q ports.ItemSearch) ([]domain.Item, error)
 	Assemblies(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID]domain.Assembly, error)
 	Leases(ctx context.Context, factory domain.FactoryID, station string) ([]domain.Lease, error)
+	FactoryLeases(ctx context.Context, factory domain.FactoryID) ([]domain.Lease, error)
 	StationLoads(ctx context.Context, factory domain.FactoryID) ([]domain.StationLoad, error)
 	FlowMetrics(ctx context.Context, q ports.FlowQuery, longWaitsAt string) (domain.FlowMetrics, error)
 	DoneByBucket(ctx context.Context, q ports.FlowQuery, d time.Duration, n int) ([]int, error)
@@ -144,7 +146,7 @@ type Items interface {
 	Parts(ctx context.Context, parent domain.ItemID) (domain.Parts, error)
 	Edges(ctx context.Context, item domain.ItemID) (domain.ItemEdges, error)
 	OpenNeeds(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID][]domain.OpenNeed, error)
-	CIWaits(ctx context.Context, item domain.ItemID, station string) ([]domain.CIWaitRecord, error)
+	CIWaitsOf(ctx context.Context, keys []domain.CIWaitKey) (map[domain.CIWaitKey][]domain.CIWaitRecord, error)
 	ListSavedViews(ctx context.Context, factory domain.FactoryID, viewer domain.UserID) ([]domain.SavedView, error)
 	CreateSavedView(ctx context.Context, v domain.SavedView) (domain.SavedView, error)
 	UpdateSavedView(ctx context.Context, factory domain.FactoryID, id domain.SavedViewID, name string, filters map[string][]string, at time.Time) (domain.SavedView, error)
@@ -634,7 +636,7 @@ func (s *server) GetItem(ctx context.Context, req gen.GetItemRequestObject) (gen
 		return nil, err
 	}
 
-	waiting, err := s.waiting(ctx, it.FactoryID, l, []domain.Item{it}, func(n int64) string { return s.ref(ctx, it.FactoryID, n) })
+	waiting, err := s.waiting(ctx, it.FactoryID, l, []domain.Item{it}, s.readRootBranch, func(n int64) string { return s.ref(ctx, it.FactoryID, n) })
 	if err != nil {
 		return nil, err
 	}
