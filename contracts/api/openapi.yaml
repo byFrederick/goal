@@ -138,6 +138,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Health" }
+        "503": { $ref: "#/components/responses/Starting" }
   /v1/auth/config:
     get:
       operationId: getAuthConfig
@@ -4952,7 +4953,23 @@ components:
         personal token (goal_pat_...)
   responses:
     Problem:
-      description: An error (RFC 9457 problem details)
+      description: >-
+        An error (RFC 9457 problem details). While goald starts, every path answers 503
+        goald-starting with Retry-After (the Starting response) until startup finishes.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Starting:
+      description: >-
+        goald is starting (code goald-starting). goald binds its listeners before it opens the
+        database and loads the definitions, and until startup finishes every path, the API, the
+        auth proxy, the gateway and the web app alike, answers this at once, never cached. Retry
+        after the Retry-After seconds.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          required: true
+          schema: { type: integer }
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
@@ -4983,7 +5000,9 @@ components:
           pattern: "^[a-z]+(-[a-z]+)*$"
           description: >-
             A stable, kebab-case name of the error for clients to branch on (org-not-found,
-            forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated
+            forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). goald-starting
+            (503, with Retry-After): goald is starting, and every path answers it until startup
+            finishes; retry. unauthenticated
             (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again.
             reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI
             confirms it's you and retries once. last-platform-admin (409): the install keeps at
