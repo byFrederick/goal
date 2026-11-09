@@ -215,6 +215,7 @@ func TestLockConn_RedialsWhenTheConnectionIsLost(t *testing.T) {
 		d.terminate(t)
 
 		var err error
+
 		digestRan, err = NewDigests(d.s).WithDigestLock(ctx, func(context.Context) error { return nil })
 
 		return err

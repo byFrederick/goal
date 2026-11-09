@@ -5,8 +5,8 @@ output "admin_url" {
 }
 
 output "app_url" {
-  description = "goald's URL as goal_app (GOAL_DATABASE_URL), its pool capped."
-  value       = "postgres://${local.user.app}@${local.server}?${local.go_tls}&pool_max_conns=${var.goald_pool_max_conns}"
+  description = "goald's URL as goal_app (GOAL_DATABASE_URL), its pool capped and its idle connections closed after 5 minutes."
+  value       = "postgres://${local.user.app}@${local.server}?${local.go_tls}&pool_max_conns=${var.goald_pool_max_conns}&pool_max_conn_idle_time=5m"
   sensitive   = true
 }
 
