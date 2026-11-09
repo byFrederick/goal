@@ -36,7 +36,7 @@ When an assembly has an integration branch, it does not close at that step. It m
 
 ## Acting on an assembly
 
-Pausing, cancelling and retrying an assembly apply to its parts, each as the same action would apply to one item, all in one step. A person can also add a part to an open assembly, with Add a part on the assembly page or through the API.
+Pausing, cancelling and retrying an assembly apply to its parts, each as the same action would apply to one item, all in one step. A person can also add a part to an open assembly, from the assembly page or through the API. See [Act on an assembly](/docs/guides/act-on-an-item/#act-on-an-assembly).
 
 ## Dependencies between items
 
