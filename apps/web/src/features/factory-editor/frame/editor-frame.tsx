@@ -43,7 +43,7 @@ interface FrameProps {
 }
 
 /** The draft's counts: the session's after its own save (fresher), else B's draft as last read. */
-function counts(s: SessionState, draft: Draft | undefined) {
+export function counts(s: SessionState, draft: Draft | undefined) {
   if (!s.hasDraft) return { summaries: [], changeCount: 0, problemCount: 0 };
   if (s.lastSaved > (draft?.revision ?? 0) && s.summaries.length > 0) {
     return { summaries: s.summaries, changeCount: s.changeCount, problemCount: s.problemCount };
