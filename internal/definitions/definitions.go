@@ -331,10 +331,11 @@ func (c *Cache) load(ctx context.Context, id domain.DefinitionVersionID, reuse *
 }
 
 // readBlobs adds to known the content of every file of manifest whose hash it lacks, read from
-// the store at the same time, each in one of the cache's blobReads slots. A file that fails fails
-// the version: the error is the first failing file's, in the order of the paths.
+// the store at the same time, each in one of the cache's blobReads slots. A file that cannot be
+// read fails the version: the error is the first failing file's, in the order of the paths.
 func (c *Cache) readBlobs(ctx context.Context, id domain.DefinitionVersionID, manifest domain.Manifest, known map[domain.BlobHash][]byte) error {
 	paths := map[domain.BlobHash]string{} // the first path of each hash to read
+
 	for _, p := range slices.Sorted(maps.Keys(manifest)) {
 		h := manifest[p]
 		_, have := known[h]

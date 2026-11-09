@@ -1041,21 +1041,21 @@ func TestCache_FactoriesListingASource(t *testing.T) {
 
 // moreOrgs creates n organizations besides org and other, each with its own factory published,
 // and returns them with the factory each runs.
-func (h *harness) moreOrgs(t testing.TB, n int) map[domain.OrgID]domain.FactoryID {
-	t.Helper()
+func (h *harness) moreOrgs(tb testing.TB, n int) map[domain.OrgID]domain.FactoryID {
+	tb.Helper()
 
 	out := map[domain.OrgID]domain.FactoryID{}
 
 	for i := range n {
 		o, err := h.orgs.CreateOrg(context.Background(), domain.LocalUser, ports.NewOrg{Slug: fmt.Sprintf("more-%d", i), Name: "Another org"})
 		if err != nil {
-			t.Fatal(err)
+			tb.Fatal(err)
 		}
 
 		id := domain.FactoryID(fmt.Sprintf("5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f%04d", i))
 		if _, err := porttest.Publish(domain.WithOrg(context.Background(), o.ID), h.store, id, acmeName,
 			bytesOf(withID(acme(acmeName, noteContract), id))); err != nil {
-			t.Fatal(err)
+			tb.Fatal(err)
 		}
 
 		out[o.ID] = id
@@ -1074,9 +1074,10 @@ type gated struct {
 
 	arrived  chan struct{}
 	release  chan struct{}
-	inFlight atomic.Int32
-	most     atomic.Int32
 	blobRead atomic.Int32
+
+	mu             sync.Mutex
+	inFlight, most int
 }
 
 func newGated(d *porttest.Definitions) *gated {
@@ -1084,13 +1085,26 @@ func newGated(d *porttest.Definitions) *gated {
 }
 
 func (g *gated) wait() {
-	n := g.inFlight.Add(1)
-	for m := g.most.Load(); n > m && !g.most.CompareAndSwap(m, n); m = g.most.Load() {
-	}
+	g.mu.Lock()
+	g.inFlight++
+	g.most = max(g.most, g.inFlight)
+	g.mu.Unlock()
 
 	g.arrived <- struct{}{}
+
 	<-g.release
-	g.inFlight.Add(-1)
+
+	g.mu.Lock()
+	g.inFlight--
+	g.mu.Unlock()
+}
+
+// mostAtOnce is the most gated calls that were in flight together.
+func (g *gated) mostAtOnce() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	return g.most
 }
 
 func (g *gated) FactoryRecords(ctx context.Context) ([]ports.FactoryRecord, error) {
@@ -1123,7 +1137,7 @@ func (g *gated) arrive(t *testing.T, n int) {
 		select {
 		case <-g.arrived:
 		case <-time.After(5 * time.Second):
-			t.Fatalf("%d calls in flight, want %d at once", g.inFlight.Load(), n)
+			t.Fatalf("at most %d calls in flight at once, want %d", g.mostAtOnce(), n)
 		}
 	}
 }
@@ -1197,7 +1211,7 @@ func TestRefresh_LoadsOrganizationsConcurrentlyWithABound(t *testing.T) {
 		t.Errorf("lines = %v, want %v", versionsOf(got.lines), want)
 	}
 
-	if n := store.most.Load(); n != orgLoads {
+	if n := store.mostAtOnce(); n != orgLoads {
 		t.Errorf("%d organizations loaded at once, want %d", n, orgLoads)
 	}
 
@@ -1229,11 +1243,11 @@ func TestLoad_ReadsFilesConcurrentlyWithASharedBound(t *testing.T) {
 		t.Fatalf("Refresh = %+v (%v), want 4 lines", got.lines, got.err)
 	}
 
-	if n := store.most.Load(); n != blobReads {
+	if n := store.mostAtOnce(); n != blobReads {
 		t.Errorf("%d files read at once, want %d", n, blobReads)
 	}
 
-	if n := store.blobRead.Load(); n != 4*int32(len(acme(acmeName, noteContract))) {
+	if n := int(store.blobRead.Load()); n != 4*len(acme(acmeName, noteContract)) {
 		t.Errorf("%d files read, want every file of the 4 versions once", n)
 	}
 
