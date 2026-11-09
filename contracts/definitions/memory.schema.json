@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://goal.local/schema/memory.schema.json",
   "title": "Goal factory memory",
-  "description": "memory.yaml, beside factory.yaml, is the factory's memory (ADR 0038 decision 6): short facts its runs should know. The file holds at most 8 KB and 50 entries (memory-too-big), and an entry's text at most 300 characters (memory-too-long).",
+  "description": "memory.yaml is the factory memory: short facts every run of the factory should know (ADR 0038 decision 6). It sits beside factory.yaml in the factory's definition. A run gets the entries in the Knowledge section of its prompt, unless its agent's builtins.read is off. Edit the facts in the Factory memory section of the web app's Definition page, with goal memory add and goal memory rm, or in the folder goal factory pull writes; Jonah's daily review proposes new ones. The file holds at most 8 KB and 50 entries (memory-too-big), and an entry's text at most 300 characters (memory-too-long).",
   "type": "array",
   "items": {
     "type": "object",

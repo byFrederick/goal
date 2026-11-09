@@ -97,6 +97,43 @@ func (q *Queries) InsertLease(ctx context.Context, arg InsertLeaseParams) (Lease
 	return i, err
 }
 
+const leasesOfFactory = `-- name: LeasesOfFactory :many
+SELECT item_id, factory_id, station, agent, slot, container, acquired_at, heartbeat_at, expires_at, org_id FROM leases WHERE factory_id = $1 ORDER BY station, slot
+`
+
+// Every lease of the factory, as StationLeases reads them station by station: what the board's
+// cards and lanes read once per request.
+func (q *Queries) LeasesOfFactory(ctx context.Context, factoryID uuid.UUID) ([]Lease, error) {
+	rows, err := q.db.Query(ctx, leasesOfFactory, factoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Lease
+	for rows.Next() {
+		var i Lease
+		if err := rows.Scan(
+			&i.ItemID,
+			&i.FactoryID,
+			&i.Station,
+			&i.Agent,
+			&i.Slot,
+			&i.Container,
+			&i.AcquiredAt,
+			&i.HeartbeatAt,
+			&i.ExpiresAt,
+			&i.OrgID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockExpiredLeases = `-- name: LockExpiredLeases :many
 SELECT l.item_id, l.factory_id, l.station, l.agent, l.slot, l.container, l.acquired_at, l.heartbeat_at, l.expires_at, l.org_id FROM leases l JOIN work_items w ON w.id = l.item_id
 WHERE l.expires_at <= $1

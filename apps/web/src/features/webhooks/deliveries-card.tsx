@@ -13,6 +13,7 @@ import { Button } from '../../ui/button';
 import { Callout } from '../../ui/callout';
 import { Chip } from '../../ui/chip';
 import { cn } from '../../ui/cn';
+import { NumberRoll } from '../../ui/number-roll';
 import { Skeleton, SkeletonRows } from '../../ui/skeleton';
 import { Card, FactoryChip } from './parts';
 import type { RequestTarget } from './request-dialog';
@@ -39,7 +40,9 @@ export function DeliveriesCard({
   const log = useInfiniteQuery(webhookDeliveriesQuery(org, webhook));
   const all = log.data?.pages.flatMap((p) => p.deliveries) ?? [];
   const rows = all.filter(listed);
-  const counted = all.length - rows.length;
+  // Every page carries the same unnamed_days, so only the first page's counts are summed.
+  const unnamed = (log.data?.pages[0]?.unnamed_days ?? []).reduce((n, d) => n + d.count, 0);
+  const counted = all.length - rows.length + unnamed;
   // A delivery that arrives after the log first had rows fades in (MOTION.md, A new item appears in a list).
   const arrived = useArrivals(rows.map((d) => d.id));
 
@@ -87,8 +90,9 @@ export function DeliveriesCard({
             </ul>
           )}
           {counted > 0 ? (
-            <p className="m-0 border-t border-line px-4 py-3 text-secondary text-muted">
-              {counted.toLocaleString('en-US')} more that no trigger names, counted only.
+            <p className={cn('m-0 px-4 py-3 text-secondary text-muted', rows.length > 0 && 'border-t border-line')}>
+              <NumberRoll value={counted.toLocaleString('en-US')} /> more {counted === 1 ? 'delivery' : 'deliveries'} no
+              trigger names in the last 30 days
             </p>
           ) : null}
           {log.hasNextPage ? (

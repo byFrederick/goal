@@ -120,7 +120,7 @@ const usage = `usage:
                                                   goal factory pull and goal factory push
   goal org list                                   the organizations (* the one commands act in)
   goal org use <slug>                             act in this organization from now on (config file)
-  goal org create <slug> --name N [--mark M]      create an organization (platform admins only)
+  goal org create <slug> --name N [--mark M]      create an organization (any signed-in person)
   goal org update <slug> [--name N] [--slug S] [--mark M] [--max-slots N]
                                                   rename it, or cap the agents running at once
                                                   across its factories (--max-slots 0: no cap)
@@ -320,16 +320,19 @@ const usage = `usage:
                                                   a version already there unchanged succeeds, a
                                                   changed one is refused
   goal catalog templates list                     the catalog's templates, latest version of each
-  goal db init                                    create the database roles goald runs as (goal_owner,
-                                                  goal_app) and hand the schema to goal_owner
+  goal db init                                    create the database roles goald and auth run as
+                                                  (goal_owner, goal_app, goal_auth) and hand the schema
+                                                  to goal_owner
   goal db migrate                                 apply the pending migrations as goal_owner
                                                   (GOAL_MIGRATE_DATABASE_URL), as goald does at its start
   goal db recover-admin <email>                   make the person a platform admin with database access
                                                   alone (GOAL_DATABASE_ADMIN_URL), creating them if no
                                                   one has the email; goald may be stopped
   goal db recover-owner <org> <email>             make the person an owner of the organization, the same way
-  goal db rekey                                   reseal every connection under the active master key (the
-                                                  first of GOAL_MASTER_KEYS) as goal_owner; then drop old keys
+  goal db rekey                                   reseal every organization's sealed secrets (connections,
+                                                  credentials and the rest, previous values too) under the
+                                                  active master key (the first of GOAL_MASTER_KEYS) as
+                                                  goal_owner; then drop old keys
   goal admin list                                 the platform admins (platform admins only)
   goal admin add <email>                          make a person who has signed in a platform admin
   goal admin remove <email>                       stop them being one (the last one stays)
@@ -352,7 +355,7 @@ factory has that item (--factory F picks the factory of a bare number). <factory
 Factory definitions live in goald (drafts and published versions), not in files: goal factory
 push is how a folder changes one, and goald ignores factory files written to the bucket.
 
-Every command that talks to goald (run, follow, start, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, jonah, test, agent, spend, triggers, webhooks) acts in one
+Every command that talks to goald (run, follow, start, item, note, answer, move, pause, cancel, the decisions, deny, status, andon, factory, policy, standing-rules, secret, env, access, repository, knowledge, memory, search, runs, jonah, test, agent, spend, triggers, webhooks, lane, intake, key) acts in one
 organization: --org <slug|id>, else GOAL_ORG, else org in the config file
 ($XDG_CONFIG_HOME/goal/config.json, default ~/.config/goal/config.json; goal org use writes it),
 else the install's only organization (decisions are the local user's); with GOAL_API_KEY set, or a key or

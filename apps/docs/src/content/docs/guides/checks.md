@@ -3,6 +3,8 @@ title: Ask an agent what to file
 description: Add a check to a schedule trigger so an agent looks at a source that cannot send webhooks and answers what is worth an item.
 ---
 
+These are intake checks: an agent looks at a source and files items. A station's command checks, which run a command against a change, are another thing; see [Stations and flow](/docs/concepts/stations-and-flow/).
+
 You end with a trigger that, on a schedule, runs an agent to read a source (an incident tool, a mailbox, a status page) and file only what is new and worth doing. Use a check when the source cannot send webhooks, or when nobody in your organization may add one.
 
 ## Add a check to a trigger
@@ -47,9 +49,9 @@ It answers in a fixed shape:
 
 - **Keys.** A `file` whose key already has an open item becomes a note on it. A key whose item closed is filed again only with `reopen`, linked to the old item; otherwise it is skipped with "closed on <date>: <reason>", so a source that stays open is not filed and closed on every check. A key takes at most one note an hour, and a repeated note is dropped.
 - **Limits.** `limits.perCheck` (default 5) is the most items one check files. `limits.perDay` counts the items the trigger filed, not its firings. What is over either is recorded as skipped, "over the limit", and Needs you shows that once a day.
-- **Repositories.** A `file` entry's `repositories` are matched against the factory's `runtime.repositories` as a trigger's `create.repositories` are ([Repositories of an item](../intake/#repositories-of-an-item)). An entry that names none gets the default entry. An entry that names a repository the factory doesn't have is skipped with "can't file it: acme/legacy is not one of SRE's repositories", and the other entries are still filed.
+- **Repositories.** A `file` entry's `repositories` are matched against the factory's `runtime.repositories` as a trigger's `create.repositories` are ([Repositories of an item](/docs/guides/intake/#repositories-of-an-item)). An entry that names none gets the default entry. An entry that names a repository the factory doesn't have is skipped with "can't file it: acme/legacy is not one of SRE's repositories", and the other entries are still filed.
 - **Reading code.** A check may open any repository the factory's `runtime.repositories` cover. Its run signs in to each with a `read` entry's token wherever one matches, and otherwise with the entry's own token, and it can never push to any repository, whatever its agent's `code`. It clones nothing at start; the end of its brief lists the entries and says to clone one with git into `/repos/<owner>/<name>`. Checks have no `Bash`, so an agent that has only the built-in tools reads code through its environment's tools instead.
-- **The door.** Each item is filed with origin `trigger`, the check's run as its filer, and untrusted unless the trigger has `create.trusted`: what the agent read is outside text, so a person merges what its items build.
+- **The door.** Each item is filed with origin `trigger`, the check's agent as its filer, and untrusted unless the trigger has `create.trusted`: what the agent read is outside text, so a person merges what its items build.
 - **One at a time.** A firing while the trigger's check is queued or running is skipped, "still checking". No check is queued while the factory's line is paused.
 - **Failures.** An error, a timeout or an answer that breaks the fixed shape is recorded with its reason and files nothing. Three in a row show in Needs you.
 
@@ -61,7 +63,7 @@ The log lists each check with its time, how it ended (Filed, Noted, Nothing new,
 
 ## Read the checks
 
-From the CLI, or with `GET` on the same API path:
+From the CLI, or with `GET /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/checks`:
 
 ```sh
 goal triggers checks acme-line new-incidents --limit 20
@@ -77,8 +79,18 @@ Try runs the check now and shows what it would do. It spends like any check, and
 goal triggers try acme-line new-incidents --wait 6m
 ```
 
-The command waits at most `--wait` for the answer and prints what it would file, note and skip. The API (`POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/checks`) queues the try and answers 202; it answers 409 `still-checking` while the trigger's check is queued or running, and 422 `no-check` for a trigger without a `check`. For a trigger without a check, Try runs on one of its [past events](../intake/#try-a-trigger-on-a-past-event) instead.
+The command waits at most `--wait` for the answer and prints what it would file, note and skip. The API (`POST /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/checks`) queues the try and answers 202; it answers 409 `still-checking` while the trigger's check is queued or running, and 422 `no-check` for a trigger without a `check`. For a trigger without a check, Try runs on one of its [past events](/docs/guides/intake/#try-a-trigger-on-a-past-event) instead.
+
+## Clear a check's saved state
+
+A check keeps the `state` it saved, so the next check starts from it. To make the next check start fresh, clear it: Clear on the trigger's page, or the API:
+
+```
+DELETE /v1/orgs/{org}/factories/{factory}/intake/triggers/{trigger}/state
+```
+
+It answers 409 `still-checking` while the trigger's check is queued or running, and 422 `no-check` for a trigger without a `check`. There is no CLI command for it.
 
 ## Next
 
-For the keys, read the [definition reference](/docs/reference/definition/). For how agents and tools are set, read [Add an agent, skill or rule](../add-an-agent-skill-or-rule/).
+For the keys, read the [definition reference](/docs/reference/definition/). For how agents and tools are set, read [Add an agent, skill or rule](/docs/guides/add-an-agent-skill-or-rule/).

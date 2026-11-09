@@ -5,15 +5,15 @@ description: Pull a factory's files into a folder, edit them, validate and publi
 
 You end with a new published version of a factory, and the work that runs from then on follows it. The folder you edit is a working copy: Goal keeps the definition itself, and `goal factory push` makes your folder the factory's draft.
 
-Use the web app's Definition page to edit the same definition by hand. In its Agents section, an agent's prompt has a Reset to default button that restores the prompt file from the running version; the [Add an agent, skill or rule](../add-an-agent-skill-or-rule/) guide describes when it is off. The Environments section edits `environments/<name>.yaml`, which says what an agent's box installs and which secrets and servers it reaches; Add a tool puts an MCP server, a command-line tool or an API into it (see [Access and secrets](../../concepts/access-and-secrets/)). A new secret on that page is named after the tool; when your organization already has a secret of that name, the page suggests the next free one, such as `sentry-token-2`. Add to draft stays at the bottom of the window while the page scrolls. On an agent's page, the Environment select picks which file the agent gets. Each entry in the page's section nav shows a summary of its section, such as the number of stations on the Line or the agents and models in Agents. A count of changes and problems appears beside the section name when there are some. Use the steps below when you want the files in your editor and in version control.
+Use the web app's Definition page to edit the same definition by hand. In its Agents section, an agent's prompt has a Reset to default button that restores the prompt file from the running version; the [Add an agent, skill or rule](/docs/guides/add-an-agent-skill-or-rule/) guide describes when it is off. The Environments section edits `environments/<name>.yaml`, which says what an agent's box installs and which secrets and servers it reaches; Add a tool puts an MCP server, a command-line tool or an API into it (see [Access and secrets](/docs/concepts/access-and-secrets/)). A new secret on that page is named after the tool; when your organization already has a secret of that name, the page suggests the next free one, such as `sentry-token-2`. Add to draft stays at the bottom of the window while the page scrolls. On an agent's page, the Environment select picks which file the agent gets. Each entry in the page's section nav shows a summary of its section, such as the number of stations on the Line or the agents and models in Agents. A count of changes and problems appears beside the section name when there are some. Use the steps below when you want the files in your editor and in version control.
 
 ## Edit in the YAML view
 
-The Definition page's YAML view shows the draft's files. Pick a file in the file tree, edit it, and use Format to rewrite it in Goal's own layout. The Problems panel under the editor lists each validation problem of the draft with its file and line; select one to jump there. It says "No problems." when the draft is valid. The bar above the editor, "Ask the factory to change it", is not available yet: its input is disabled. `goal factory ask` is not built yet either: goald refuses every request with 501 `not-built`, so the command prints that refusal and exits non-zero, with or without `--wait`. Change the draft with `goal factory pull` and `goal factory push` instead.
+The Definition page's YAML view shows the draft's files. Pick a file in the file tree, edit it, and use Format to rewrite it in Goal's own layout. The Problems panel under the editor lists each validation problem of the draft with its file and line; select one to jump there. It says "No problems." when the draft is valid. The bar above the editor, "Ask the factory to change it", is not available yet: its input is disabled. Draft requests are not built, so neither that bar, Ask Jonah nor `goal factory ask` changes a draft today. `goal factory ask` is refused with 501 `not-built`: the command prints that refusal and exits non-zero, with or without `--wait`. Edit the files or the form instead, or change the draft with `goal factory pull` and `goal factory push`.
 
 ## Before you start
 
-- A signed-in `goal` CLI that can reach your Goal server ([Self-host with Docker Compose](../self-host-with-docker-compose/) shows how to start one on your machine).
+- A signed-in `goal` CLI that can reach your Goal server ([Self-host with Docker Compose](/docs/guides/self-host-with-docker-compose/) shows how to start one on your machine).
 - The factory's name. `goal factory list` prints each factory with its current version and its open draft, if it has one.
 
 ## 1. Pull the factory into a folder
@@ -26,13 +26,16 @@ This writes the current version's files into `./acme-line`, which must be a new 
 
 ## 2. Edit the files
 
-The folder holds `factory.yaml` at its root, and the files it points to:
+The folder holds `factory.yaml` at its root, and the files it points to. Validation requires `factory.yaml` and `environments/default.yaml`; the rest depends on what the factory uses.
 
+- `environments/default.yaml` (required) is the environment an agent gets when it names none. `environments/<name>.yaml` adds others.
 - `agents/` for each agent's prompt,
 - `skills/` and `rules/` for skills and factory rules,
-- `contracts/` for output contracts.
+- `contracts/` for output contracts,
+- `memory.yaml` (optional) for the factory's memory facts,
+- `triggers/<name>.md` (optional) for the briefs that triggers name as `./triggers/<name>.md`.
 
-What each field means is in the [factory definition reference](/docs/reference/). For example, runs cache Go's and pnpm's downloads and builds per repository by default; set `runtime.buildCache: false` to turn the cache off. To add an agent, a skill or a rule, follow [Add an agent, skill or rule](../add-an-agent-skill-or-rule/).
+What each field means is in the [factory definition reference](/docs/reference/definition/). For example, runs cache Go's and pnpm's downloads and builds per repository by default; set `runtime.buildCache: false` to turn the cache off. To add an agent, a skill or a rule, follow [Add an agent, skill or rule](/docs/guides/add-an-agent-skill-or-rule/).
 
 ## 3. Validate the folder
 
@@ -89,7 +92,7 @@ You can also change the line in the draft's form: open the factory's Definition 
 
 - Change a station's name, kind or WIP limit in its row. A kind change that drops fields, such as an agent's checks, says what it removed and offers Undo.
 - Move a station with its up and down buttons, or focus its row and press Alt with the up or down arrow, or drag its number. The More menu inserts a station above or below, duplicates it or deletes it.
-- Open Rules under a row to set its checks, rework rule, merge step and note. A row that has a problem opens its rules for you.
+- Open Rules under a row to set its checks, lanes, rework rule, merge step and note. A station's `waitFor`, `merges` and `context` have no control in the app; change them in the YAML view or in the files. A row that has a problem opens its rules for you.
 - Checks on this line, under the table, lists what passed, what to know and what must be fixed before you can publish.
 
 ## Edit repositories and an agent's code in the app
@@ -101,7 +104,7 @@ Open the factory's Definition and choose Basics. Under Runtime, Repositories lis
 - **Default** marks the repository an item uses when it names none. The only repository is the default, and a URL that ends in `/*` (every repository of an owner) cannot be.
 - **Add a repository** adds a row, and **Remove** takes one out of the draft. A factory with none shows "No code. Agents work through their tools."
 
-A definition that still has the `runtime.repository` shorthand keeps its single URL and token field; the app does not convert it. Choose one form: publish refuses a definition that has both.
+A definition that still has the `runtime.repository` shorthand keeps its single URL and token field in Basics, with no Add a repository button there. In Factory settings under Code, **Add a repository** converts the shorthand: the shorthand becomes the default write entry of `runtime.repositories`, and a new row is added after it. Choose one form: publish refuses a definition that has both.
 
 An agent's **Code** is on its page in Agents, as Write or Read. Write lets the agent push, open pull requests and merge in repositories whose access is write. When you choose nothing, an agent writes if the factory has a repository that writes, and reads otherwise.
 
@@ -125,5 +128,5 @@ The published version that runs is marked with `*`. To run an earlier version ag
 
 ## Related
 
-- [Add an agent, skill or rule](../add-an-agent-skill-or-rule/)
-- [Factory definition reference](/docs/reference/)
+- [Add an agent, skill or rule](/docs/guides/add-an-agent-skill-or-rule/)
+- [Factory definition reference](/docs/reference/definition/)

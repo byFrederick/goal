@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  api.listWebhookDeliveries.mockResolvedValue({ deliveries: [], next_after: null });
+  api.listWebhookDeliveries.mockResolvedValue({ deliveries: [], unnamed_days: [], next_after: null });
 });
 
 const secrets = [

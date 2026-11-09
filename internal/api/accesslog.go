@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/byFrederick/goal/internal/core/domain"
+	"github.com/byFrederick/goal/internal/core/ports"
 )
 
 // accessRecord is what one request's access log line says beyond its method, status and request
@@ -41,8 +42,9 @@ func notePrincipal(ctx context.Context) {
 
 // accessLog logs every request once it is answered (spec 3 §12): its method, operationId (never
 // its path, which may name an invitation), status and request id, its principal (user:<id>,
-// service:<key id> or none) and credential (session, key:<id>, pat:<id>), its organization's id
-// and how long it took. Never a cookie, an Authorization value, a token or an email. A refusal
+// service:<key id> or none) and credential (session, key:<id>, pat:<id>), its organization's id,
+// how long it took, and its database work: the queries it ran (queries) and how long it waited
+// for pooled connections (db_wait_ms), counted by the store's tracer on the request's meter. Never a cookie, an Authorization value, a token or an email. A refusal
 // before routing (cross-origin, a malformed credential) has no operation; one before the
 // principal is made (401) has principal none.
 func (s *server) accessLog(next http.Handler) http.Handler {
@@ -51,12 +53,15 @@ func (s *server) accessLog(next http.Handler) http.Handler {
 		rec := &accessRecord{}
 		sw := &statusWriter{ResponseWriter: w}
 
-		next.ServeHTTP(sw, r.WithContext(context.WithValue(r.Context(), accessKey{}, rec)))
+		ctx, meter := ports.WithDBMeter(context.WithValue(r.Context(), accessKey{}, rec))
+
+		next.ServeHTTP(sw, r.WithContext(ctx))
 
 		attrs := []slog.Attr{
 			slog.String("method", r.Method), slog.String("operation", rec.operation), slog.Int("status", sw.code()),
 			slog.String("request_id", w.Header().Get(requestIDHeader)), slog.String("principal", principalName(rec.principal)),
 			slog.Int64("duration_ms", time.Since(start).Milliseconds()),
+			slog.Int("queries", meter.Queries()), slog.Int64("db_wait_ms", meter.Wait().Milliseconds()),
 		}
 		if c := credentialLabel(rec.principal); c != "" {
 			attrs = append(attrs, slog.String("credential", c))

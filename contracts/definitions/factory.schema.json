@@ -67,7 +67,7 @@
         },
         "contracts": {
           "type": "object",
-          "description": "Named JSON Schemas that station outputs must satisfy. An output contract becomes the model's tool input_schema, so its top level must be \"type\": \"object\" with no oneOf, anyOf or allOf there (nested under a property is fine).",
+          "description": "Named JSON Schemas that station outputs must satisfy; each value is the path of a JSON Schema file in the factory folder. An output contract becomes the model's tool input_schema, so its top level must be \"type\": \"object\" with no oneOf, anyOf or allOf there (nested under a property is fine).",
           "additionalProperties": { "type": "string" }
         },
         "agents": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/agent" } },
@@ -172,7 +172,7 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "dailyUsd": { "type": "number", "minimum": 0 },
+            "dailyUsd": { "type": "number", "minimum": 0, "description": "A daily spend figure that is shown but never enforced; weeklyUsd is the cap." },
             "weeklyUsd": { "type": "number", "minimum": 0, "description": "Spend cap over a rolling 7 days." },
             "onExhausted": { "enum": ["drain", "stop"], "description": "At the weekly cap: drain starts no new agent work and lets running tasks finish; stop also stops them. Default drain." },
             "perItemUsd": { "type": "number", "minimum": 0 },
@@ -275,9 +275,14 @@
                 "description": "stdio: give the sidecar outbound network access (Docker's default bridge; host.docker.internal is the host). Without it the sidecar has no network at all, which suits servers that only work on their stdio. Servers that browse, call APIs or reach a database need it."
               }
             },
-            "oneOf": [
-              { "properties": { "transport": { "const": "http" } }, "required": ["url"] },
-              { "properties": { "transport": { "const": "stdio" } }, "anyOf": [ { "required": ["image"] }, { "required": ["command"] } ] }
+            "allOf": [
+              {
+                "description": "An mcp connection over http needs url; one over stdio needs image or command.",
+                "oneOf": [
+                  { "properties": { "transport": { "const": "http" } }, "required": ["url"] },
+                  { "properties": { "transport": { "const": "stdio" } }, "anyOf": [ { "required": ["image"] }, { "required": ["command"] } ] }
+                ]
+              }
             ]
           }
         },
@@ -301,7 +306,7 @@
         "name": { "$ref": "#/$defs/slug" },
         "source": {
           "type": "string",
-          "description": "A local folder (./skills/x) or a skills.sh reference (skills.sh:owner/repo@skill), pinned by the lockfile.",
+          "description": "A local folder (./skills/x), which goald ships to the agent, or a skills.sh reference (skills.sh:owner/repo@skill), which goald does not fetch: the agent gets that skill only when the repository vendors it in .claude/skills.",
           "pattern": "^(\\./.+|skills\\.sh:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+)$"
         },
         "origin": {
@@ -539,11 +544,11 @@
         },
         "agents": { "type": "integer", "minimum": 1, "maximum": 20, "description": "Parallel agent containers at this station." },
         "wip": { "type": "integer", "minimum": 1, "description": "Max items in progress at this station." },
-        "buffer": { "type": "integer", "minimum": 0, "description": "Items kept ready in front of the station (use at the constraint)." },
+        "buffer": { "type": "integer", "minimum": 0, "description": "Items to keep ready in front of the station. Not enforced yet: goald accepts the value and ignores it." },
         "output": { "type": "string", "description": "Name of a contract the station's result must satisfy." },
         "checks": {
           "type": "array",
-          "description": "Checks the station's output must pass before the item moves on. A command check runs in the run's workspace with CI=true and GOAL_BASE_BRANCH, the branch the item's pull request goes into; GOAL_BASE_BRANCH is empty when that is the repository's default branch.",
+          "description": "Checks the station's output must pass before the item moves on. A command check runs in the run's workspace with CI=true and GOAL_BASE_BRANCH, the branch the item's pull request goes into; GOAL_BASE_BRANCH is empty when that is the repository's default branch. It runs with no credentials and stops after 30 minutes.",
           "items": {
             "description": "A check, or its shorthand: \"schema\", \"evidence-links\" or a command line (\"go test ./...\").",
             "if": { "type": "string" },
@@ -561,7 +566,7 @@
         },
         "action": {
           "enum": ["merge"],
-          "description": "On a human station or an agent station with a gate: what goald does when the human or the gate approves. merge merges every pull request the item's outputs name first (the pull_request and pull_requests fields of each station's latest output, the gate's own included), each through the factory's code host connection for its host; at a gate goald merges as the engine, and a refused merge blocks the item at the gate."
+          "description": "On a human station or an agent station with a gate: what goald does when the human or the gate approves. merge merges every pull request the item's outputs name first (the pull_request and pull_requests fields of each station's latest output, the gate's own included), each signing in with the token of the most specific runtime.repositories entry that covers its repository and writes (runtime.repository.token when that entry has none, or when there is no runtime.repositories); at a gate goald merges as the engine, and a refused merge blocks the item at the gate."
         },
         "merges": {
           "enum": ["serialize", "allow"],
@@ -581,7 +586,7 @@
                   "description": "Wait for CI, with any of the defaults changed. max must be above grace.",
                   "additionalProperties": false,
                   "properties": {
-                    "grace": { "type": "string", "pattern": "^[1-9][0-9]*(s|m|h)$", "default": "5m", "description": "How long a first check may take to appear, such as 5m. It counts from goald's first poll of the commit, or from the wait's start when that is earlier; a commit with no check by then gets no CI, and the wait ends." },
+                    "grace": { "type": "string", "pattern": "^[1-9][0-9]*(s|m|h)$", "default": "5m", "description": "How long a first check may take to appear, such as 5m, counted from the commit's first CI poll or the start of the wait, whichever is earlier; a commit with no check by then gets no CI, and the wait ends." },
                     "max": { "type": "string", "pattern": "^[1-9][0-9]*(s|m|h)$", "default": "60m", "description": "The longest goald waits for CI on one commit, such as 60m; CI not finished by then counts as failed, and the station runs again." },
                     "rounds": { "type": "integer", "minimum": 1, "default": 3, "description": "How many CI rounds one visit to the station gets; after that many, the item blocks for a person, naming the failing checks." }
                   }
@@ -601,7 +606,7 @@
           "required": ["onReject"],
           "additionalProperties": false,
           "properties": {
-            "onReject": { "type": "string" },
+            "onReject": { "type": "string", "description": "The station a rejected item goes back to, where the work is redone. It must name a station before this one." },
             "maxRework": { "type": "integer", "minimum": 0, "maximum": 5 }
           }
         }
@@ -609,6 +614,7 @@
       "allOf": [
         { "if": { "properties": { "kind": { "const": "agent" } } }, "then": { "oneOf": [ { "required": ["agent"] }, { "required": ["route"] } ] } },
         {
+          "description": "A station with action is a human station, or an agent station with a gate.",
           "if": { "required": ["action"] },
           "then": {
             "oneOf": [
@@ -661,9 +667,10 @@
               }
             },
             "constraint": { "type": "string", "description": "auto, or a station id." },
-            "release": { "enum": ["drum-buffer-rope", "push"] },
+            "release": { "enum": ["drum-buffer-rope", "push"], "description": "How work is released into the line. drum-buffer-rope is not enforced yet: goald accepts it and releases work as it would without it." },
             "andon": {
               "type": "object",
+              "description": "When one more rejection at a gate would bring its rework rate over the last window verdicts to reworkRate, the inbox shows a rework warning. goald only warns and never stops the line.",
               "additionalProperties": false,
               "properties": {
                 "reworkRate": { "type": "number", "minimum": 0, "maximum": 1 },

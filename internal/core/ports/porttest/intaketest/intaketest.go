@@ -379,18 +379,28 @@ func testDeliveryDays(f *fixture) {
 		t.Fatal(err)
 	}
 
+	// Deliveries no trigger names are only counted, and count as delivered on their UTC day: b's
+	// day before has nothing else.
+	f.receive(a, "unnamed-before", since.Add(-time.Minute), false) // a UTC day before since
+	f.receive(a, "unnamed-1", t0, false)
+	f.receive(a, "unnamed-2", t0.Add(time.Minute), false)
+	f.receive(b, "unnamed-3", since.Add(time.Hour), false)
+
 	elsewhere := f.factory
 	f.factory = f.NewFactory(t, f.org)
-	f.deliver(f.endpoint("elsewhere").ID, t0)
+	other := f.endpoint("elsewhere").ID
+	f.deliver(other, t0)
+	f.receive(other, "unnamed-elsewhere", t0, false)
 	f.factory = elsewhere
 
 	want := []domain.DeliveryDay{
 		{EndpointID: a, Day: since, Delivered: 1},
-		{EndpointID: a, Day: day, Delivered: 1, Refused: 2},
+		{EndpointID: a, Day: day, Delivered: 3, Refused: 2},
+		{EndpointID: b, Day: since, Delivered: 1},
 		{EndpointID: b, Day: day, Delivered: 1, Refused: 1},
 	}
 	if b < a {
-		want = []domain.DeliveryDay{want[2], want[0], want[1]}
+		want = []domain.DeliveryDay{want[2], want[3], want[0], want[1]}
 	}
 
 	got, err := f.in.DeliveryDays(f.ctx(), f.factory, since)
