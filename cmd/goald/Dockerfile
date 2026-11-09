@@ -40,14 +40,11 @@ COPY apps/web/ apps/web/
 COPY --from=web /src/apps/web/dist/ apps/web/dist/
 RUN CGO_ENABLED=0 go build -trimpath -tags webui -ldflags="-s -w" -o /out/goald ./cmd/goald
 
-# Alpine for wget (the health check) and the CA bundle, which Go's system pool reads: a managed
-# PostgreSQL's verify-full (sslrootcert=system), R2 and every connection over TLS need it (spec 4
-# §5.12). Runs clone in their own box, so goald needs no git.
-FROM ${RUNTIME_IMAGE} AS runtime
-RUN apk add --no-cache ca-certificates
 # github-mcp-server, the tool catalog's one stdio MCP server (the github and github-read
 # templates' Enterprise lines): environment tests start it in goald from /usr/local/bin, the
-# start of the PATH it gets (ADR 0041 decision 15). Pinned, and checked by sha256 per arch.
+# start of the PATH it gets (ADR 0041 decision 15). Pinned, and checked by sha256 per arch. Its own
+# stage, so the runtime gets the binary alone and its layer never depends on what lies below it.
+FROM ${RUNTIME_IMAGE} AS mcp
 ARG TARGETARCH
 ARG GITHUB_MCP_SERVER_VERSION=2.1.0
 ARG GITHUB_MCP_SERVER_SHA256_AMD64=a442f9db287cea01008bcb55fe6bc0292270301046c3edbd1a8b22d6e4157b2b
@@ -61,10 +58,21 @@ RUN set -eu; \
     wget -q -O /tmp/github-mcp-server.tar.gz \
       "https://github.com/github/github-mcp-server/releases/download/v${GITHUB_MCP_SERVER_VERSION}/github-mcp-server_Linux_${arch}.tar.gz"; \
     echo "${sum}  /tmp/github-mcp-server.tar.gz" | sha256sum -c -; \
-    tar -xzf /tmp/github-mcp-server.tar.gz -C /usr/local/bin github-mcp-server; \
-    chmod 0755 /usr/local/bin/github-mcp-server; \
-    rm /tmp/github-mcp-server.tar.gz
-COPY --from=build /out/goald /usr/local/bin/goald
+    mkdir -p /out; \
+    tar -xzf /tmp/github-mcp-server.tar.gz -C /out github-mcp-server; \
+    chmod 0755 /out/github-mcp-server
+
+# The runtime: the pinned Alpine base, for busybox wget (the health check) and its CA bundle
+# (ca-certificates-bundle, /etc/ssl/certs/ca-certificates.crt), which Go's system pool reads: a
+# managed PostgreSQL's verify-full (sslrootcert=system), R2 and every connection over TLS need it
+# (spec 4 §5.12). No apk add: a package from the live mirror could change the layer on a cold
+# builder; bump RUNTIME_IMAGE's digest for a newer bundle. Runs clone in their own box, so goald
+# needs no git. The layers run from what changes least to what changes on every deploy: the base,
+# github-mcp-server, then the goald binary, the only layer a source change touches. --link keeps
+# each copied layer independent of those below it, so it keeps its digest when they change.
+FROM ${RUNTIME_IMAGE} AS runtime
+COPY --link --from=mcp /out/github-mcp-server /usr/local/bin/github-mcp-server
+COPY --link --from=build /out/goald /usr/local/bin/goald
 USER 65532:65532
 EXPOSE 8080 8090
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \

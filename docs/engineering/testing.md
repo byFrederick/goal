@@ -56,6 +56,8 @@ An e2e spec whose page counts by day or week (Runs, Spend, Home, the Floor) pins
 
 A pull request into main runs three ci jobs: `task check`, `task test-integration` and the e2e job's 12 shards, `task web:e2e (1/12)` through `task web:e2e (12/12)`. When nothing under `apps/web/`, `packages/api-client/`, `contracts/` or `.github/workflows/ci.yml` changed, each shard succeeds without running the suite, so it always reports a status.
 
+A fourth job, `goald image and cold start`, runs `task goald:coldstart` and writes goald's image sizes, its layers and its local cold start to the job summary. It only reports: it has `continue-on-error: true` and is not a required check, so never add it to the list below.
+
 Branch protection is not managed in code: `deploy/terraform` has no GitHub provider and the repository has no ruleset file. A repository admin sets the required checks by hand. In the branch protection rule or ruleset for main, under required status checks, add the twelve checks `task web:e2e (1/12)`, `task web:e2e (2/12)`, … `task web:e2e (12/12)` next to `task check` and `task test-integration`. A shard that fails only on a known flaky test (software#759) is re-run once before anyone judges it.
 
 The e2e job is a matrix of 12 shards, `task web:e2e (<i>/12)`, each running `playwright test --shard=<i>/12` in `apps/web` with fail-fast off, so one shard's failures never cancel the others. A shard that fails uploads its HTML report and traces as the artifact `e2e-report-<i>`, kept 7 days; read the failing tests from the failed shards' artifacts.
