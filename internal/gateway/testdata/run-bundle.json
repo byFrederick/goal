@@ -63,5 +63,8 @@
   "read_only": [],
   "tools": [
     "task@3.46.1"
-  ]
+  ],
+  "build_cache": {
+    "enabled": false
+  }
 }

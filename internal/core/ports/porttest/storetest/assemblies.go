@@ -54,6 +54,35 @@ func testAssembliesPartsInNumberOrder(f *fixture) {
 	}
 }
 
+// An assembly read by Assemblies carries its integration branch once one is set, none before.
+func testAssembliesWithIntegrationBranch(f *fixture) {
+	t := f.t
+
+	it, l := f.planning(t, domain.NewItem{Title: titleBig})
+	asm, _ := f.assemble(t, assembly(it, l, plan()[:1]))
+
+	read := func() domain.Assembly {
+		t.Helper()
+
+		got, err := f.Store.Assemblies(f.ctx(t), f.factory, []domain.ItemID{asm.ID})
+		if err != nil || len(got) != 1 {
+			t.Fatalf("Assemblies = %+v, %v; want the assembly", got, err)
+		}
+
+		return got[asm.ID]
+	}
+
+	if b := read().IntegrationBranch; b != "" {
+		t.Errorf("integration branch before one is set = %q; want none", b)
+	}
+
+	f.setBranch(t, asm.ID)
+
+	if b := read().IntegrationBranch; b != branchIntg {
+		t.Errorf("integration branch = %q; want %q", b, branchIntg)
+	}
+}
+
 // The landing station and integration branch the integration-branch cases use.
 const (
 	stLand     = "land"

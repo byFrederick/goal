@@ -1,11 +1,12 @@
 import type { SDKMessage, query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 import { agentQuery } from './agent.js';
+import { readBuildCacheState, saveBuildCache } from './cache.js';
 import { type MeterOptions, startMeter } from './cgroup.js';
 import { repositoryUrl } from './credential.js';
 import { applyEnvironment, type EnvironmentDeps } from './environment.js';
 import { EventMapper, type Finished, type FinishedRepository, type WorkerEvent } from './events.js';
 import { NotePoller, notePollMs, PromptQueue } from './notes.js';
-import { isCommitId } from './prepare.js';
+import { type Exec, isCommitId } from './prepare.js';
 import type { AgentFiles, TaskSpec } from './spec.js';
 
 export interface RunDeps {
@@ -33,6 +34,13 @@ export interface RunDeps {
    * none of them.
    */
   resources?: MeterOptions;
+  /**
+   * The build cache prepare restored (src/cache.ts): its state file, where the archive is packed,
+   * how tar runs and, for a test, the archive's limit. Every finished line then carries the state's
+   * build_cache, and after a miss the cache is saved once the agent ended, before the finished line.
+   * Absent, no build_cache.
+   */
+  buildCache?: { state: string; archive: string; exec: Exec; log?: (line: string) => void; maxBytes?: number };
 }
 
 /**
@@ -50,10 +58,17 @@ export interface RunDeps {
  * With deps.resources, the box is measured from the start (src/cgroup.ts), and the finished event
  * carries cpu_seconds, peak_memory_bytes and memory_source where they can be read; a counter that
  * can't be read leaves its field out and changes nothing else.
+ *
+ * With deps.buildCache, the finished event carries the build cache's outcome from prepare's state
+ * file. After a miss, and once the agent ran, the cache is saved before that event (saveBuildCache);
+ * a failed save is logged and changes neither the event nor the exit code.
  */
 export async function runTask(spec: TaskSpec, files: AgentFiles, deps: RunDeps): Promise<number> {
   const meter = deps.resources ? startMeter(deps.resources) : undefined;
-  const finish = async (f: Finished) => deps.emit({ ...f, ...(await meter?.stop()) });
+  const finish = async (f: Finished, ran = true) => {
+    const build_cache = await settleBuildCache(spec, deps, ran);
+    deps.emit({ ...f, ...(build_cache ? { build_cache } : {}), ...(await meter?.stop()) });
+  };
   try {
     return await runAgent(spec, files, deps, finish);
   } finally {
@@ -66,14 +81,14 @@ async function runAgent(
   spec: TaskSpec,
   files: AgentFiles,
   deps: RunDeps,
-  finish: (f: Finished) => Promise<void>,
+  finish: (f: Finished, ran?: boolean) => Promise<void>,
 ): Promise<number> {
   if (spec.environment) {
     try {
       if (!deps.environment) throw new Error('environment setup: the worker has no shell to apply it');
       await applyEnvironment(spec.environment, { ...deps.environment, env: deps.env });
     } catch (err) {
-      await finish(failed(deps.now, err instanceof Error ? err.message : String(err)));
+      await finish(failed(deps.now, err instanceof Error ? err.message : String(err)), false);
       return 1;
     }
     // A try's env is setup's alone (ADR 0039 decision 9): the agent starts without it.
@@ -119,6 +134,33 @@ async function runAgent(
 
   await finish(await withPushes(spec, deps, result ?? failed(deps.now, 'the agent ended without a result')));
   return result ? 0 : 1;
+}
+
+/**
+ * The build cache's outcome from prepare's state file, saving the cache first after a miss when the
+ * agent ran; undefined without deps.buildCache or a state.
+ */
+async function settleBuildCache(spec: TaskSpec, deps: RunDeps, ran: boolean): Promise<Finished['build_cache']> {
+  const cache = deps.buildCache;
+  if (!cache) return undefined;
+  const state = await readBuildCacheState(cache.state);
+  if (!state) return undefined;
+  const token = deps.env.GOAL_GATEWAY_TOKEN;
+  if (ran && state.outcome === 'miss' && spec.gateway_url && token) {
+    await saveBuildCache(
+      {
+        fetch: deps.fetch,
+        exec: cache.exec,
+        gateway: spec.gateway_url,
+        token,
+        archive: cache.archive,
+        log: cache.log ?? ((line) => process.stderr.write(`${line}\n`)),
+        ...(cache.maxBytes === undefined ? {} : { maxBytes: cache.maxBytes }),
+      },
+      state,
+    );
+  }
+  return state.outcome;
 }
 
 /**

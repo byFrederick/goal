@@ -64,6 +64,12 @@ type CIPollKey struct {
 	SHA  string
 }
 
+// CIWaitKey names an item's CI waits at one station, which Store.CIWaitsOf reads in one batch.
+type CIWaitKey struct {
+	Item    ItemID
+	Station string
+}
+
 // CIPoll is one commit's poll: when it is next due, how often, what the last poll read and who
 // holds it.
 type CIPoll struct {

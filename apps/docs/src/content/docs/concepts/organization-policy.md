@@ -54,3 +54,5 @@ The Models and policies screen has no control for it. Set it with `PUT /v1/orgs/
 The box time limit is how long a box may run before the engine stops it, in minutes, and the default is 180. A run's timeout is the smaller of the engine's task timeout and this limit.
 
 Change it in the hours field of the **Box sizes** card, or with `goal policy set --box-limit 90m`. It must be above zero.
+
+The decision behind the policy is ADR 0024.

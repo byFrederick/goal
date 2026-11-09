@@ -8,6 +8,7 @@ import {
   openNavigation,
   orgMarkOf,
   orgNav,
+  pinClock,
   recordToasts,
 } from './support';
 
@@ -490,8 +491,10 @@ test('the board updates live when an item moves elsewhere', async ({ page, reque
   await expect(build.getByRole('link', { name: 'goald: serve the embedded web UI' })).toBeVisible();
 });
 
-test('the board shows how each station is doing and who works each card', async ({ page }) => {
+test('the board shows how each station is doing and who works each card', async ({ page, request }) => {
   test.skip(isPhone(page), 'the line and the columns are the desktop board');
+  // The mock's Done item finished hours before its noon-UTC now: pin the browser's clock so it is today's (software#761).
+  await pinClock(page, request);
   await page.goto('/o/acme/f/sre/board');
 
   // Each station's column header card: its name, its count and what it says of its load.

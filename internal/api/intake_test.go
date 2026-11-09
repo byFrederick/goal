@@ -315,6 +315,51 @@ func TestIntake_TriggerProblems(t *testing.T) {
 	}
 }
 
+// Deliveries no trigger names count as delivered, so they leave the refused deliveries a
+// trigger's problem counts as they are.
+func TestIntake_RefusedIgnoresUnnamedDeliveries(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	if _, err := h.secrets.Create(inOrg(t), domain.NewSecret{Name: domain.WebhookSecretName("github-app"), Value: "test-secret"}, domain.LocalUser); err != nil {
+		t.Fatal(err)
+	}
+
+	w, err := h.intake.CreateWebhook(inOrg(t), domain.NewWebhook{Name: "github-app", Sender: domain.SenderGitHub, Secret: domain.WebhookSecretName("github-app")})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.intake.PatchWebhook(inOrg(t), w.ID, domain.WebhookPatch{Open: []domain.WebhookOpening{{FactoryID: acmeID}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	for i, at := range []time.Time{oct(20, 0), oct(23, 8)} {
+		if _, err := h.intake.RecordDelivery(inOrg(t), domain.NewWebhookDelivery{
+			EndpointID: w.ID, ReceivedAt: at, Outcome: domain.DeliveryRefused, Reason: signatureMismatch,
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		h.receiveUnnamed(t, string(w.ID), fmt.Sprintf("unnamed-%d", i), at)
+	}
+
+	h.receiveUnnamed(t, string(w.ID), "unnamed-only", oct(21, 0))
+
+	var in gen.Intake
+	h.call(t, http.MethodGet, intakePath, "", &in)
+
+	i := slices.IndexFunc(in.Triggers, func(tr gen.IntakeTrigger) bool { return tr.Name == flakyName })
+	if i < 0 {
+		t.Fatalf("triggers = %+v; want flaky", in.Triggers)
+	}
+
+	if p := in.Triggers[i].Problem; p == nil || p.Message != "2 deliveries refused in the last 7 days" {
+		t.Errorf("flaky problem = %+v; want the 2 refused deliveries only", p)
+	}
+}
+
 // A trigger the current definition does not have is not found, as is a factory the caller may
 // not see; a caller refused the factory gets 403.
 func TestIntakeTrigger_NotFound(t *testing.T) {

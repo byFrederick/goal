@@ -138,14 +138,26 @@ WHERE endpoint_id = sqlc.arg(endpoint_id) AND delivery_id = sqlc.arg(delivery_id
 -- name: WebhookDeliveryDays :many
 -- The deliveries since the instant of the organization's webhooks open to the factory, or of all
 -- of them for no factory, per endpoint and UTC day; each endpoint's rows come from
--- webhook_deliveries_endpoint_idx (endpoint_id, received_at).
-SELECT d.endpoint_id, date_trunc('day', d.received_at, 'UTC')::timestamptz AS day,
-       count(*) FILTER (WHERE d.outcome <> 'refused') AS delivered,
-       count(*) FILTER (WHERE d.outcome = 'refused') AS refused
-FROM webhook_endpoints e
-JOIN webhook_deliveries d ON d.endpoint_id = e.id AND d.received_at >= sqlc.arg(since)
-WHERE sqlc.narg(factory_id)::uuid IS NULL
-   OR EXISTS (SELECT 1 FROM webhook_openings o WHERE o.webhook_id = e.id AND o.factory_id = sqlc.narg(factory_id)::uuid)
+-- webhook_deliveries_endpoint_idx (endpoint_id, received_at). Delivered adds the endpoint's
+-- counts of deliveries no trigger named (webhook_delivery_counts) from the instant's UTC day on,
+-- so a day with only those has a row too.
+SELECT days.endpoint_id, days.day, sum(days.delivered)::bigint AS delivered, sum(days.refused)::bigint AS refused
+FROM (
+  SELECT d.endpoint_id, date_trunc('day', d.received_at, 'UTC')::timestamptz AS day,
+         count(*) FILTER (WHERE d.outcome <> 'refused') AS delivered,
+         count(*) FILTER (WHERE d.outcome = 'refused') AS refused
+  FROM webhook_endpoints e
+  JOIN webhook_deliveries d ON d.endpoint_id = e.id AND d.received_at >= sqlc.arg(since)
+  WHERE sqlc.narg(factory_id)::uuid IS NULL
+     OR EXISTS (SELECT 1 FROM webhook_openings o WHERE o.webhook_id = e.id AND o.factory_id = sqlc.narg(factory_id)::uuid)
+  GROUP BY 1, 2
+  UNION ALL
+  SELECT c.webhook_id, (c.day::timestamp AT TIME ZONE 'UTC')::timestamptz, c.count::bigint, 0::bigint
+  FROM webhook_endpoints e
+  JOIN webhook_delivery_counts c ON c.webhook_id = e.id AND c.day >= (sqlc.arg(since)::timestamptz AT TIME ZONE 'UTC')::date
+  WHERE sqlc.narg(factory_id)::uuid IS NULL
+     OR EXISTS (SELECT 1 FROM webhook_openings o WHERE o.webhook_id = e.id AND o.factory_id = sqlc.narg(factory_id)::uuid)
+) days
 GROUP BY 1, 2
 ORDER BY 1, 2;
 

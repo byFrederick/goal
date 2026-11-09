@@ -14,7 +14,7 @@ variables {
     app   = "app"
     auth  = "auth"
   }
-  goald_pool_max_conns = 8
+  goald_pool_max_conns = 16
 }
 
 run "valid_inputs_pass" {
