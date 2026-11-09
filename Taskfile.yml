@@ -389,7 +389,7 @@ tasks:
       # pings Docker at start (GOAL_SANDBOX=docker); GOAL_DOCKER_GID as for compose's goald. Like
       # compose's goald it reads .env when there is one, runs GOAL_AUTH=session (the production path,
       # with its identity self-check) and blanks the auth service's secrets; the -e flags win over
-      # .env. Without GOAL_AUTH_PROXY_SECRET (CI has no .env) it gets a throwaway one; the identity
+      # .env. Without GOAL_AUTH_PROXY_SECRET or GOAL_GATEWAY_KEY (CI has no .env) it gets a throwaway one of each; the identity
       # service need not run, since goald only watches for it after it listens.
       - |
         set -eu
@@ -399,7 +399,8 @@ tasks:
         envfile=""
         if [ -f .env ]; then envfile="--env-file .env"; fi
         GOAL_AUTH_PROXY_SECRET="${GOAL_AUTH_PROXY_SECRET:-$(openssl rand -hex 32)}"
-        export GOAL_AUTH_PROXY_SECRET
+        GOAL_GATEWAY_KEY="${GOAL_GATEWAY_KEY:-$(openssl rand -hex 32)}"
+        export GOAL_AUTH_PROXY_SECRET GOAL_GATEWAY_KEY
         began=$(date +%s.%N)
         # shellcheck disable=SC2086 # envfile is empty or two words
         docker run -d --name {{.CONTAINER}} --network "container:$(docker compose ps -q postgres)" \
@@ -407,7 +408,7 @@ tasks:
           -v /var/run/docker.sock:/var/run/docker.sock --group-add "$gid" $envfile \
           -e GOAL_LISTEN=0.0.0.0:8080 -e GOAL_GATEWAY_LISTEN=0.0.0.0:8090 \
           -e GOAL_GATEWAY_URL=http://goald:8090/mcp -e GOAL_PUBLIC_URL=http://127.0.0.1:8080 \
-          -e GOAL_AUTH=session -e GOAL_AUTH_UPSTREAM=http://127.0.0.1:8081 -e GOAL_AUTH_PROXY_SECRET \
+          -e GOAL_AUTH=session -e GOAL_AUTH_UPSTREAM=http://127.0.0.1:8081 -e GOAL_AUTH_PROXY_SECRET -e GOAL_GATEWAY_KEY \
           -e GOAL_SANDBOX_NETWORK="${GOAL_SANDBOX_NETWORK:-goal_agents}" -e GOAL_DOCS_DIR= \
           -e BETTER_AUTH_SECRET= -e BETTER_AUTH_SECRETS= -e GOAL_PG_PASSWORD= -e GOAL_PG_AUTH_PASSWORD= \
           -e GOAL_AUTH_DATABASE_URL= -e GOAL_DATABASE_ADMIN_URL= -e GOAL_BOOTSTRAP_OWNER_EMAIL= \
