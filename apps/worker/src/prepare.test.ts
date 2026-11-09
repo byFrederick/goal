@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crc32 } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { restoreTimeoutMs } from './cache.js';
 import { credentialHelper, type Exec, type Output, type PrepareDeps, prepare } from './prepare.js';
 
 const gateway = 'http://goal-egress:3128/mcp';
@@ -1444,4 +1445,112 @@ describe("prepare: the item's repositories", () => {
     expect(stderr).toContain('this run may not push to https://github.com/acme/lib');
     expect(() => git(libDir, 'fetch', '--quiet', 'origin')).not.toThrow();
   }, 20_000);
+});
+
+describe('prepare: the build cache', () => {
+  const branch = 'goal/12-cache';
+  const goFiles = { 'go.mod': 'module example.com/acme\n', 'go.sum': 'example.com/x v1.0.0 h1:abc=\n' };
+
+  /** The gateway's /run and its build-cache GET, answered with cacheStatus (0: never); every request is recorded. */
+  function serving(bundle: unknown, cacheStatus: number) {
+    const requests: string[] = [];
+    const fake = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      requests.push(url.pathname);
+      if (url.pathname === '/run') return Response.json(bundle);
+      // 0: the gateway never answers, until the request is ended.
+      if (cacheStatus === 0) {
+        return new Promise((_resolve, reject) =>
+          init?.signal?.addEventListener('abort', () => reject(new Error('the request was aborted'))),
+        );
+      }
+      return new Response('', { status: cacheStatus });
+    }) as typeof fetch;
+    return { fake, requests };
+  }
+
+  /** Real git; mise, go and pnpm answered as a box would, each call logged in order with exec's. */
+  function tools(order: string[]): Output {
+    return async (command, args, opts = {}) => {
+      if (command === 'git') return output(command, args, opts);
+      order.push(`output ${command} ${args.join(' ')}`);
+      if (command === 'mise') return '1.26.10\n';
+      if (command === 'go') return `${join(root, 'gomod')}\n${join(root, 'gocache')}\n`;
+      throw new Error(`${command} exited 1`);
+    };
+  }
+
+  async function run(buildCache: unknown, cacheStatus: number, timeoutMs?: number) {
+    const url = await origin(branch, { changed: goFiles });
+    const bundle = { spec, files: {}, repository: { url, branch }, build_cache: buildCache };
+    const { fake, requests } = serving(bundle, cacheStatus);
+    const order: string[] = [];
+    const { exec } = recorder();
+    const logs: string[] = [];
+    const logged: Exec = (command, args, opts) => {
+      if (command !== 'git') order.push(`exec ${command} ${args.join(' ')}`);
+      return exec(command, args, opts);
+    };
+    const stdout: string[] = [];
+    const write = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      stdout.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write;
+    try {
+      const prepared = await prepare({
+        ...depsWith(fake, logged),
+        output: tools(order),
+        log: (l) => logs.push(l),
+        ...(timeoutMs === undefined ? {} : { buildCacheTimeoutMs: timeoutMs }),
+      });
+      return { prepared, requests, order, logs, stdout };
+    } finally {
+      process.stdout.write = write;
+    }
+  }
+
+  const state = async () => JSON.parse(await readFile(join(dirs.goal, 'build-cache.json'), 'utf8'));
+
+  it("restores after the workspace's mise install and hands a miss, its key and directories to run", async () => {
+    const { prepared, requests, order, stdout } = await run({ enabled: true }, 404);
+
+    expect(prepared.branch).toBe(branch);
+    expect(order.indexOf('exec mise install --yes')).toBeLessThan(order.indexOf('output mise current go'));
+    expect(order).toContain('output go env GOMODCACHE GOCACHE');
+    const saved = await state();
+    expect(saved).toEqual({
+      outcome: 'miss',
+      key: expect.stringMatching(/^[0-9a-f]{64}$/),
+      dirs: [join(root, 'gomod'), join(root, 'gocache')],
+    });
+    expect(requests).toEqual(['/run', `/run/build-cache/${saved.key}`]);
+    expect(stdout).toEqual([]);
+  });
+
+  it('reports error and still prepares when the restore fails', async () => {
+    const { prepared, logs, stdout } = await run({ enabled: true }, 500);
+
+    expect(prepared.branch).toBe(branch);
+    expect((await state()).outcome).toBe('error');
+    expect(logs.join('\n')).toMatch(/build cache restore: GET \/run\/build-cache\/<key>: 500/);
+    expect(stdout).toEqual([]);
+  });
+
+  it('is off, and fetches nothing, when the bundle turns the cache off', async () => {
+    const { requests, order } = await run({ enabled: false }, 404);
+
+    expect(await state()).toEqual({ outcome: 'off' });
+    expect(requests).toEqual(['/run']);
+    expect(order.filter((c) => c.startsWith('output'))).toEqual([]);
+  });
+
+  it('bounds the restore, restoreTimeoutMs by default, and goes on cold past it', async () => {
+    expect(restoreTimeoutMs).toBe(5 * 60_000);
+    const { prepared, logs } = await run({ enabled: true }, 0, 20);
+
+    expect(prepared.branch).toBe(branch);
+    expect((await state()).outcome).toBe('error');
+    expect(logs.join('\n')).toMatch(/build cache restore/);
+  });
 });

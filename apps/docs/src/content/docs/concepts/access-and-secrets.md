@@ -16,7 +16,14 @@ A secret is an organization's named value. It has:
 - an optional description, an optional expiry and a reminder of 1 to 90 days before it;
 - a scope: all factories, including ones created later, or a list of factories.
 
-The Secrets page lists them with where each is used, when it was last used and what expires soon. **New secret** opens a side sheet, and **Import** reads a `.env` or YAML file and checks it before anything is saved. A secret's page shows its scope, its expiry and its uses, and has Replace value and Delete. Replace value applies to runs that start afterwards, and then tests again each remote MCP server whose headers use the secret, in every factory's current published version and open draft, so the Environments section shows the new results. It also tests again each kept repository test whose token is the secret ([Testing a repository's token](#testing-a-repositorys-token)). A test that fails keeps that failure as its result and doesn't stop the replace. Delete is disabled, with the reason, while something uses the secret: a factory's current published version that refers to it as a repository token, its model key, a trigger's model-agrees key or from an environment file, a knowledge source that reads with it, an organization webhook it signs, or a connection that refers to it. An archived factory doesn't count. Changing a secret needs an owner or admin who has signed in within the last 10 minutes. Everyone in the organization can read the list, never a value.
+The Secrets page lists them with where each is used, when it was last used and what expires soon. **New secret** opens a side sheet, and **Import** reads a `.env` file or a YAML file with a top-level `secrets:` map, and checks it before anything is saved. A secret's page shows its scope, its expiry and its uses, and has Replace value and Delete. Replace value applies to runs that start afterwards, and then tests again each remote MCP server whose headers use the secret, in every factory's current published version and open draft, so the Environments section shows the new results. It also tests again each kept repository test whose token is the secret ([Testing a repository's token](#testing-a-repositorys-token)). A test that fails keeps that failure as its result and doesn't stop the replace. Delete is disabled, with the reason, while something uses the secret: a factory's current published version that refers to it as a repository token, its model key, a trigger's model-agrees key or from an environment file, a knowledge source that reads with it, an organization webhook it signs, or a connection that refers to it. An archived factory doesn't count. Changing a secret needs an owner or admin who has signed in within the last 10 minutes. Everyone in the organization can read the list, never a value.
+
+A YAML import holds one `secrets:` map of names to values. A file that uses the older key `credentials:` imports the same way.
+
+```yaml
+secrets:
+  sentry-token: example-value
+```
 
 Values come in only by pasting them, through standard input or from an import file, never on the command line, and no command prints one.
 

@@ -897,8 +897,11 @@ type Claim struct {
 	FactoryID domain.FactoryID
 	// Station is the full station spec; the lease's agent is Station.AgentFor(item.Lane), or ""
 	// when the item's lane has no route (the engine then blocks the item).
-	Station   domain.Station
-	Slot      int
+	Station domain.Station
+	Slot    int
+	// Lanes is which items the slot takes, Station.SlotLanes()[Slot]: a kept slot only its lane, a
+	// shared slot no lane that keeps slots. The zero value takes every item.
+	Lanes     domain.SlotLane
 	Now       time.Time
 	ExpiresAt time.Time
 }
@@ -1292,6 +1295,12 @@ type ObjectStore interface {
 	// decision 7). It makes no network call and does not check that key exists. The URL is a
 	// bearer credential: never log it. A ttl at or below zero is domain.ErrInvalid.
 	PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error)
+
+	// PresignPut returns a SigV4 query-signed URL that anyone holding it can PUT the object at key
+	// with, valid for ttl, so a cloud box uploads a build cache archive to the bucket itself,
+	// bigger than a request through the control Worker can carry. It makes no network call. The
+	// URL is a bearer credential: never log it. A ttl at or below zero is domain.ErrInvalid.
+	PresignPut(ctx context.Context, key string, ttl time.Duration) (string, error)
 
 	// Put stores body at key, replacing what was there, and returns it.
 	Put(ctx context.Context, key string, body []byte) (ObjectInfo, error)

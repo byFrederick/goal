@@ -202,3 +202,46 @@ func testFactoryLeases(f *fixture) {
 		t.Errorf("FactoryLeases =\n  %+v\nwant the leases at %s then %s\n  %+v", got, stNext, stWork, want)
 	}
 }
+
+// testClaimKeepsSlotsForALane claims at a station of 3 slots whose backend lane keeps 1: an item
+// of another lane never takes the kept slot, and a backend item never takes a shared one.
+func testClaimKeepsSlotsForALane(f *fixture) {
+	t := f.t
+	ctx := f.ctx(t)
+
+	st := domain.Station{
+		ID: stWork, Kind: domain.KindAgent, Agents: 3,
+		Route: map[string]string{laneBackend: agBackend, laneFrontend: agWorker}, RouteAgents: map[string]int{laneBackend: 1},
+	}
+	lanes := st.SlotLanes()
+
+	claim := func(slot int) (domain.Item, error) {
+		it, _, err := f.Store.ClaimNext(ctx, ports.Claim{FactoryID: f.factory, Station: st, Slot: slot, Lanes: lanes[slot], Now: t1, ExpiresAt: t1.Add(ttl)})
+		return it, err
+	}
+
+	front := f.create(t, domain.NewItem{Title: "frontend", Lane: laneFrontend})
+	unlaned := f.create(t, domain.NewItem{Title: "no lane", CreatedAt: t0.Add(time.Second)})
+
+	if _, err := claim(0); !errors.Is(err, ports.ErrNoWork) {
+		t.Fatalf("kept slot with only other lanes waiting = %v; want ErrNoWork", err)
+	}
+
+	back := f.create(t, domain.NewItem{Title: "backend", Lane: laneBackend, Priority: 9})
+
+	if it, err := claim(1); err != nil || it.ID != front.ID {
+		t.Fatalf("shared slot 1 claimed %q, %v; want the frontend item, skipping the backend one", it.Title, err)
+	}
+
+	if it, err := claim(2); err != nil || it.ID != unlaned.ID {
+		t.Fatalf("shared slot 2 claimed %q, %v; want the item without a lane", it.Title, err)
+	}
+
+	if it, err := claim(0); err != nil || it.ID != back.ID {
+		t.Fatalf("kept slot claimed %q, %v; want the backend item", it.Title, err)
+	}
+
+	if got := f.item(t, back.ID); got.State != domain.StateInProgress {
+		t.Errorf("backend item = %s; want in progress", got.State)
+	}
+}

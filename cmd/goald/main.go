@@ -240,7 +240,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// bundle; the engine's RunDefinition signs its token.
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, StandingRules: rules, Policies: policies, Events: store, Clock: clock, Logger: log,
-		Knowledge: kb.kb, Objects: objects, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, Watches: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore, Tries: store, Proposed: gatewayProposed{defs: defs}, Grades: jonahGrades(store), Checks: intake,
+		Knowledge: kb.kb, Objects: objects, BuildCaches: store, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, Watches: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore, Tries: store, Proposed: gatewayProposed{defs: defs}, Grades: jonahGrades(store), Checks: intake,
 	}, gateway.Config{Key: []byte(key), KnowledgeURLTTL: knowledgeURLTTL(s)})
 	if err != nil {
 		return err
@@ -591,7 +591,7 @@ func routes(separate bool, apiHandler, hooks, gw, spa, site http.Handler) (prima
 	mux.Handle(api.DocsPath, site)
 	mux.Handle(api.DocsPath+"/", site)
 
-	gatewayPaths := []string{api.GatewayPath, api.RunPath, api.ToolApprovalPath, api.KnowledgePath}
+	gatewayPaths := []string{api.GatewayPath, api.RunPath, api.ToolApprovalPath, api.KnowledgePath, api.BuildCachePath}
 
 	if !separate {
 		for _, p := range gatewayPaths {
@@ -612,13 +612,14 @@ func routes(separate bool, apiHandler, hooks, gw, spa, site http.Handler) (prima
 }
 
 // gatewayHandler serves the gateway's paths: the MCP endpoint, the run bundle, the run's tool
-// approvals and its knowledge snapshots.
+// approvals, its knowledge snapshots and its build caches.
 func gatewayHandler(gw *gateway.Gateway) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle(api.GatewayPath, gw)
 	mux.HandleFunc(api.RunPath, gw.ServeRun)
 	mux.HandleFunc(api.ToolApprovalPath, gw.ServeToolApproval)
 	mux.HandleFunc(api.KnowledgePath, gw.ServeKnowledge)
+	mux.HandleFunc(api.BuildCachePath, gw.ServeBuildCache)
 
 	return mux
 }

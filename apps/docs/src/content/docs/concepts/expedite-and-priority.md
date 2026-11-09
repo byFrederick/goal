@@ -20,7 +20,7 @@ Assemblies pass their class to their parts.
 
 ## Priority
 
-Priority is a whole number that a person sets when an item is submitted through the API. It defaults to 0. Within a class, a higher number is pulled first. A part gets its assembly's priority.
+Priority is a whole number that a person sets when an item is submitted through the API, or with `goal run --priority N` ([CLI reference](/docs/reference/cli/)). It defaults to 0. Within a class, a higher number is pulled first. A part gets its assembly's priority. A follow-up item is standard and has a priority one below its source. A triage item, which gathers follow-ups, is standard too, with a priority one below the lowest of its sources.
 
 No field of the factory definition sets priority.
 
@@ -33,7 +33,7 @@ The pull order above is enforced. Two expedite settings are not enforced yet:
 
 ## Where expedite shows up
 
-- The **Inbox** lists open expedite items, so a person sees them even when they need no decision.
+- The **Needs you** lists open expedite items, so a person sees them even when they need no decision.
 - The flow metrics show expedite lead time against its target.
 
 ## Related
