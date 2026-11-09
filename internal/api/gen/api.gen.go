@@ -6821,7 +6821,7 @@ type PolicyModel struct {
 
 // Problem defines model for Problem.
 type Problem struct {
-	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections: connection-not-found (404, a connection the organization does not have), connections-unavailable (503: goald has no master key, so no secret can be opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Webhooks (ADR 0040): webhook-not-found and webhook-delivery-not-found (404), webhook-invalid (400), webhook-name-taken and webhook-in-use (409; webhook-in-use with triggers naming each trigger that uses it), webhooks-unavailable (503). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate).
+	// Code A stable, kebab-case name of the error for clients to branch on (org-not-found, forbidden, slug-taken, confirmation-mismatch, draft-conflict, ...). goald-starting (503, with Retry-After): goald is starting, and every path answers it until startup finishes; retry. unauthenticated (401): no, a malformed, unknown, expired or revoked credential; the UI signs in again. reauth-required (403): the change needs a sign-in from the last 10 minutes; the UI confirms it's you and retries once. last-platform-admin (409): the install keeps at least one platform admin. scope-not-allowed (400): an API key scope keys may not carry, or that its creator or its ceiling does not hold, or a personal token scope tokens may not carry or that its creator does not hold. api-key-name-taken (409): another live key of the organization has the name. personal-token-name-taken (409): another live token of yours in the organization has the name. browser-session-required (403): personal tokens are created in the browser only, never with a CLI session, an API key or a token. Members and roles (409): not-an-admin (ownership goes to an admin only), last-owner (an organization keeps an owner), editor-everywhere (owners and admins hold every factory role already). An unknown organization, factory, item or run and one the caller may not see answer the same fixed body without detail: org-not-found, factory-not-found, item-not-found, run-not-found; so does a CLI sign-in code that is not pending: device-code-not-found. touch-not-found (404): an event that is not one of the item's touches. Connections: connection-not-found (404, a connection the organization does not have), connections-unavailable (503: goald has no master key, so no secret can be opened). Credentials (ADR 0017): credential-not-found (404), credential-invalid (400), credential-name-taken and credential-in-use (409, naming the connections), credentials-unavailable (503: goald has no master key). Secrets (ADR 0037): secret-not-found (404), secret-invalid (400), secret-name-taken and secret-in-use (409; secret-in-use with uses naming each use), secrets-unavailable (503: goald has no master key). Webhooks (ADR 0040): webhook-not-found and webhook-delivery-not-found (404), webhook-invalid (400), webhook-name-taken and webhook-in-use (409; webhook-in-use with triggers naming each trigger that uses it), webhooks-unavailable (503). Environment tests (ADR 0037 decision 9): environment-not-found, environment-server-not-found and template-not-found (404), environment-test-invalid (400). Knowledge (ADR 0038): knowledge-source-not-found and knowledge-file-not-found (404), knowledge-source-name-taken, knowledge-source-in-use and not-an-upload-source (409), upload-too-large (413), unsupported-document-type (415). Jonah (ADR 0039): draft-open (409) when approving a proposal while the factory has an open draft. Try another model (decision 13): model-not-allowed, agent-not-triable and no-finished-items (422), learning-budget-exhausted (409, with model_estimate). Try again (decision 11): proposal-not-triable (422), proposal-not-tried (409), learning-budget-exhausted (409, with try_estimate).
 	Code   *string `json:"code,omitempty"`
 	Detail *string `json:"detail,omitempty"`
 
@@ -9090,6 +9090,9 @@ type WorkTypeFilter = string
 
 // Conflict defines model for Conflict.
 type Conflict = Problem
+
+// Starting defines model for Starting.
+type Starting = Problem
 
 // GetAccessParams defines parameters for GetAccess.
 type GetAccessParams struct {
@@ -29156,16 +29159,30 @@ func (r GetCatalogResponse) ContentType() string {
 	return ""
 }
 
+// GetHealthResponse503Headers the declared response headers of an HTTP 503 response for GetHealth
+type GetHealthResponse503Headers struct {
+	RetryAfter int
+}
+
 type GetHealthResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *Health
+	// ApplicationproblemJSON503 the response for an HTTP 503 `application/problem+json` response
+	ApplicationproblemJSON503 *Starting
+	// Headers503 the parsed response headers for an HTTP 503 response
+	Headers503 *GetHealthResponse503Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r GetHealthResponse) GetJSON200() *Health {
 	return r.JSON200
+}
+
+// GetApplicationproblemJSON503 returns the response for an HTTP 503 `application/problem+json` response
+func (r GetHealthResponse) GetApplicationproblemJSON503() *Starting {
+	return r.ApplicationproblemJSON503
 }
 
 // GetBody returns the raw response body bytes
@@ -42136,6 +42153,26 @@ func ParseGetHealthResponse(rsp *http.Response) (*GetHealthResponse, error) {
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Starting
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON503 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 503:
+		var headers GetHealthResponse503Headers
+		if values := rsp.Header.Values("Retry-After"); len(values) > 0 {
+			var value int
+			if err := runtime.BindStyledParameterWithOptions("simple", "Retry-After", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.RetryAfter = value
+		}
+		response.Headers503 = &headers
 	}
 
 	return response, nil
@@ -57233,6 +57270,15 @@ type ConflictApplicationProblemPlusJSONResponse Problem
 
 type ProblemApplicationProblemPlusJSONResponse Problem
 
+type StartingResponseHeaders struct {
+	RetryAfter int
+}
+type StartingApplicationProblemPlusJSONResponse struct {
+	Body Problem
+
+	Headers StartingResponseHeaders
+}
+
 type GetAuthConfigRequestObject struct {
 }
 
@@ -57348,6 +57394,23 @@ func (response GetHealth200JSONResponse) VisitGetHealthResponse(w http.ResponseW
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetHealth503ApplicationProblemPlusJSONResponse struct {
+	StartingApplicationProblemPlusJSONResponse
+}
+
+func (response GetHealth503ApplicationProblemPlusJSONResponse) VisitGetHealthResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.Header().Set("Retry-After", fmt.Sprint(response.Headers.RetryAfter))
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }

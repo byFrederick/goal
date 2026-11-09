@@ -48,6 +48,8 @@ task up:compose
 
 `task up:compose` runs `goal up --compose`. It starts `goald` and the auth service as Compose services (`goald` and `auth`, in the `stack` profile), and returns once they are healthy. This needs sign-in on (`GOAL_AUTH=session`, the default). The services keep running afterwards, so you do not need to keep the terminal open.
 
+goald binds its port before it opens the database. Until it has started, every path, the API, `/api/auth/*` and the web app alike, answers 503 as problem JSON with the code `goald-starting`, a `Retry-After` header in seconds and `Cache-Control: no-store`. Retry after those seconds. The `goald` service reads as healthy only once `GET /v1/health` answers 200.
+
 Follow their logs, and stop them when you are done:
 
 ```sh
