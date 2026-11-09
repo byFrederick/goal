@@ -15,7 +15,7 @@ import { factoryModelOf, type Model, modelOf } from '../../shared/definition/mod
 import { renderFactoryPage } from '../../test/route';
 import { FactorySettingsPage } from './settings-page';
 
-const api = vi.hoisted(() => ({ model: {} as unknown }));
+const api = vi.hoisted(() => ({ model: {} as unknown, saves: [] as { basics: Record<string, unknown> }[] }));
 
 vi.mock(import('../../api/definitions'), async (original) => ({
   ...(await original()),
@@ -30,6 +30,19 @@ vi.mock(import('../../api/definitions'), async (original) => ({
       }) as never,
   ),
   getVersionModel: vi.fn(async () => ({ model: api.model, revision: 1 }) as never),
+  saveDraftSection: vi.fn(
+    async (_org: string, _factory: string, _section: string, _etag: string, save: { value: unknown }) => {
+      api.saves.push({ basics: save.value as Record<string, unknown> });
+      return {
+        etag: 'next',
+        revision: 2,
+        updated_at: '2026-11-08T10:00:00Z',
+        sections: [],
+        change_count: 0,
+        problem_count: 0,
+      };
+    },
+  ),
 }));
 vi.mock(import('../../api/repositories'), async (original) => ({
   ...(await original()),
@@ -38,7 +51,10 @@ vi.mock(import('../../api/repositories'), async (original) => ({
 }));
 
 afterEach(cleanup);
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  api.saves = [];
+});
 
 const org: OrgSummary = { id: 'org-1', slug: 'acme', name: 'Acme', mark: 'A', factory_count: 1, role: 'owner' };
 const factoryId = 'factory-1';
@@ -213,6 +229,41 @@ describe('Code section', () => {
     await waitFor(() => expect(within(region).getByRole('button', { name: 'Done' })).toBeTruthy());
     const urls = within(region).getAllByLabelText('URL') as HTMLInputElement[];
     expect(urls.map((u) => u.value)).toEqual(['https://github.com/acme/app', '']);
+  });
+
+  it('Add then Remove on the shorthand restores runtime.repository', async () => {
+    const repository = { url: 'https://github.com/acme/app', token: '{{github-token}}' };
+    setDraft({ repository });
+    const region = await renderCode();
+    await within(region).findByText('Read and write');
+    fireEvent.click(within(region).getByRole('button', { name: 'Add a repository' }));
+    await waitFor(() => expect(within(region).getAllByLabelText('URL').length).toBe(2));
+    fireEvent.click(within(region).getByRole('button', { name: 'Remove repository repo-2' }));
+    // The draft is back to what the server holds, so a save is either skipped or carries the shorthand.
+    await waitFor(() => expect(within(region).queryByRole('button', { name: 'Done' })).toBeNull());
+    for (const saved of api.saves.filter((_, i, all) => i === all.length - 1)) {
+      expect(saved.basics.repository).toEqual(repository);
+      expect(saved.basics.repositories).toBeUndefined();
+    }
+    expect(await within(region).findByText('Read and write')).toBeTruthy();
+    expect(within(region).queryByRole('button', { name: 'Remove' })).toBeNull();
+  });
+
+  it('keeps the list form when the converted entry was edited before the new row is removed', async () => {
+    setDraft({ repository: { url: 'https://github.com/acme/app', token: '{{github-token}}' } });
+    const region = await renderCode();
+    await within(region).findByText('Read and write');
+    fireEvent.click(within(region).getByRole('button', { name: 'Add a repository' }));
+    await waitFor(() => expect(within(region).getAllByLabelText('URL').length).toBe(2));
+    fireEvent.change(within(region).getAllByLabelText('URL')[0] as HTMLElement, {
+      target: { value: 'https://github.com/acme/other' },
+    });
+    fireEvent.click(within(region).getByRole('button', { name: 'Remove repository repo-2' }));
+    await waitFor(() => {
+      const last = api.saves.at(-1)?.basics;
+      expect(last?.repositories).toEqual([expect.objectContaining({ url: 'https://github.com/acme/other' })]);
+      expect(last?.repository).toBeUndefined();
+    });
   });
 
   it('with no repositories says No code, offers Add and makes no test request', async () => {

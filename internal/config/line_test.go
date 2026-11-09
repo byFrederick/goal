@@ -14,6 +14,28 @@ import (
 // defaultIntegration is board.flow.assemblies.integration when a definition leaves it out.
 var defaultIntegration = domain.IntegrationPolicy{Mode: domain.IntegrationModeTrunk, Refresh: domain.RefreshOnLand}
 
+// An andon block without window counts the default window of verdicts; an explicit one stays.
+func TestLine_AndonWindowDefaultsToTen(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		block string
+		want  domain.AndonPolicy
+	}{
+		{"{ reworkRate: 0.5 }", domain.AndonPolicy{ReworkRate: 0.5, Window: domain.DefaultAndonWindow}},
+		{"{ reworkRate: 0.5, window: 5 }", domain.AndonPolicy{ReworkRate: 0.5, Window: 5}},
+	} {
+		f, err := Load(checkTree(baseFactory+"    flow:\n      andon: "+tc.block+"\n", nil))
+		if err != nil {
+			t.Fatalf("andon %s: %v", tc.block, err)
+		}
+
+		if got := f.Line().Flow.Andon; got == nil || *got != tc.want {
+			t.Errorf("andon %s = %+v, want %+v", tc.block, got, tc.want)
+		}
+	}
+}
+
 // The line carries the flow policy and targets the engine and the flow metrics read.
 func TestLine_CarriesFlowPolicyAndTargets(t *testing.T) {
 	t.Parallel()
@@ -288,6 +310,47 @@ func TestLine_WeeklyBudgetMapsToTheRuntime(t *testing.T) {
 			b := f.Line().Runtime.WeeklyBudget(0, time.Time{})
 			if b.WeeklyUSD != tc.wantWeekly || b.Policy != tc.wantPolicy {
 				t.Errorf("weekly budget = $%v %s, want $%v %s", b.WeeklyUSD, b.Policy, tc.wantWeekly, tc.wantPolicy)
+			}
+		})
+	}
+}
+
+// runtime.buildCache maps onto the runtime; absent keeps the cache on, and the schema refuses a
+// value that is not a boolean.
+func TestLine_BuildCacheMapsToTheRuntime(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		field   string
+		want    bool
+		wantErr bool
+	}{
+		{name: "omitted", want: true},
+		{name: "true", field: "    buildCache: true\n", want: true},
+		{name: "false", field: "    buildCache: false\n", want: false},
+		{name: "a string", field: "    buildCache: \"off\"\n", wantErr: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			f, err := Load(checkTree(edited(runtimeModel, runtimeModel+tc.field), nil))
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("Load accepted a string runtime.buildCache, want a schema error")
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if got := f.Line().Runtime.BuildCacheEnabled(); got != tc.want {
+				t.Errorf("BuildCacheEnabled() = %v, want %v", got, tc.want)
 			}
 		})
 	}

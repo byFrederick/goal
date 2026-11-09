@@ -2,6 +2,7 @@ package domain
 
 import (
 	"math"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -295,5 +296,73 @@ func TestStation_WaitsForCI(t *testing.T) {
 	st := Station{Kind: KindAgent, WaitFor: CIWait{Grace: DefaultCIGrace, Max: DefaultCIMax, Rounds: DefaultCIRounds}}
 	if !st.WaitsForCI() {
 		t.Error("a station with waitFor does not wait for CI")
+	}
+}
+
+// laneData is the lane the slot layout tests keep slots for.
+const laneData = "data"
+
+// Kept slots come first, by lane name, cut off at the station's capacity; the rest are shared
+// and take no lane that keeps slots.
+func TestStation_SlotLanes(t *testing.T) {
+	t.Parallel()
+
+	route := map[string]string{"db": "db-dev", laneData: "db-dev", "ui": "ui-dev"}
+
+	for _, tt := range []struct {
+		name string
+		st   Station
+		want []SlotLane
+	}{
+		{"no counts", Station{Kind: KindAgent, Route: route, Agents: 2}, []SlotLane{{}, {}}},
+		{
+			"one lane keeps one of three",
+			Station{Kind: KindAgent, Route: route, Agents: 3, RouteAgents: map[string]int{laneData: 1}},
+			[]SlotLane{{Lane: laneData}, {Exclude: []string{laneData}}, {Exclude: []string{laneData}}},
+		},
+		{
+			"lanes in name order",
+			Station{Kind: KindAgent, Route: route, Agents: 5, RouteAgents: map[string]int{"ui": 1, "db": 2}},
+			[]SlotLane{{Lane: "db"}, {Lane: "db"}, {Lane: "ui"}, {Exclude: []string{"db", "ui"}}, {Exclude: []string{"db", "ui"}}},
+		},
+		{
+			"cut off at wip",
+			Station{Kind: KindAgent, Route: route, Agents: 4, WIP: 2, RouteAgents: map[string]int{"ui": 1, "db": 2}},
+			[]SlotLane{{Lane: "db"}, {Lane: "db"}},
+		},
+	} {
+		if got := tt.st.SlotLanes(); !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("%s: slot lanes = %#v, want %#v", tt.name, got, tt.want)
+		}
+	}
+}
+
+// A kept slot takes only its lane; a shared slot takes every lane it does not exclude, and an
+// item without a lane.
+func TestSlotLane_Takes(t *testing.T) {
+	t.Parallel()
+
+	kept, shared := SlotLane{Lane: laneData}, SlotLane{Exclude: []string{laneData}}
+
+	for _, tt := range []struct {
+		slot SlotLane
+		lane string
+		want bool
+	}{
+		{kept, laneData, true},
+		{kept, "ui", false},
+		{kept, "", false},
+		{shared, laneData, false},
+		{shared, "ui", true},
+		{shared, "", true},
+		{SlotLane{}, laneData, true},
+	} {
+		if got := tt.slot.Takes(tt.lane); got != tt.want {
+			t.Errorf("%#v takes %q = %v, want %v", tt.slot, tt.lane, got, tt.want)
+		}
+	}
+
+	if kept.TakesEvery() || shared.TakesEvery() || !(SlotLane{}).TakesEvery() {
+		t.Error("only the zero slot lane takes every lane")
 	}
 }
