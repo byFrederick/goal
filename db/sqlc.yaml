@@ -19,6 +19,9 @@ sql:
         output_batch_file_name: batch.gen.go
         output_copyfrom_file_name: copyfrom.gen.go
         output_files_suffix: .gen
+        # sqlc singularizes build_caches to build_cach.
+        rename:
+          build_cach: BuildCache
         overrides:
           - db_type: uuid
             go_type: github.com/google/uuid.UUID

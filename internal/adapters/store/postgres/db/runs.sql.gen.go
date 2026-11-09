@@ -15,7 +15,7 @@ import (
 const cancelLostRuns = `-- name: CancelLostRuns :many
 UPDATE agent_runs SET status = 'cancelled', error = $1, ended_at = $2
 WHERE id = ANY ($3::uuid[]) AND status = 'running'
-RETURNING id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, cpu_seconds, peak_memory_bytes, box_size, peak_memory_source
+RETURNING id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, cpu_seconds, peak_memory_bytes, box_size, peak_memory_source, build_cache
 `
 
 type CancelLostRunsParams struct {
@@ -58,6 +58,7 @@ func (q *Queries) CancelLostRuns(ctx context.Context, arg CancelLostRunsParams) 
 			&i.PeakMemoryBytes,
 			&i.BoxSize,
 			&i.PeakMemorySource,
+			&i.BuildCache,
 		); err != nil {
 			return nil, err
 		}
@@ -199,8 +200,9 @@ UPDATE agent_runs SET
   input_tokens = $4, output_tokens = $5,
   cost_usd = $6, error = $7, ended_at = $8,
   output = $9, cpu_seconds = $10::float8,
-  peak_memory_bytes = $11::bigint, peak_memory_source = $12::text
-WHERE id = $13 AND status = 'running'
+  peak_memory_bytes = $11::bigint, peak_memory_source = $12::text,
+  build_cache = $13::text
+WHERE id = $14 AND status = 'running'
 RETURNING factory_id, item_id, station, agent
 `
 
@@ -217,6 +219,7 @@ type FinishRunParams struct {
 	CpuSeconds       *float64
 	PeakMemoryBytes  *int64
 	PeakMemorySource *string
+	BuildCache       *string
 	ID               uuid.UUID
 }
 
@@ -229,7 +232,8 @@ type FinishRunRow struct {
 
 // Only a running run finishes; finishing it again matches nothing. cpu_seconds and
 // peak_memory_bytes are NULL when the worker reported none (00136), peak_memory_source when it
-// reported no known source with its peak memory (00137).
+// reported no known source with its peak memory (00137), build_cache when it reported no known
+// build cache outcome (00144).
 func (q *Queries) FinishRun(ctx context.Context, arg FinishRunParams) (FinishRunRow, error) {
 	row := q.db.QueryRow(ctx, finishRun,
 		arg.Status,
@@ -244,6 +248,7 @@ func (q *Queries) FinishRun(ctx context.Context, arg FinishRunParams) (FinishRun
 		arg.CpuSeconds,
 		arg.PeakMemoryBytes,
 		arg.PeakMemorySource,
+		arg.BuildCache,
 		arg.ID,
 	)
 	var i FinishRunRow
@@ -257,7 +262,7 @@ func (q *Queries) FinishRun(ctx context.Context, arg FinishRunParams) (FinishRun
 }
 
 const getRun = `-- name: GetRun :one
-SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, cpu_seconds, peak_memory_bytes, box_size, peak_memory_source FROM agent_runs WHERE id = $1
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, cpu_seconds, peak_memory_bytes, box_size, peak_memory_source, build_cache FROM agent_runs WHERE id = $1
 `
 
 func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (AgentRun, error) {
@@ -288,6 +293,7 @@ func (q *Queries) GetRun(ctx context.Context, id uuid.UUID) (AgentRun, error) {
 		&i.PeakMemoryBytes,
 		&i.BoxSize,
 		&i.PeakMemorySource,
+		&i.BuildCache,
 	)
 	return i, err
 }
@@ -333,7 +339,7 @@ func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) error {
 }
 
 const itemRuns = `-- name: ItemRuns :many
-SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, cpu_seconds, peak_memory_bytes, box_size, peak_memory_source FROM agent_runs
+SELECT id, factory_id, item_id, station, agent, model, session_id, status, turns, input_tokens, output_tokens, cost_usd, error, started_at, ended_at, org_id, definition_version_id, kind, brief, output, cpu_seconds, peak_memory_bytes, box_size, peak_memory_source, build_cache FROM agent_runs
 WHERE item_id = $1
 ORDER BY started_at, id
 LIMIT $2::bigint
@@ -380,6 +386,7 @@ func (q *Queries) ItemRuns(ctx context.Context, arg ItemRunsParams) ([]AgentRun,
 			&i.PeakMemoryBytes,
 			&i.BoxSize,
 			&i.PeakMemorySource,
+			&i.BuildCache,
 		); err != nil {
 			return nil, err
 		}
@@ -392,7 +399,7 @@ func (q *Queries) ItemRuns(ctx context.Context, arg ItemRunsParams) ([]AgentRun,
 }
 
 const listOrgRuns = `-- name: ListOrgRuns :many
-SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, r.kind, r.brief, r.output, r.cpu_seconds, r.peak_memory_bytes, r.box_size, r.peak_memory_source, w.number AS item_number, w.title AS item_title
+SELECT r.id, r.factory_id, r.item_id, r.station, r.agent, r.model, r.session_id, r.status, r.turns, r.input_tokens, r.output_tokens, r.cost_usd, r.error, r.started_at, r.ended_at, r.org_id, r.definition_version_id, r.kind, r.brief, r.output, r.cpu_seconds, r.peak_memory_bytes, r.box_size, r.peak_memory_source, r.build_cache, w.number AS item_number, w.title AS item_title
 FROM agent_runs r
 JOIN work_items w ON w.id = r.item_id
 WHERE r.factory_id = ANY ($1::uuid[])
@@ -482,6 +489,7 @@ func (q *Queries) ListOrgRuns(ctx context.Context, arg ListOrgRunsParams) ([]Lis
 			&i.AgentRun.PeakMemoryBytes,
 			&i.AgentRun.BoxSize,
 			&i.AgentRun.PeakMemorySource,
+			&i.AgentRun.BuildCache,
 			&i.ItemNumber,
 			&i.ItemTitle,
 		); err != nil {

@@ -405,6 +405,11 @@ export const Bundle = z
      * instead of a repository. It comes with the spec's draft_request, and never with a repository.
      */
     definition: z.object({ files: z.record(relativePath, z.base64()) }).optional(),
+    /**
+     * Whether the run restores and saves its workspace repository's build cache (ADR 0045, src/cache.ts);
+     * false when the definition turns it off or the run has no repository. Absent is off.
+     */
+    build_cache: z.object({ enabled: z.boolean() }).optional(),
   })
   .refine((b) => !(b.definition && b.repository), {
     message: 'a bundle has a definition or a repository, not both',

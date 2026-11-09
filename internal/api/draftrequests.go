@@ -15,8 +15,10 @@ import (
 	"github.com/byFrederick/goal/internal/core/ports"
 )
 
-// The draft request routes (ADR 0021): asked changes to a factory's definition, queued here and
-// run by goald in a box that writes its result into the draft.
+// The draft request routes (ADR 0021): asked changes to a factory's definition, run by goald in a
+// box that writes its result into the draft. No runner is wired into goald yet, so the create
+// route checks a request and then refuses it with 501 not-built instead of queueing it; the list
+// and get routes read what the store holds.
 
 // defaultDraftRequestList is how many requests a list holds without a limit.
 const defaultDraftRequestList = 20
@@ -27,6 +29,8 @@ var (
 	errDraftRequestText = fmt.Errorf("draft request text must be 1 to %d characters", domain.MaxDraftRequestText)
 	// errDraftRequestNotFound is a request that is not the factory's: 404 draft-request-not-found.
 	errDraftRequestNotFound = fmt.Errorf("draft request %w", ports.ErrNotFound)
+	// errDraftRequestsNotBuilt is a valid request while goald has no runner for it: 501 not-built.
+	errDraftRequestsNotBuilt = errors.New("draft requests are not built yet: goald has no runner for them, so it does not queue them")
 )
 
 func (s *server) CreateDraftRequest(ctx context.Context, req gen.CreateDraftRequestRequestObject) (gen.CreateDraftRequestResponseObject, error) {
@@ -56,15 +60,10 @@ func (s *server) CreateDraftRequest(ctx context.Context, req gen.CreateDraftRequ
 		}
 	}
 
-	r, err := s.draftRequests.Create(ctx, n)
-	if err != nil {
-		return nil, fmt.Errorf("create draft request on %s: %w", rec.ID, err)
-	}
-
-	out := s.draftRequestOut(r)
-	s.nameActors(ctx, &out.Requester)
-
-	return gen.CreateDraftRequest201JSONResponse(out), nil
+	// Until a runner is wired, a queued request would never run and would block the factory's
+	// next one, so a request that passes every check is refused here instead of queued
+	// (s.draftRequests.Create).
+	return nil, errDraftRequestsNotBuilt
 }
 
 // draftAgent checks that agent is an agent of the factory's definition as a request starts from
@@ -171,6 +170,7 @@ func draftRequestProblem(err error) (gen.Problem, bool) {
 		{errDraftRequestText, http.StatusUnprocessableEntity, "draft-request-text-invalid"},
 		{errDraftRequestNotFound, http.StatusNotFound, "draft-request-not-found"},
 		{domain.ErrDraftRequestOpen, http.StatusConflict, "draft-request-open"},
+		{errDraftRequestsNotBuilt, http.StatusNotImplemented, "not-built"},
 	} {
 		if errors.Is(err, c.err) {
 			p := detailed(c.status, err)

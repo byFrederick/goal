@@ -9,7 +9,7 @@ Use the web app's Definition page to edit the same definition by hand. In its Ag
 
 ## Edit in the YAML view
 
-The Definition page's YAML view shows the draft's files. Pick a file in the file tree, edit it, and use Format to rewrite it in Goal's own layout. The Problems panel under the editor lists each validation problem of the draft with its file and line; select one to jump there. It says "No problems." when the draft is valid. The bar above the editor, "Ask the factory to change it", is not available yet: its input is disabled.
+The Definition page's YAML view shows the draft's files. Pick a file in the file tree, edit it, and use Format to rewrite it in Goal's own layout. The Problems panel under the editor lists each validation problem of the draft with its file and line; select one to jump there. It says "No problems." when the draft is valid. The bar above the editor, "Ask the factory to change it", is not available yet: its input is disabled. `goal factory ask` is not built yet either: goald refuses every request with 501 `not-built`, so the command prints that refusal and exits non-zero, with or without `--wait`. Change the draft with `goal factory pull` and `goal factory push` instead.
 
 ## Before you start
 
@@ -32,7 +32,7 @@ The folder holds `factory.yaml` at its root, and the files it points to:
 - `skills/` and `rules/` for skills and factory rules,
 - `contracts/` for output contracts.
 
-What each field means is in the [factory definition reference](/docs/reference/). To add an agent, a skill or a rule, follow [Add an agent, skill or rule](../add-an-agent-skill-or-rule/).
+What each field means is in the [factory definition reference](/docs/reference/). For example, runs cache Go's and pnpm's downloads and builds per repository by default; set `runtime.buildCache: false` to turn the cache off. To add an agent, a skill or a rule, follow [Add an agent, skill or rule](../add-an-agent-skill-or-rule/).
 
 ## 3. Validate the folder
 

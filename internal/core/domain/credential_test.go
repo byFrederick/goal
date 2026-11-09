@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -231,6 +232,8 @@ func TestParseCredentialImport(t *testing.T) {
 			map[string]string{"one-key": "it's", "two-key": "plain value", "three-key": "a#b"},
 		},
 		{"yaml no entries", CredentialImportYAML, "credentials:\n", map[string]string{}},
+		{"yaml secrets", CredentialImportYAML, "secrets:\n  sentry-token: x\n  api-key: 'v'\n", map[string]string{testCredName: "x", "api-key": "v"}},
+		{"yaml secrets no entries", CredentialImportYAML, "---\nsecrets: # none yet\n", map[string]string{}},
 	}
 
 	for _, tc := range ok {
@@ -265,6 +268,11 @@ func TestParseCredentialImport(t *testing.T) {
 		{"env unclosed quote", CredentialImportEnv, "SENTRY_TOKEN=\"" + credMarker},
 		{"yaml no credentials key", CredentialImportYAML, "other:\n  sentry-token: " + credMarker},
 		{"yaml other top-level key", CredentialImportYAML, "credentials:\n  sentry-token: " + credMarker + "\nother: " + credMarker},
+		{"yaml secrets and another top-level key", CredentialImportYAML, "secrets:\n  sentry-token: " + credMarker + "\nother: " + credMarker},
+		{"yaml secrets and credentials", CredentialImportYAML, "secrets:\n  sentry-token: " + credMarker + "\ncredentials:\n  api-key: " + credMarker},
+		{"yaml credentials and secrets", CredentialImportYAML, "credentials:\n  sentry-token: " + credMarker + "\nsecrets:\n  api-key: " + credMarker},
+		{"yaml secrets twice", CredentialImportYAML, "secrets:\n  sentry-token: " + credMarker + "\nsecrets:\n  api-key: " + credMarker},
+		{"yaml secrets flow map", CredentialImportYAML, "secrets: {api-key: " + credMarker + "}"},
 		{"yaml duplicate", CredentialImportYAML, "credentials:\n  sentry-token: " + credMarker + "\n  sentry-token: " + credMarker},
 		{"yaml invalid name", CredentialImportYAML, "credentials:\n  Sentry: " + credMarker},
 		{"yaml reserved", CredentialImportYAML, "credentials:\n  ld-preload: " + credMarker},
@@ -299,6 +307,28 @@ func TestParseCredentialImport(t *testing.T) {
 				t.Fatalf("the error shows the value: %v", err)
 			}
 		})
+	}
+}
+
+// A secrets: import and its credentials: twin, the older name of the key, give the same entries in
+// the same order.
+func TestParseCredentialImport_SecretsKeyMatchesCredentialsAlias(t *testing.T) {
+	t.Parallel()
+
+	body := "  sentry-token: x # c\n  api-key: \"a b\"\n  other-key: 'it''s'\n"
+
+	secrets, err := ParseCredentialImport(CredentialImportYAML, "secrets:\n"+body)
+	if err != nil {
+		t.Fatalf("ParseCredentialImport(secrets:): %v", err)
+	}
+
+	credentials, err := ParseCredentialImport(CredentialImportYAML, "credentials:\n"+body)
+	if err != nil {
+		t.Fatalf("ParseCredentialImport(credentials:): %v", err)
+	}
+
+	if len(secrets) != 3 || !slices.Equal(secrets, credentials) {
+		t.Fatalf("secrets: gives %d entries that differ from credentials:'s %d", len(secrets), len(credentials))
 	}
 }
 

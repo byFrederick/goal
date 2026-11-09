@@ -30,7 +30,7 @@ The design and its reasons are in [architecture.md](../../docs/engineering/archi
 - Claim work with `FOR UPDATE SKIP LOCKED` and leases, so instances never take the same item and lost work returns to the queue.
 - Use `LISTEN/NOTIFY` for realtime, so every instance streams to its own clients without sticky sessions.
 - Run scheduled jobs under `pg_try_advisory_lock`, so exactly one instance runs each.
-- Store only immutable content-addressed blobs in the bucket and never rely on object versioning, because R2 has none.
+- Store only immutable content-addressed blobs in the bucket and never rely on object versioning, because R2 has none. The one exception is the build cache's objects, keyed by their inputs and written once ([ADR 0045](../../docs/adr/0045-runs-share-a-per-repository-build-cache-in-the-bucket.md)).
 
 ## Wiring
 

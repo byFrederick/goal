@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"errors"
+	"maps"
 	"testing"
 
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -246,5 +247,74 @@ func TestEngine_ClaimWaitsForNeeds(t *testing.T) {
 
 	if got := h.item(t, part.ID); got.State != domain.StateDone {
 		t.Errorf("part = %s at %s on the tick after its need is done; want done", got.State, got.Station)
+	}
+}
+
+// A lane whose route entry keeps slots uses only those, and other lanes never take them (ADR
+// 0012 decision 9): backend keeps 1 of 3 slots, so 2 frontend items take the shared slots, 1
+// backend item the kept one, and the second backend item waits though slot 0 is the only one
+// a frontend item could otherwise have filled.
+func TestEngine_ClaimKeepsSlotsForALane(t *testing.T) {
+	t.Parallel()
+
+	build := domain.Station{
+		ID: stWork, Kind: domain.KindAgent, Agents: 3,
+		Route:       map[string]string{laneBack: agBackend, laneFront: agFrontend},
+		RouteAgents: map[string]int{laneBack: 1},
+	}
+
+	release := make(chan struct{})
+	h := newHarness(t, lineOf(build), porttest.Block(release, `{}`))
+
+	t.Cleanup(func() {
+		close(release)
+		h.wait(t, h.e)
+	})
+
+	// The backend items go first in pull order, so slots that ignored lanes would take them both.
+	lane := map[domain.ItemID]string{}
+
+	for i, l := range []string{laneBack, laneBack, laneFront, laneFront, laneFront, laneFront} {
+		it := h.submit(t, domain.NewItem{Title: l, Lane: l, Priority: 6 - i})
+		lane[it.ID] = l
+	}
+
+	h.tick(t)
+
+	if err := h.worker.WaitRuns(bounded(t), 3); err != nil {
+		t.Fatal(err)
+	}
+
+	leases, err := h.store.Leases(inOrg(t), factoryID, stWork)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := map[int]string{}
+
+	for _, l := range leases {
+		got[l.Slot] = lane[l.ItemID]
+	}
+
+	want := map[int]string{0: laneBack, 1: laneFront, 2: laneFront}
+	if !maps.Equal(got, want) {
+		t.Fatalf("slots hold lanes %v; want %v", got, want)
+	}
+
+	waiting, err := h.store.Waiting(inOrg(t), factoryID, stWork, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var backend int
+
+	for _, it := range waiting {
+		if it.Lane == laneBack {
+			backend++
+		}
+	}
+
+	if backend != 1 {
+		t.Errorf("%d backend items wait at %s; want 1", backend, stWork)
 	}
 }

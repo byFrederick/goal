@@ -435,6 +435,8 @@ const lockNextWaitingItem = `-- name: LockNextWaitingItem :one
 SELECT id, factory_id, number, parent_id, type, lane, title, body, station, state, class_of_service, priority, size, rework_count, cost_usd, outputs, created_at, updated_at, done_at, org_id, part_key, part_paths, paths, base_commit, trigger, integration_branch, integration_land_at, origin, via, created_by, generation, untrusted, start_at, started_at, triage, branch FROM work_items w
 WHERE w.factory_id = $1 AND w.station = $2 AND w.state IN ('queued', 'ready')
   AND (w.start_at IS NULL OR w.start_at <= $3::timestamptz)
+  AND ($4::text IS NULL OR w.lane = $4::text)
+  AND (w.lane IS NULL OR NOT (w.lane = ANY(coalesce($5::text[], '{}'))))
   AND NOT EXISTS (
     SELECT 1 FROM item_edges e JOIN work_items n ON n.id = e.needs_id
     WHERE e.item_id = w.id AND n.state NOT IN ('done', 'cancelled')
@@ -448,9 +450,11 @@ FOR NO KEY UPDATE OF w SKIP LOCKED
 `
 
 type LockNextWaitingItemParams struct {
-	FactoryID uuid.UUID
-	Station   string
-	Now       time.Time
+	FactoryID    uuid.UUID
+	Station      string
+	Now          time.Time
+	Lane         *string
+	ExcludeLanes []string
 }
 
 // Pull, never push: one agent slot takes the next item at its station. SKIP LOCKED lets many
@@ -459,9 +463,17 @@ type LockNextWaitingItemParams struct {
 // and while its start_at is after the claim's now (an item a trigger placed past the first
 // station), and while it has an open CI wait at the station, whatever its phase (ADR 0044
 // decisions 2 and 3; the partial index ci_waits_open_key serves it). WaitingItems lists it all
-// the same.
+// the same. The slot's lanes filter it (ADR 0012 decision 9): a slot kept for a lane (lane set)
+// takes only that lane's items, a shared slot none of exclude_lanes, and an item without a lane
+// is excluded from no shared slot.
 func (q *Queries) LockNextWaitingItem(ctx context.Context, arg LockNextWaitingItemParams) (WorkItem, error) {
-	row := q.db.QueryRow(ctx, lockNextWaitingItem, arg.FactoryID, arg.Station, arg.Now)
+	row := q.db.QueryRow(ctx, lockNextWaitingItem,
+		arg.FactoryID,
+		arg.Station,
+		arg.Now,
+		arg.Lane,
+		arg.ExcludeLanes,
+	)
 	var i WorkItem
 	err := row.Scan(
 		&i.ID,
