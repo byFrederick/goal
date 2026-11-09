@@ -138,6 +138,12 @@ describe('the import', () => {
     expect(importFormat('A_B=x')).toBe('env');
   });
 
+  it('reads the older top-level credentials map as YAML, but not an indented one', () => {
+    expect(importFormat('credentials:\n  a-b: x')).toBe('yaml');
+    expect(importFormat('# keys\ncredentials:\n  a-b: x')).toBe('yaml');
+    expect(importFormat('other:\n  credentials:\n    a-b: x')).toBe('env');
+  });
+
   it('counts the new names, and the existing ones too when they are replaced', () => {
     const found = [{ exists: true }, { exists: false }];
     expect(importCount(found, 'skip')).toBe(1);

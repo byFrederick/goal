@@ -77,7 +77,7 @@ An entry in the definition may replace the line with its own `readWhen`. A sourc
 The factory memory is `memory.yaml`, beside `factory.yaml`: short facts that every run's prompt carries. Each entry has its `text`, the items it came from (`from`, as `<factory>#<number>`) and the date it was added (`added`). Memory holds at most 50 entries and 8 KB, and an entry at most 300 characters.
 
 People add facts with `goal memory add` or in the definition editor. Jonah may propose facts too, but only a person's own words from a note, an answer or a send-back reason, which goald checks against that person's event. A person approves the proposal before memory changes ([memory facts](/docs/concepts/jonah/#memory-facts)).
-Its entries appear in each run's Knowledge section, after the source lines. The file's fields are in the [definition reference](/docs/reference/definition/).
+Its entries appear in each run's Knowledge section, after the source lines. The file's fields are in the [memory file reference](/docs/reference/memory-file/).
 
 | Limit | Value |
 | --- | --- |
