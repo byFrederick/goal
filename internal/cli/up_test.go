@@ -181,7 +181,7 @@ func TestUp_EachProcessGetsItsOwnVariables(t *testing.T) {
 	}
 }
 
-// goal up serves the docs build at /docs when it exists (task docs:build) and GOAL_DOCS_DIR does
+// goal up serves the docs build at /docs when it exists (task docs:site:build) and GOAL_DOCS_DIR does
 // not name another; without a build goald gets no GOAL_DOCS_DIR and /docs is 404.
 func TestUp_GoaldServesTheDocsBuildWhenThereIsOne(t *testing.T) {
 	t.Parallel()
