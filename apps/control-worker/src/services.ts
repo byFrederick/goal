@@ -3,9 +3,7 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import { authEnv, type Env, goaldEnv, hosts, ports } from './env.js';
-
-/** How long a service may take from its start until its health check answers. */
-const bootMs = 120_000;
+import { starting } from './unavailable.js';
 
 /** How long one health check may take before it is sent again: a hung one must not hold a boot. */
 const healthMs = 5_000;
@@ -47,7 +45,14 @@ abstract class Service extends DurableObject<Env> {
 
   /** booting is the boot in flight, or the last one that finished (booted then says so). */
   private booting: Promise<void> | undefined;
-  private booted = false;
+  protected booted = false;
+  /** failure is why the last boot failed, until a request reports it or a new boot starts. */
+  protected failure: unknown;
+  /**
+   * startedAt is when this instance started the container, until the container first answers on
+   * its port or stops: while it is set, a start is in progress.
+   */
+  protected startedAt: number | undefined;
   /** watching says whether a monitor() call waits for the running container to stop. */
   private watching = false;
 
@@ -76,7 +81,8 @@ abstract class Service extends DurableObject<Env> {
    * under it (a deploy's rollover stops the old one) is sent once more after a new boot.
    */
   async forward(request: Request, port?: number): Promise<Response> {
-    await this.ensure();
+    const early = await this.admit(request);
+    if (early) return early;
     const url = new URL(request.url);
     const headers = new Headers(request.headers);
     headers.set('x-forwarded-proto', url.protocol.slice(0, -1));
@@ -89,9 +95,27 @@ abstract class Service extends DurableObject<Env> {
       return await send();
     } catch (error) {
       if (!idempotent(request) || this.container().running) throw error;
-      await this.ensure();
-      return send();
+      return (await this.admit(request)) ?? send();
     }
+  }
+
+  /**
+   * admit decides whether forward sends request to the container: it answers undefined to send it,
+   * or the Response to answer instead. A service waits for its boot by default.
+   */
+  protected async admit(_request: Request): Promise<Response | undefined> {
+    await this.ensure();
+    return undefined;
+  }
+
+  /** bootMs is how long a service may take from its start until it is ready; tests shorten it. */
+  protected bootMs(): number {
+    return 120_000;
+  }
+
+  /** ready says whether an answer of the container's readiness probe means it is ready: a 2xx by default. */
+  protected ready(res: Response): boolean {
+    return res.ok;
   }
 
   /**
@@ -103,12 +127,16 @@ abstract class Service extends DurableObject<Env> {
     if (this.booted && !this.container().running) this.booting = undefined;
     if (!this.booting) {
       this.booted = false;
+      this.failure = undefined;
       const boot: Promise<void> = this.boot().then(
         () => {
           if (this.booting === boot) this.booted = true;
         },
         (error: unknown) => {
-          if (this.booting === boot) this.booting = undefined;
+          if (this.booting === boot) {
+            this.booting = undefined;
+            this.failure = error;
+          }
           throw error;
         },
       );
@@ -125,17 +153,18 @@ abstract class Service extends DurableObject<Env> {
   }
 
   /**
-   * boot starts the container and waits for its health check, for at most bootMs. Cloudflare
+   * boot starts the container and waits until its readiness probe passes, for at most bootMs. Cloudflare
    * refuses a start while it has no instance for the Durable Object yet ("try again later", seen
    * during a deploy's rollover), so a failed start is tried again until then.
    */
   private async boot(): Promise<void> {
-    const until = Date.now() + bootMs;
+    const until = Date.now() + this.bootMs();
     const c = this.container();
     for (;;) {
       try {
         if (!c.running) {
           c.start({ env: await this.environment(), enableInternet: true });
+          this.startedAt = Date.now();
           console.log(JSON.stringify({ msg: 'container started', service: this.service() }));
         }
         this.watch(c);
@@ -147,7 +176,36 @@ abstract class Service extends DurableObject<Env> {
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
     }
-    await healthy(c.getTcpPort(this.port), this.health, until);
+    await this.probe(c.getTcpPort(this.port), until);
+  }
+
+  /**
+   * probe polls the health path on the container's port until ready accepts its answer, until the
+   * time until. The first answer of any status logs `container ready` with the milliseconds since
+   * this instance started the container: Cloudflare's part of the start. Each check gets healthMs:
+   * a check that hangs is given up and sent again, so the boot still ends by until.
+   */
+  private async probe(port: Fetcher, until: number): Promise<void> {
+    let last = 'no answer';
+    for (;;) {
+      try {
+        const res = await port.fetch(`http://container${this.health}`, { signal: AbortSignal.timeout(healthMs) });
+        await res.body?.cancel();
+        if (this.startedAt !== undefined) {
+          const ms = Date.now() - this.startedAt;
+          this.startedAt = undefined;
+          console.log(JSON.stringify({ msg: 'container ready', service: this.service(), ms }));
+        }
+        if (this.ready(res)) return;
+        last = `HTTP ${res.status}`;
+      } catch (error) {
+        last = error instanceof Error ? error.message : String(error);
+      }
+      if (Date.now() > until) {
+        throw new Error(`the container did not answer ${this.health} within ${this.bootMs() / 1000}s: ${last}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
   }
 
   /**
@@ -160,6 +218,7 @@ abstract class Service extends DurableObject<Env> {
     this.watching = true;
     const stopped = (exitCode: number | null, reason: string) => {
       this.watching = false;
+      this.startedAt = undefined;
       console.warn(JSON.stringify({ msg: 'container stopped', service: this.service(), exitCode, reason }));
     };
     c.monitor().then(
@@ -190,12 +249,54 @@ export class Goald extends Service {
   /** armed says whether this instance has made sure the alarm is set. */
   private armed = false;
 
-  /** ensure boots goald like Service.ensure, and sets the alarm once per instance. */
+  /**
+   * ensure boots goald like Service.ensure, and sets the alarm once per instance before it waits:
+   * the alarm wakes this object again if Cloudflare evicts it during a boot nobody waits for.
+   */
   override async ensure(): Promise<void> {
-    await super.ensure();
-    if (this.armed) return;
-    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + heartbeatMs);
-    this.armed = true;
+    const boot = super.ensure();
+    // Handled below; marked handled now so a boot that fails while the alarm is set is no unhandled rejection.
+    boot.catch(() => {});
+    if (!this.armed) {
+      if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + heartbeatMs);
+      this.armed = true;
+    }
+    await boot;
+  }
+
+  /** goald is ready once its port answers anything, its own 503 goald-starting included. */
+  protected override ready(): boolean {
+    return true;
+  }
+
+  /**
+   * A request never waits for goald's container to start, which takes Cloudflare minutes during a
+   * deploy: while a start is in progress it answers 503 goald-starting at once, and the boot goes
+   * on without it. A boot that failed answers its error once, which the Worker logs and answers
+   * with its 502; the next request starts a new boot. A container this instance found running is
+   * only probed, so a request waits for that, at most bootMs as before.
+   */
+  protected override async admit(request: Request): Promise<Response | undefined> {
+    if (this.failure !== undefined) {
+      const failure = this.failure;
+      this.failure = undefined;
+      throw failure;
+    }
+    if (this.booted && this.container().running) return undefined;
+    const boot = this.ensure();
+    if (this.container().running && this.startedAt === undefined) {
+      try {
+        await boot;
+      } catch (error) {
+        // This request reports it, so the next one does not.
+        this.failure = undefined;
+        throw error;
+      }
+      return undefined;
+    }
+    // The failure stays in this.failure for the next request.
+    this.ctx.waitUntil(boot.catch(() => {}));
+    return starting(request);
   }
 
   /**
@@ -254,24 +355,4 @@ export function auth(env: Env): DurableObjectStub<Auth> {
 /** idempotent says whether request can be sent again: a GET or HEAD, which has no body. */
 export function idempotent(request: Request): boolean {
   return request.method === 'GET' || request.method === 'HEAD';
-}
-
-/**
- * healthy polls path on the container's port until it answers 2xx, until the time until. Each
- * check gets healthMs: a check that hangs is given up and sent again, so the boot still ends by until.
- */
-async function healthy(port: Fetcher, path: string, until: number): Promise<void> {
-  let last = 'no answer';
-  for (;;) {
-    try {
-      const res = await port.fetch(`http://container${path}`, { signal: AbortSignal.timeout(healthMs) });
-      await res.body?.cancel();
-      if (res.ok) return;
-      last = `HTTP ${res.status}`;
-    } catch (error) {
-      last = error instanceof Error ? error.message : String(error);
-    }
-    if (Date.now() > until) throw new Error(`the container did not answer ${path} within ${bootMs / 1000}s: ${last}`);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
 }
