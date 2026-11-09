@@ -32,7 +32,7 @@ For GitHub, once you add the webhook, GitHub sends a ping. The **Status** line t
 - **Duplicate**: Goal had already taken this delivery id, so it created nothing.
 - **Refused**: with the reason, such as a signature that did not match.
 
-Under a delivery is one line per factory whose triggers name it: **Created** with the item's ref, **Skipped** with the reason, or **Failed** with the error. Accepted deliveries that no factory names are not listed; the log counts them in one line.
+Under a delivery is one line per factory whose triggers name it: **Created** with the item's ref, **Skipped** with the reason, or **Failed** with the error. Accepted deliveries that no enabled trigger names, such as GitHub's ping, are not listed. Under the rows, or under "No deliveries to show yet.", one line counts them over the last 30 days, such as "12 more deliveries no trigger names in the last 30 days"; it is hidden when there are none.
 
 **View request** on a delivery opens its headers and body. Only people with `webhook:manage` see it, because an organization webhook carries every repository's events. Goal keeps deliveries for 30 days.
 

@@ -2483,7 +2483,7 @@ export interface paths {
         };
         /**
          * One page of a webhook's deliveries, newest first
-         * @description What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
+         * @description What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). The log keeps only deliveries an enabled trigger names; the others, such as GitHub's ping or one that arrives before a trigger names the webhook, are only counted per UTC day, and unnamed_days carries those counts for the log's 30 days. Every page carries the same unnamed_days. 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
          */
         get: operations["listOrgWebhookDeliveries"];
         put?: never;
@@ -8287,7 +8287,7 @@ export interface components {
              * @description The UTC day
              */
             day: string;
-            /** @description Deliveries accepted */
+            /** @description Deliveries accepted, with or without an item created, including those no enabled trigger names */
             delivered: number;
             refused: number;
         };
@@ -8351,8 +8351,19 @@ export interface components {
         };
         WebhookDeliveryPage: {
             deliveries: components["schemas"]["WebhookDelivery"][];
+            /** @description The webhook's daily counts of accepted deliveries no enabled trigger names, which the log does not keep, from the UTC day 30 days ago through today, oldest first; a day without one has no entry */
+            unnamed_days: components["schemas"]["WebhookUnnamedDay"][];
             /** @description Pass as `after` for the next page; null on the last page */
             next_after: string | null;
+        };
+        WebhookUnnamedDay: {
+            /**
+             * Format: date
+             * @description The UTC day
+             */
+            day: string;
+            /** @description Accepted deliveries no enabled trigger named that day */
+            count: number;
         };
         WebhookDeliveryRequest: components["schemas"]["WebhookDelivery"] & {
             /** @description The request's headers, names lower-cased, without X-Goal-Signature, X-Hub-Signature-256 or X-Hub-Signature */
