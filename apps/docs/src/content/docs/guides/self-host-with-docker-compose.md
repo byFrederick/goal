@@ -17,8 +17,10 @@ You end with Goal running on your machine at `http://127.0.0.1:8080`, with its d
 
 - the database passwords (`GOAL_PG_PASSWORD`, `GOAL_PG_OWNER_PASSWORD`, `GOAL_PG_APP_PASSWORD`, `GOAL_PG_AUTH_PASSWORD`). Goal refuses the passwords this repository publishes, so set your own.
 - `BETTER_AUTH_SECRET`, the sign-in secret, and `GOAL_BOOTSTRAP_OWNER_EMAIL`, the email of the first owner. Both are needed while nobody has signed in yet.
+- [`GOAL_GATEWAY_KEY`](/docs/reference/environment/), which signs the tokens of the tool gateway. It is empty in `.env.example`, and goald does not start without it. Generate one with `openssl rand -hex 32`.
+- [`GOAL_MASTER_KEYS`](/docs/reference/environment/), which seals saved secrets. Generate one entry with `k1:$(openssl rand -base64 32)`, and keep a copy offline. See [Master keys](#master-keys).
 
-`.env.example` lists every variable. Do not commit `.env`.
+`.env.example` lists every variable, and [Environment variables](/docs/reference/environment/) describes each one. Do not commit `.env`.
 
 ## 2. Start the platform
 
@@ -30,7 +32,7 @@ task up
 
 Open `http://127.0.0.1:8080` and sign in with the owner's email. The sign-in code arrives in Mailpit, at `http://127.0.0.1:8025`. Its user and password are in the file `goal up` names when it starts.
 
-`goal up` does not push any factory. Create one with [Change a factory definition](../change-a-factory-definition/).
+`goal up` does not push any factory. Create one with [Create a factory](/docs/getting-started/create-a-factory/). To make the starter templates appear, [seed the catalogs](#seed-the-catalogs) first.
 
 To use the single local user without sign-in, set `GOAL_AUTH=none` before `task up`. Then the web app and the CLI act as that user and need no sign-in. Mailpit does not start.
 
@@ -50,6 +52,65 @@ Follow their logs, and stop them when you are done:
 docker compose logs -f goald
 docker compose stop goald auth
 ```
+
+## Master keys
+
+Master keys seal the secrets, connection credentials and webhook endpoints that Goal stores in PostgreSQL. You set them in `.env` as `GOAL_MASTER_KEYS`: entries of the form `<id>:<base64 of 32 bytes>`, separated by commas. The first entry is the active key. [`GOAL_MASTER_KEY_FILE`](/docs/reference/environment/) names a file of the same entries, one per line and mode 0600, instead.
+
+Without a master key, goald starts and logs a warning, but no secret can be saved: the API answers 503. Keep a copy of the keys offline. Without them, the stored secrets are lost.
+
+goald refuses to start when something is sealed under a key id that the configured keys do not hold. Add the missing key back to `GOAL_MASTER_KEYS`.
+
+To rotate:
+
+1. Generate a new entry, such as `k2:$(openssl rand -base64 32)`, and put it first in `GOAL_MASTER_KEYS`. Keep the old entry after it.
+2. Restart goald.
+3. Run `goal db rekey`. It reseals everything under the new key.
+4. Remove the old entry, and restart goald.
+
+## Seed the catalogs
+
+The template catalog and the skill catalog start empty. Seed them once the platform is up.
+
+Push the starter templates into the bucket:
+
+```sh
+task catalog:templates:push
+```
+
+It is safe to repeat: a version that is already held unchanged is not an error.
+
+Sync skills from `skills.sh` and GitHub with one of:
+
+```sh
+bin/goal catalog skills sync --file sources.yaml
+bin/goal catalog skills sync --search "<query>" --top 5
+```
+
+`sources.yaml` is a YAML list of `owner/repo@skill`, with an optional `#commit`. `--search` can repeat, and `--top` (1 to 50, default 5) limits the hits per query.
+
+## Recover access
+
+A deleted organization is kept for `GOAL_ORG_RETENTION` (default 7 days). After that, goald purges its rows and bucket objects. See [Environment variables](/docs/reference/environment/).
+
+If nobody can sign in as an admin or an owner, recover access from the machine that runs the platform, with the database settings of `.env` exported:
+
+```sh
+bin/goal db recover-admin admin@example.com
+bin/goal db recover-owner acme admin@example.com
+```
+
+`recover-admin` makes the person a platform admin. `recover-owner <org> <email>` makes them an owner of the live organization, named by slug or id. Each recovery is recorded in the security log, and an owner recovery in the organization's audit log too.
+
+## Serve the docs at /docs
+
+goald serves the docs site at `http://127.0.0.1:8080/docs` when `GOAL_DOCS_DIR` names a build. Build it once:
+
+```sh
+task docs:site:build
+```
+
+`goal up` sets `GOAL_DOCS_DIR` to `apps/docs/dist/docs` when that build exists and you have not set it yourself, so build before `task up`. Without a build, `/docs` answers 404. The Compose goald mounts the same build.
 
 ## Stop
 
@@ -80,5 +141,6 @@ On a database that has not, migration 00138 refuses to run and changes nothing. 
 
 ## Related
 
-- [Change a factory definition](../change-a-factory-definition/)
+- [Create a factory](/docs/getting-started/create-a-factory/)
+- [Change a factory definition](/docs/guides/change-a-factory-definition/)
 - [Concepts](/docs/concepts/) for the parts of the platform.
