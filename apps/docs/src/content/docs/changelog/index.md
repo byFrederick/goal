@@ -5,6 +5,10 @@ description: What changed in Goal, week by week.
 
 This page lists the changes a person using Goal would notice, newest first, grouped by ISO week. Each entry links its pull request on [github.com/byFrederick/goal](https://github.com/byFrederick/goal). Refactors, CI and tooling changes are left out. The list starts with the changes merged to main from 2026-10-23, when the repository's history begins. Weeks are ISO weeks, starting on Monday, and dates are in UTC.
 
+## Week of 2026-11-09
+
+- **goald says when it is starting.** goald opens its port before it connects to the database and loads the definitions. Until it has started, every request that reaches it, the API, sign-in and the agents' gateway alike, gets 503 at once with the code `goald-starting` and a `Retry-After` header, instead of waiting until it has. `GET /v1/health` answers 200 only once goald has started ([#984](https://github.com/byFrederick/goal/pull/984)).
+
 ## Week of 2026-11-02
 
 - Settings › Code no longer leaves a changed draft behind when you add a repository and remove it again. On a factory that uses the `runtime.repository` shorthand, Add moved it into `runtime.repositories`; removing the new row now puts the shorthand back. Settings also shows an open draft with changes under the title, with Review changes and Discard draft.
