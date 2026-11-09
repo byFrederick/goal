@@ -19,7 +19,7 @@ An agent is one entry of the `agents` list in the factory definition. Its schema
 | `code` | `write` lets the agent push, open pull requests and merge. `read` lets it only read the code. It defaults to `write` when the factory has an entry that writes, and to `read` otherwise. |
 | `maxTurns`, `perItemUsd` | Limits for this agent. They override the factory's `runtime.budget` values. |
 | `skills` | The names of the definition's skills this agent may load. See [skills and rules](/docs/concepts/skills-and-rules/). |
-| `environment` | The environment file the agent's box gets, `environments/<name>.yaml`. `default` when omitted. See [access and secrets](/docs/concepts/access-and-secrets/). |
+| `environment` | The [environment file](/docs/reference/environment-file/) the agent's box gets, `environments/<name>.yaml`. `default` when omitted. See [access and secrets](/docs/concepts/access-and-secrets/). |
 | `tools` or `builtins` | Which tools the agent may call. An agent has one or the other, never both. With neither, the agent gets only Read, Grep and Glob. |
 
 The Definition's Agents section edits the prompt. Reset to default in it, and beside the prompt on the agent's page, restores the running version's prompt file, as described in [Add an agent, skill or rule](/docs/guides/add-an-agent-skill-or-rule/).
