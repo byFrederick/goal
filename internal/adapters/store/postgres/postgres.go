@@ -17,11 +17,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -74,7 +77,9 @@ const (
 // creates them (roles.sql), not a migration.
 var migrationRoles = []string{AppRole, AuthRole}
 
-// Migrate applies every pending migration from the migrations package. Instances that start
+// Migrate applies every pending migration from the migrations package. It first reads the
+// applied versions in one query on pool, and when every embedded migration is applied it returns
+// at once: no lock, no connection of its own, no goose. Otherwise instances that start
 // together take turns on a session advisory lock keyed by the schema, so exactly one applies
 // each migration; the lock is freed when its connection closes, even if the process dies.
 // While it holds the lock it takes no connection from pool: the lock is held on a connection of
@@ -91,6 +96,22 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 const closeTimeout = 5 * time.Second
 
 func migrateRequiring(ctx context.Context, pool *pgxpool.Pool, roles []string) (err error) {
+	// goose records each version in its migration's transaction, so a version read here as
+	// applied is applied, even while another instance migrates.
+	applied, err := appliedVersions(ctx, pool)
+	if err != nil {
+		return fmt.Errorf("postgres: migrate: %w", err)
+	}
+
+	embedded, err := embeddedVersions(migrations.FS)
+	if err != nil {
+		return fmt.Errorf("postgres: migrate: %w", err)
+	}
+
+	if upToDate(applied, embedded) {
+		return nil
+	}
+
 	if err := requireRoles(ctx, pool, roles); err != nil {
 		return fmt.Errorf("postgres: migrate: %w", err)
 	}
@@ -144,6 +165,59 @@ func migrateRequiring(ctx context.Context, pool *pgxpool.Pool, roles []string) (
 	_, err = p.Up(ctx)
 
 	return err
+}
+
+// appliedVersions reads the migration versions goose has applied to the database: none on one
+// without goose's table yet.
+func appliedVersions(ctx context.Context, pool *pgxpool.Pool) ([]int64, error) {
+	var applied []int64
+
+	// A version's latest row says whether it is applied: goose's older down migrations add a row
+	// with is_applied false instead of deleting the version's.
+	err := pool.QueryRow(ctx, `
+		SELECT coalesce(array_agg(version_id), '{}') FROM (
+			SELECT DISTINCT ON (version_id) version_id, is_applied FROM goose_db_version ORDER BY version_id, id DESC
+		) v WHERE is_applied`).Scan(&applied)
+
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == undefinedTable {
+		return nil, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("read the applied versions: %w", err)
+	}
+
+	return applied, nil
+}
+
+// undefinedTable is PostgreSQL's error code for a table that does not exist.
+const undefinedTable = "42P01"
+
+// embeddedVersions is the version of every migration in fsys, in the order of the file names.
+func embeddedVersions(fsys fs.FS) ([]int64, error) {
+	names, err := fs.Glob(fsys, "*.sql")
+	if err != nil {
+		return nil, fmt.Errorf("list the migrations: %w", err)
+	}
+
+	versions := make([]int64, 0, len(names))
+
+	for _, name := range names {
+		v, err := goose.NumericComponent(name)
+		if err != nil {
+			return nil, fmt.Errorf("migration %s: %w", name, err)
+		}
+
+		versions = append(versions, v)
+	}
+
+	return versions, nil
+}
+
+// upToDate reports whether every version of embedded is in applied, so goose has nothing to do.
+func upToDate(applied, embedded []int64) bool {
+	return !slices.ContainsFunc(embedded, func(v int64) bool { return !slices.Contains(applied, v) })
 }
 
 // refuseLegacyImport fails with ErrLegacyImportPending when the database, at migration version,

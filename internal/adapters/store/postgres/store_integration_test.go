@@ -122,6 +122,59 @@ func TestMigrate_RepeatableAndSafeToRunConcurrently(t *testing.T) {
 	}
 }
 
+// At the latest version Migrate does nothing: it returns while another instance holds the
+// migration lock, which it would otherwise wait for, and goose's log is left as it was.
+func TestMigrate_AtTheLatestVersionDoesNothing(t *testing.T) {
+	t.Parallel()
+
+	db := newTestDB(t, OwnerRole)
+	pool := openPool(t, db.owner)
+
+	if err := Migrate(t.Context(), pool); err != nil {
+		t.Fatal(err)
+	}
+
+	log := func() string {
+		t.Helper()
+
+		var s string
+		if err := pool.QueryRow(t.Context(), "SELECT string_agg(id || ':' || version_id || ':' || is_applied, ',' ORDER BY id) FROM goose_db_version").Scan(&s); err != nil {
+			t.Fatal(err)
+		}
+
+		return s
+	}
+
+	before := log()
+
+	holder, err := pool.Acquire(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Release()
+
+	if _, err := holder.Exec(t.Context(), "SELECT pg_advisory_lock(hashtext('goal.migrate.' || current_schema()))"); err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		if _, err := holder.Exec(context.WithoutCancel(t.Context()), "SELECT pg_advisory_unlock_all()"); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("Migrate at the latest version = %v, want nil without taking the lock", err)
+	}
+
+	if after := log(); after != before {
+		t.Errorf("goose_db_version after a second Migrate = %s, want %s", after, before)
+	}
+}
+
 // withPoolSize is dbURL with a pool of at most size connections.
 func withPoolSize(t *testing.T, dbURL string, size int) string {
 	t.Helper()

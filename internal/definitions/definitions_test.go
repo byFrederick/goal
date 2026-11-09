@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -1035,5 +1036,268 @@ func TestCache_FactoriesListingASource(t *testing.T) {
 
 	if got := c.FactoriesListing(t.Context(), "handbook"); got != nil {
 		t.Errorf("FactoriesListing without an organization = %v, want none", got)
+	}
+}
+
+// moreOrgs creates n organizations besides org and other, each with its own factory published,
+// and returns them with the factory each runs.
+func (h *harness) moreOrgs(tb testing.TB, n int) map[domain.OrgID]domain.FactoryID {
+	tb.Helper()
+
+	out := map[domain.OrgID]domain.FactoryID{}
+
+	for i := range n {
+		o, err := h.orgs.CreateOrg(context.Background(), domain.LocalUser, ports.NewOrg{Slug: fmt.Sprintf("more-%d", i), Name: "Another org"})
+		if err != nil {
+			tb.Fatal(err)
+		}
+
+		id := domain.FactoryID(fmt.Sprintf("5c0d7a52-8b1e-4f43-9d3a-2e6b7c8f%04d", i))
+		if _, err := porttest.Publish(domain.WithOrg(context.Background(), o.ID), h.store, id, acmeName,
+			bytesOf(withID(acme(acmeName, noteContract), id))); err != nil {
+			tb.Fatal(err)
+		}
+
+		out[o.ID] = id
+	}
+
+	return out
+}
+
+// gated is a definition store whose gated calls (FactoryRecords or Blob) wait for release,
+// counting how many are in flight at once. FactoryRecords fails for the organizations in fail.
+type gated struct {
+	*porttest.Definitions
+
+	records, blobs bool
+	fail           map[domain.OrgID]bool
+
+	arrived  chan struct{}
+	release  chan struct{}
+	blobRead atomic.Int32
+
+	mu             sync.Mutex
+	inFlight, most int
+}
+
+func newGated(d *porttest.Definitions) *gated {
+	return &gated{Definitions: d, arrived: make(chan struct{}, 1024), release: make(chan struct{})}
+}
+
+func (g *gated) wait() {
+	g.mu.Lock()
+	g.inFlight++
+	g.most = max(g.most, g.inFlight)
+	g.mu.Unlock()
+
+	g.arrived <- struct{}{}
+
+	<-g.release
+
+	g.mu.Lock()
+	g.inFlight--
+	g.mu.Unlock()
+}
+
+// mostAtOnce is the most gated calls that were in flight together.
+func (g *gated) mostAtOnce() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	return g.most
+}
+
+func (g *gated) FactoryRecords(ctx context.Context) ([]ports.FactoryRecord, error) {
+	if g.records {
+		g.wait()
+	}
+
+	if o, _ := domain.OrgFrom(ctx); g.fail[o] {
+		return nil, errStoreDown
+	}
+
+	return g.Definitions.FactoryRecords(ctx)
+}
+
+func (g *gated) Blob(ctx context.Context, h domain.BlobHash) ([]byte, error) {
+	g.blobRead.Add(1)
+
+	if g.blobs {
+		g.wait()
+	}
+
+	return g.Definitions.Blob(ctx, h)
+}
+
+// arrive waits until n gated calls are in flight together.
+func (g *gated) arrive(t *testing.T, n int) {
+	t.Helper()
+
+	for range n {
+		select {
+		case <-g.arrived:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("at most %d calls in flight at once, want %d", g.mostAtOnce(), n)
+		}
+	}
+}
+
+// refresh runs c.Refresh in the background.
+func refresh(c *Cache) <-chan struct {
+	lines []domain.Line
+	err   error
+} {
+	done := make(chan struct {
+		lines []domain.Line
+		err   error
+	}, 1)
+
+	go func() {
+		lines, err := c.Refresh(context.Background())
+		done <- struct {
+			lines []domain.Line
+			err   error
+		}{lines, err}
+	}()
+
+	return done
+}
+
+// A refresh loads organizations at the same time, never more than orgLoads at once, and ends as
+// a load one after another would: every organization's line, each organization that cannot be
+// listed in the joined error in the order of its id, and onLoad told every line once.
+func TestRefresh_LoadsOrganizationsConcurrentlyWithABound(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	v := h.publish(t, org, acme(acmeName, noteContract))
+	want := map[domain.FactoryID]domain.DefinitionVersionID{acmeID: v.ID}
+
+	more := h.moreOrgs(t, 2*orgLoads)
+	for o, id := range more {
+		recs, err := h.store.FactoryRecords(domain.WithOrg(t.Context(), o))
+		if err != nil || len(recs) != 1 {
+			t.Fatal(recs, err)
+		}
+
+		want[id] = recs[0].Current.ID
+	}
+
+	failing := slices.Sorted(maps.Keys(more))[:2]
+	for _, o := range failing {
+		delete(want, more[o])
+	}
+
+	store := newGated(h.store)
+	store.records = true
+	store.fail = map[domain.OrgID]bool{failing[0]: true, failing[1]: true}
+
+	rec := newLoads()
+	done := refresh(New(store, h.orgs, rec.record, Config{}, nil))
+
+	store.arrive(t, orgLoads)
+	close(store.release)
+
+	got := <-done
+
+	wantErr := errors.Join(
+		fmt.Errorf("list factories of organization %s: %w", failing[0], errStoreDown),
+		fmt.Errorf("list factories of organization %s: %w", failing[1], errStoreDown))
+	if got.err == nil || got.err.Error() != wantErr.Error() {
+		t.Errorf("Refresh error = %v, want %v", got.err, wantErr)
+	}
+
+	if !reflect.DeepEqual(versionsOf(got.lines), want) {
+		t.Errorf("lines = %v, want %v", versionsOf(got.lines), want)
+	}
+
+	if n := store.mostAtOnce(); n != orgLoads {
+		t.Errorf("%d organizations loaded at once, want %d", n, orgLoads)
+	}
+
+	if n := rec.count(); n != 1 || !reflect.DeepEqual(rec.last(), got.lines) {
+		t.Errorf("onLoad called %d times with %v, want once with the lines", n, rec.last())
+	}
+}
+
+// A version's files are read at the same time, no more than blobReads at once across every
+// organization a refresh loads; a file the version it replaces already has is not read again.
+func TestLoad_ReadsFilesConcurrentlyWithASharedBound(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	h.publish(t, org, acme(acmeName, noteContract))
+	h.publish(t, other, withID(acme(acmeName, noteContract), otherID))
+	h.moreOrgs(t, 2)
+
+	store := newGated(h.store)
+	store.blobs = true
+
+	c := New(store, h.orgs, nil, Config{}, nil)
+	done := refresh(c)
+
+	store.arrive(t, blobReads)
+	close(store.release)
+
+	if got := <-done; got.err != nil || len(got.lines) != 4 {
+		t.Fatalf("Refresh = %+v (%v), want 4 lines", got.lines, got.err)
+	}
+
+	if n := store.mostAtOnce(); n != blobReads {
+		t.Errorf("%d files read at once, want %d", n, blobReads)
+	}
+
+	if n := int(store.blobRead.Load()); n != 4*len(acme(acmeName, noteContract)) {
+		t.Errorf("%d files read, want every file of the 4 versions once", n)
+	}
+
+	store.blobRead.Store(0)
+	h.publish(t, org, acme(acmeName, bodyContract))
+
+	if _, err := c.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	if n := store.blobRead.Load(); n != 1 {
+		t.Errorf("%d files read for a version that changes one file, want 1", n)
+	}
+}
+
+// latent is a definition store that takes delay over every read, as a remote database and bucket do.
+type latent struct {
+	*porttest.Definitions
+
+	delay time.Duration
+}
+
+func (l latent) FactoryRecords(ctx context.Context) ([]ports.FactoryRecord, error) {
+	time.Sleep(l.delay)
+	return l.Definitions.FactoryRecords(ctx)
+}
+
+func (l latent) Version(ctx context.Context, id domain.DefinitionVersionID) (domain.DefinitionVersion, error) {
+	time.Sleep(l.delay)
+	return l.Definitions.Version(ctx, id)
+}
+
+func (l latent) Blob(ctx context.Context, h domain.BlobHash) ([]byte, error) {
+	time.Sleep(l.delay)
+	return l.Definitions.Blob(ctx, h)
+}
+
+// BenchmarkRefresh_ManyOrganizations is goald's first refresh over 8 organizations of one
+// 5-file factory each, on a store that takes 5 ms a read.
+func BenchmarkRefresh_ManyOrganizations(b *testing.B) {
+	objects := porttest.NewObjectStore()
+	h := &harness{objects: objects, orgs: porttest.NewTenancy(time.Now)}
+	h.store = porttest.NewDefinitions(porttest.DefinitionsDeps{Objects: objects})
+	h.moreOrgs(b, 8)
+
+	store := latent{Definitions: h.store, delay: 5 * time.Millisecond}
+
+	for b.Loop() {
+		if lines, err := New(store, h.orgs, nil, Config{}, nil).Refresh(context.Background()); err != nil || len(lines) != 8 {
+			b.Fatal(lines, err)
+		}
 	}
 }
