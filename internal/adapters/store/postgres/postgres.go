@@ -199,6 +199,10 @@ var _ ports.Store = (*Store)(nil)
 type Store struct {
 	pool *pgxpool.Pool
 	q    *db.Queries
+	// listen and locks are the store's two connections outside its pool: the one that LISTENs
+	// for every listener, and the one that holds the minute loops' session advisory locks.
+	listen *listenHub
+	locks  *sessionLocks
 	// exportPage is how many rows an export reads at a time; 0 is defaultExportPage.
 	exportPage int
 }
@@ -209,9 +213,11 @@ const defaultExportPage = 1000
 // page is how many rows an export reads at a time.
 func (s *Store) page() int { return cmp.Or(s.exportPage, defaultExportPage) }
 
-// New returns a store on pool; the caller closes the pool.
+// New returns a store on pool; the caller closes the store (Close), then the pool.
 func New(pool *pgxpool.Pool) *Store {
-	return &Store{pool: pool, q: db.New(pool)}
+	cfg := pool.Config().ConnConfig
+
+	return &Store{pool: pool, q: db.New(pool), listen: newListenHub(cfg.Copy()), locks: newSessionLocks(cfg.Copy())}
 }
 
 // inTx runs fn in a transaction bound to the organization in ctx, committing when it returns

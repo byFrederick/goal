@@ -169,15 +169,14 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	pool, err := openDatabase(ctx, s, clock, log)
+	// One value is the Store, Tenancy and Audit. Each binds its transactions to the organization
+	// in ctx: the engine takes it from each line, the API from the request.
+	pool, store, err := openDatabase(ctx, s, clock, log)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
-
-	// One value is the Store, Tenancy and Audit. Each binds its transactions to the organization
-	// in ctx: the engine takes it from each line, the API from the request.
-	store := postgres.New(pool)
+	defer store.Close()
 
 	identity, proxySecret, err := authentication(ctx, s, store, secrets, log)
 	if err != nil {
@@ -780,37 +779,46 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 
 // openDatabase applies pending migrations as goal_owner on a pool of its own, closed before goald
 // serves anything, then opens goald's pool as goal_app and refuses a role that row-level security
-// would not bind. It logs the pool's "db pool" line once a minute until ctx ends, so pool
-// starvation shows in the logs. The caller closes the pool.
-func openDatabase(ctx context.Context, s settings, clock ports.Clock, log *slog.Logger) (*pgxpool.Pool, error) {
+// would not bind. It returns the pool and the store on it, whose lock connection, which the
+// minute loops' session locks share outside the pool, it dials so goald fails at start without
+// one. It logs the "db pool" line once a minute until ctx ends, so pool starvation shows in the
+// logs. The caller closes the store, then the pool.
+func openDatabase(ctx context.Context, s settings, clock ports.Clock, log *slog.Logger) (*pgxpool.Pool, *postgres.Store, error) {
 	owner, err := postgres.Open(ctx, s.MigrateDatabaseURL)
 	if err != nil {
-		return nil, fmt.Errorf("GOAL_MIGRATE_DATABASE_URL: %w (goal db init creates the roles)", err)
+		return nil, nil, fmt.Errorf("GOAL_MIGRATE_DATABASE_URL: %w (goal db init creates the roles)", err)
 	}
 
 	err = postgres.Migrate(ctx, owner)
 	owner.Close()
 
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	pool, err := postgres.Open(ctx, s.DatabaseURL)
 	if err != nil {
-		return nil, fmt.Errorf("GOAL_DATABASE_URL: %w", err)
+		return nil, nil, fmt.Errorf("GOAL_DATABASE_URL: %w", err)
 	}
 
 	if err := postgres.CheckAppRole(ctx, pool); err != nil {
 		pool.Close()
 
-		return nil, fmt.Errorf("GOAL_DATABASE_URL: %w", err)
+		return nil, nil, fmt.Errorf("GOAL_DATABASE_URL: %w", err)
 	}
 
 	log.InfoContext(ctx, "database ready", slog.String("role_check", "passed"))
 
-	go postgres.LogPoolStats(ctx, postgres.PoolStats(pool), clock, postgres.PoolStatsInterval, log)
+	store := postgres.New(pool)
+	if err := store.OpenLockConn(ctx); err != nil {
+		pool.Close()
 
-	return pool, nil
+		return nil, nil, err
+	}
+
+	go postgres.LogPoolStats(ctx, store.PoolStats, clock, postgres.PoolStatsInterval, log)
+
+	return pool, store, nil
 }
 
 // HTTP server bounds: a client has readHeaderTimeout to send its headers and readTimeout for the

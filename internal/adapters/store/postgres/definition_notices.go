@@ -19,19 +19,19 @@ const definitionChannel = "goal_definitions"
 
 var _ ports.DefinitionNotices = (*DefinitionNotices)(nil)
 
-// DefinitionNotices implements ports.DefinitionNotices with LISTEN goal_definitions on a
-// connection of its own; it hears every organization's changes, from every goald. Draft and
+// DefinitionNotices implements ports.DefinitionNotices with LISTEN goal_definitions on the
+// store's one listening connection (listenHub); it hears every organization's changes, from every goald. Draft and
 // current notices are read back through the row-level security of the organization they name
 // (review 2.2 M4) and carry the version's own fields; a factory or org notice carries ids only.
 type DefinitionNotices struct {
 	l listener[ports.DefinitionNotice]
 }
 
-// NewDefinitionNotices listens with the connection config of s's pool and reads notices back
+// NewDefinitionNotices listens on s's listening connection and reads notices back
 // through s. log may be nil.
 func NewDefinitionNotices(s *Store, log *slog.Logger) *DefinitionNotices {
 	return &DefinitionNotices{l: listener[ports.DefinitionNotice]{
-		cfg: s.pool.Config().ConnConfig, log: discardIfNil(log), channels: []string{definitionChannel}, name: "definition notices",
+		hub: s.listen, log: discardIfNil(log), channels: []string{definitionChannel}, name: "definition notices",
 		resync: ports.DefinitionNotice{Resync: true}, decode: definitionNoticeFrom, readBack: s.readBackDefinitionNotice,
 	}}
 }

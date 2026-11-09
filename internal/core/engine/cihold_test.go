@@ -381,3 +381,102 @@ func TestCIHold_DeferredMergeRetriesWithoutRun(t *testing.T) {
 		t.Errorf("%d runs; want the held run only", n)
 	}
 }
+
+// expectNoMergeTried fails if the code host merged anything or the item counted a deferral.
+func (h *harness) expectNoMergeTried(t *testing.T, id domain.ItemID) {
+	t.Helper()
+
+	if m := h.codehost.Merges(); len(m) != 0 {
+		t.Errorf("merges while CI runs = %+v; want none", m)
+	}
+
+	if d := h.eventsOf(id, domain.EventMergeDeferred); len(d) != 0 {
+		t.Errorf("merge_deferred events %+v; want none while CI runs", d)
+	}
+}
+
+// At an action: merge gate, an approval whose run pushed nothing, and whose own output is the
+// only one to name the pull request, is held on the pull request's head while its CI runs: no
+// merge is tried and no deferral counted. Once CI passes, the next claim merges once without a
+// new run.
+func TestCIHold_MergeWithoutPushWaitsOnPullRequest(t *testing.T) {
+	t.Parallel()
+
+	h, p := holdHarness(t, holdLine(domain.ActionMerge, domain.DefaultCIRounds))
+	it := h.at(t, h.submit(t, domain.NewItem{Title: "a"}), stReview, domain.StateQueued)
+	h.codehost.Add(prFrom(prOf(it), it))
+	p.set(it.ID, stReview, ok(`{"decision":"approve","pull_request":"`+prOf(it)+`"}`))
+
+	h.step(t)
+
+	if w := h.expectHeld(t, it.ID, headSHA, 1, 1); w.PRURL != prOf(it) {
+		t.Errorf("wait on %q; want the pull request %s", w.PRURL, prOf(it))
+	}
+
+	released := h.eventsOf(it.ID, domain.EventReleased)
+	if r, _ := released[len(released)-1].Data["reason"].(string); !strings.Contains(r, "waiting for CI on "+appKey+"@"+headSHA) {
+		t.Errorf("released for %q; want waiting for CI on the pull request's head", r)
+	}
+
+	h.expectNoMergeTried(t, it.ID)
+
+	h.step(t) // the wait is open: the claim skips the item
+	h.expectHeld(t, it.ID, headSHA, 1, 1)
+	h.expectNoMergeTried(t, it.ID)
+
+	h.endCI(t, headSHA, checksOf(ports.CheckPassed, ports.CheckFinished))
+	h.step(t)
+
+	h.expectPosition(t, it.ID, isDone)
+
+	if m := h.codehost.Merges(); len(m) != 1 || m[0].URL != prOf(it) {
+		t.Errorf("merges = %+v; want %s merged once", m, prOf(it))
+	}
+
+	if n := len(h.worker.Runs()); n != 1 {
+		t.Errorf("%d runs; want the held run only", n)
+	}
+}
+
+// When CI on the pull request's head fails, the merging gate whose run pushed nothing runs
+// again with the failing checks in its CI section, its next approval is held in round 2, and
+// past the station's rounds the item blocks for a person without a merge.
+func TestCIHold_MergeWithoutPushFailedRunsAgain(t *testing.T) {
+	t.Parallel()
+
+	h, p := holdHarness(t, holdLine(domain.ActionMerge, 2))
+	it := h.at(t, h.submit(t, domain.NewItem{Title: "a"}), stReview, domain.StateQueued)
+	h.codehost.Add(prFrom(prOf(it), it))
+	p.set(it.ID, stReview, ok(`{"decision":"approve","pull_request":"`+prOf(it)+`"}`))
+
+	h.step(t)
+	h.expectHeld(t, it.ID, headSHA, 1, 1)
+	h.endCI(t, headSHA, failing)
+
+	h.step(t)
+
+	section := h.ciSectionOf(t, 1)
+	for _, want := range []string{headSHA, prOf(it), string(domain.CIFailed), "e2e: failed", "shard (3/12)"} {
+		if !strings.Contains(section, want) {
+			t.Errorf("CI section lacks %q:\n%s", want, section)
+		}
+	}
+
+	h.expectHeld(t, it.ID, headSHA, 2, 2)
+	h.expectNoMergeTried(t, it.ID)
+	h.endCI(t, headSHA, failing)
+
+	h.step(t)
+
+	h.expectPosition(t, it.ID, domain.Position{Station: stReview, State: domain.StateBlocked})
+	h.expectNoMergeTried(t, it.ID)
+
+	blocked := h.eventsOf(it.ID, domain.EventBlocked)
+	if len(blocked) != 1 {
+		t.Fatalf("%d blocked events; want 1", len(blocked))
+	}
+
+	if reason, _ := blocked[0].Data["reason"].(string); !strings.Contains(reason, "2 rounds") || !strings.Contains(reason, "e2e") {
+		t.Errorf("block reason %q; want the rounds and the failing check", reason)
+	}
+}

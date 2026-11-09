@@ -91,8 +91,8 @@
   // Platform secrets only (AGENTS.md rule 7): Terraform's goal-production-<NAME>, in the store of
   // `terraform output secrets_store_id`; each container gets those deploy/terraform/secrets.tf's
   // secret_consumers give it (src/env.ts). The database URLs follow spec 4 §5.12: port 5432,
-  // verify-full (with sslrootcert=system and pool_max_conns=8 for goald, whose 4 listeners
-  // and up to 4 lock connections are outside that pool, beside migrations' 2).
+  // verify-full (with sslrootcert=system and pool_max_conns=14 for goald, whose listening
+  // connection and lock connection are outside that pool, beside auth's 4 and migrations' 2).
   "secrets_store_secrets": [
     { "binding": "GOAL_MASTER_KEYS", "store_id": "c495e044e49147dcb6f4cde9b282ec17", "secret_name": "goal-production-GOAL_MASTER_KEYS" },
     { "binding": "GOAL_GATEWAY_KEY", "store_id": "c495e044e49147dcb6f4cde9b282ec17", "secret_name": "goal-production-GOAL_GATEWAY_KEY" },

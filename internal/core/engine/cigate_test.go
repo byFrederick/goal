@@ -281,3 +281,33 @@ func TestCIGate_StationWithoutWaitForUnchanged(t *testing.T) {
 		t.Errorf("Checks calls = %+v; want none", calls)
 	}
 }
+
+// An open pull request of the item in a repository its runs never pushed to is waited on at its
+// current head, with its URL, before the run starts.
+func TestCIGate_PullRequestWithoutPushWaits(t *testing.T) {
+	t.Parallel()
+
+	h := newCIGateHarness(t, ciLine())
+	h.codehost.Add(openPR(prURL))
+	it := h.atReview(t, `{"pull_request": "`+prURL+`"}`)
+
+	h.step(t)
+
+	h.expectWaitingBeforeRun(t, it.ID, headSHA)
+
+	if open := h.openWaits(t, it.ID); open[0].PRURL != prURL {
+		t.Errorf("wait on %q; want the pull request %s", open[0].PRURL, prURL)
+	}
+
+	h.codehost.SetChecks(appRepo, headSHA, checksOf(ports.CheckPassed, ports.CheckFinished))
+	pollCI(t, h.e)
+	h.step(t)
+
+	if n := len(h.worker.Runs()); n != 1 {
+		t.Fatalf("%d runs once CI on the head finished; want 1", n)
+	}
+
+	if section := h.ciSectionOf(t, 0); !strings.Contains(section, headSHA) || !strings.Contains(section, prURL) {
+		t.Errorf("CI section does not name the head %s and the pull request:\n%s", headSHA, section)
+	}
+}
