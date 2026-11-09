@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Environment",
+  "description": "An agent's box, as environments/<name>.yaml.",
+  "type": "object",
+  "required": ["kind", "spec"],
+  "properties": {
+    "kind": { "const": "Environment" },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "size": { "enum": ["small", "large"], "description": "How big the box is." },
+        "tools": { "type": "array", "maxItems": 5, "items": { "type": "string", "minLength": 1 } },
+        "mcp": { "type": "object", "additionalProperties": { "$ref": "#/$defs/server" } }
+      }
+    }
+  },
+  "$defs": {
+    "server": {
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "description": "Remote: the URL." },
+        "command": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      },
+      "oneOf": [{ "required": ["url"] }, { "required": ["command"] }]
+    }
+  }
+}

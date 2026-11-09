@@ -60,12 +60,14 @@ const (
 
 // An entry is one variable of the registry: its name and meaning, never a value.
 type entry struct {
-	Name     string   `yaml:"name"`
-	Readers  []string `yaml:"readers"`
-	Class    string   `yaml:"class"`
-	Required bool     `yaml:"required"`
-	Meaning  string   `yaml:"meaning"`
-	Indirect string   `yaml:"indirect,omitempty"`
+	Name         string   `yaml:"name"`
+	Readers      []string `yaml:"readers"`
+	Class        string   `yaml:"class"`
+	Required     bool     `yaml:"required"`
+	RequiredWhen string   `yaml:"requiredWhen,omitempty"`
+	Default      string   `yaml:"default,omitempty"`
+	Meaning      string   `yaml:"meaning"`
+	Indirect     string   `yaml:"indirect,omitempty"`
 }
 
 type registry struct {

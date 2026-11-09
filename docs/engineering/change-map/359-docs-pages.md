@@ -4,7 +4,7 @@ A CLI command, an API endpoint, a field of the factory definition or a screen: a
 
 ## Also change
 
-Its docs page in `apps/docs/src/content/docs/`: a generated reference page (`reference/cli.md` from `internal/cli`'s usage text, `reference/definition.md` from `contracts/definitions/factory.schema.json`, `reference/environment.md` and `reference/glossary.md` from `docs/reference/`) by running `task docs:ref:gen`, never by hand; the API reference, which the site renders from `contracts/api/openapi.yaml` at build time; or the guide or concept page that describes it
+Its docs page in `apps/docs/src/content/docs/`: a generated reference page (`reference/cli.md` from `internal/cli`'s usage text, `reference/definition.md`, `reference/environment-file.md` and `reference/memory-file.md` from `contracts/definitions/factory.schema.json`, `environment.schema.json` and `memory.schema.json`, `reference/environment.md` and `reference/glossary.md` from `docs/reference/`) by running `task docs:ref:gen`, never by hand; the API reference, which the site renders from `contracts/api/openapi.yaml` at build time; or the guide or concept page that describes it
 
 ## Run
 
