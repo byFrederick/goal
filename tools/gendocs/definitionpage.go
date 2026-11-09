@@ -851,9 +851,10 @@ func (s definitionSchema) writeFields(b *strings.Builder, n *node, depth int, se
 	return nil
 }
 
-// renderDefinitionPage renders the factory definition reference from the schema's JSON: one
-// section per top-level field, each with its fields nested below it.
-func renderDefinitionPage(raw []byte) (string, error) {
+// renderSchemaPage renders p from its schema's JSON: one section per top-level field, each with
+// its fields nested below it. A schema whose root is an array, such as memory.yaml's, has the
+// fields of its entries as the top-level ones.
+func renderSchemaPage(raw []byte, p schemaPage) (string, error) {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
 
@@ -862,25 +863,38 @@ func renderDefinitionPage(raw []byte) (string, error) {
 		return "", err
 	}
 
-	if root.get("properties") == nil {
-		return "", fmt.Errorf("%w: no top-level properties", errSchema)
-	}
-
 	s := definitionSchema{defs: root.get("$defs")}
 
 	var b strings.Builder
 
-	b.WriteString(pageHead("Factory definition reference",
-		"Every field of a factory definition, with its type, whether it is required, its default and what it means.", definitionSource))
+	b.WriteString(pageHead(p.title, p.description, p.source))
 
 	if d := root.str("description"); d != "" {
 		b.WriteString(escapeProse(d) + "\n\n")
 	}
 
+	object := root
+	if root.str("type") == "array" {
+		if object, _, err = s.resolve(root.get("items")); err != nil {
+			return "", err
+		}
+
+		list := "The file is a list"
+		if bound := bounds(root, root); bound != "" {
+			list += " (" + bound + ")"
+		}
+
+		b.WriteString(list + ", and each entry has the fields below.\n\n")
+	}
+
+	if object.get("properties") == nil {
+		return "", fmt.Errorf("%w: no top-level properties", errSchema)
+	}
+
 	b.WriteString("Fields are listed in the schema's order, each nested under the field that holds it. " +
 		"The fields under an array are those of each of its elements, and the fields under a map are those of each of its values.\n")
 
-	top, err := s.fields(root, nil)
+	top, err := s.fields(object, nil)
 	if err != nil {
 		return "", err
 	}

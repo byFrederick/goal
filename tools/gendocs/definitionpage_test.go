@@ -6,6 +6,9 @@ import (
 	"testing"
 )
 
+// testSchemaPage is the head of the pages the fixtures here render.
+var testSchemaPage = schemaPage{title: "Test reference", description: "A test schema's fields.", source: "test.schema.json"}
+
 // renderFixture renders a definition page from a schema whose one top-level field, spec, holds
 // the given properties and, after them, the given schema keys (allOf, oneOf, $defs entries…).
 func renderFixture(t *testing.T, props, extra string) string {
@@ -13,7 +16,7 @@ func renderFixture(t *testing.T, props, extra string) string {
 
 	schema := `{"properties": {"spec": {"type": "object", "properties": {` + props + `}` + extra + `}}}`
 
-	page, err := renderDefinitionPage([]byte(schema))
+	page, err := renderSchemaPage([]byte(schema), testSchemaPage)
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -137,9 +140,9 @@ func TestDefinitionPage_RendersRulesInsideAConditionalVariant(t *testing.T) {
 func TestDefinitionPage_RuleItCannotDeriveFails(t *testing.T) {
 	t.Parallel()
 
-	_, err := renderDefinitionPage([]byte(`{"properties": {"spec": {"type": "object",
+	_, err := renderSchemaPage([]byte(`{"properties": {"spec": {"type": "object",
 		"properties": {"kind": {"enum": ["agent"]}, "gate": {"type": "object"}},
-		"allOf": [{"if": {"required": ["action"]}, "then": {"required": ["gate"]}}]}}}`))
+		"allOf": [{"if": {"required": ["action"]}, "then": {"required": ["gate"]}}]}}}`), testSchemaPage)
 
 	if !errors.Is(err, errSchema) {
 		t.Fatalf("want errSchema, got %v", err)
@@ -147,5 +150,37 @@ func TestDefinitionPage_RuleItCannotDeriveFails(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "spec: allOf[0]") {
 		t.Errorf("want the error to name the rule's path, got %v", err)
+	}
+}
+
+func TestDefinitionPage_RendersArrayRoot(t *testing.T) {
+	t.Parallel()
+
+	page, err := renderSchemaPage([]byte(`{"description": "A list of facts.", "type": "array", "maxItems": 50,
+		"items": {"type": "object", "required": ["text"], "properties": {
+			"text": {"type": "string", "minLength": 1, "description": "One fact."},
+			"from": {"type": "array", "items": {"type": "string"}}}}}`), testSchemaPage)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+
+	assertLines(t, page,
+		"title: Test reference",
+		"A list of facts.",
+		"The file is a list (at most 50 items), and each entry has the fields below.",
+		"## text",
+		"string, at least 1 character, required. One fact.",
+		"## from",
+		"array of string.",
+	)
+}
+
+func TestDefinitionPage_RootWithoutFieldsFails(t *testing.T) {
+	t.Parallel()
+
+	for _, schema := range []string{`{"type": "string"}`, `{"type": "array", "items": {"type": "string"}}`} {
+		if _, err := renderSchemaPage([]byte(schema), testSchemaPage); !errors.Is(err, errSchema) {
+			t.Errorf("render %s: want errSchema, got %v", schema, err)
+		}
 	}
 }
