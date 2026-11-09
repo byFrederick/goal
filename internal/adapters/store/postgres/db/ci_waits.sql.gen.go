@@ -112,6 +112,75 @@ func (q *Queries) CIWaitsAt(ctx context.Context, arg CIWaitsAtParams) ([]CIWaits
 	return items, nil
 }
 
+const cIWaitsOfKeys = `-- name: CIWaitsOfKeys :many
+SELECT w.id, w.org_id, w.item_id, w.station, w.visit, w.host, w.repo, w.sha, w.pr_url, w.phase, w.round, w.held, w.started_at, w.ended_at, w.outcome, p.org_id, p.host, p.repo, p.sha, p.next_poll_at, p.interval_seconds, p.etag, p.checks, p.first_check_seen_at, p.last_error, p.lease_owner, p.lease_until, p.first_polled_at
+FROM (SELECT unnest($1::uuid[]) AS item_id, unnest($2::text[]) AS station) k
+JOIN ci_waits w ON w.item_id = k.item_id AND w.station = k.station
+JOIN ci_polls p ON p.org_id = w.org_id AND p.host = w.host AND p.repo = w.repo AND p.sha = w.sha
+ORDER BY w.item_id, w.station, w.started_at, w.visit, w.repo, w.id
+`
+
+type CIWaitsOfKeysParams struct {
+	ItemIds  []uuid.UUID
+	Stations []string
+}
+
+type CIWaitsOfKeysRow struct {
+	CiWait CiWait
+	CiPoll CiPoll
+}
+
+// CIWaitsAt for each (item, station) pair of the two arrays, zipped, in one read: what the board reads for
+// its waiting cards. By pair, then as CIWaitsAt orders them.
+func (q *Queries) CIWaitsOfKeys(ctx context.Context, arg CIWaitsOfKeysParams) ([]CIWaitsOfKeysRow, error) {
+	rows, err := q.db.Query(ctx, cIWaitsOfKeys, arg.ItemIds, arg.Stations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CIWaitsOfKeysRow
+	for rows.Next() {
+		var i CIWaitsOfKeysRow
+		if err := rows.Scan(
+			&i.CiWait.ID,
+			&i.CiWait.OrgID,
+			&i.CiWait.ItemID,
+			&i.CiWait.Station,
+			&i.CiWait.Visit,
+			&i.CiWait.Host,
+			&i.CiWait.Repo,
+			&i.CiWait.Sha,
+			&i.CiWait.PrUrl,
+			&i.CiWait.Phase,
+			&i.CiWait.Round,
+			&i.CiWait.Held,
+			&i.CiWait.StartedAt,
+			&i.CiWait.EndedAt,
+			&i.CiWait.Outcome,
+			&i.CiPoll.OrgID,
+			&i.CiPoll.Host,
+			&i.CiPoll.Repo,
+			&i.CiPoll.Sha,
+			&i.CiPoll.NextPollAt,
+			&i.CiPoll.IntervalSeconds,
+			&i.CiPoll.Etag,
+			&i.CiPoll.Checks,
+			&i.CiPoll.FirstCheckSeenAt,
+			&i.CiPoll.LastError,
+			&i.CiPoll.LeaseOwner,
+			&i.CiPoll.LeaseUntil,
+			&i.CiPoll.FirstPolledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const endCIWaits = `-- name: EndCIWaits :execrows
 UPDATE ci_waits SET ended_at = $1, outcome = $2
 WHERE id = ANY($3::uuid[]) AND ended_at IS NULL

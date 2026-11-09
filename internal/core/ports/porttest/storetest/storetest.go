@@ -111,6 +111,7 @@ func suiteCases() []suiteCase {
 		{"ListItems_NewestFirstFilteredAndPaged", testListItems},
 		{"SearchItems_MatchesTitleAndNumber", testSearchItems},
 		{"Assemblies_PartsInNumberOrder", testAssembliesPartsInNumberOrder},
+		{"Assemblies_WithIntegrationBranch", testAssembliesWithIntegrationBranch},
 		{"IntegrationBranch_SetOnceAndSticky", testIntegrationBranchSetOnceAndSticky},
 		{"IntegrationBranch_AssemblyLandsAtItsStation", testIntegrationBranchAssemblyLandsAtItsStation},
 		{"IntegrationBranch_NoDonePartOrCancelClosesAsToday", testIntegrationBranchNoDonePartOrCancelClosesAsToday},
@@ -136,6 +137,7 @@ func suiteCases() []suiteCase {
 		{"OrgSpend_UsageByAgentAndStationAndBoxSize", testOrgSpendUsage},
 		{"EachAgentModelSpend_ByFactoryAgentAndModelUpToMax", testEachAgentModelSpend},
 		{"ClaimNext_OrgAndFactorySlotCaps", testSlotCaps},
+		{"FactoryLeases_EveryStationByStationThenSlot", testFactoryLeases},
 		{"Concurrent_ClaimsNeverExceedTheOrgCap", testConcurrentClaimsCapped},
 		{"ItemSpans_FollowEveryTransition", testSpansFollowEveryTransition},
 		{"ItemSpans_OnlyOnChangeAndOnlyTheOrgs", testSpansOnlyOnChangeAndOnlyTheOrgs},
@@ -164,18 +166,22 @@ func suiteCases() []suiteCase {
 		{"OrgTouches_EachFactoryAndTheirTotal", testOrgTouches},
 		{"LabelTouch_OnTheNamingEventOnly", testLabelTouch},
 		{"Touches_NeedAnOrgAndSeeOnlyItsItems", testTouchesTenancy},
-		{"SavedViews_SharedFirstThenOwnByName", testSavedViewsListOrderAndVisibility},
-		{"SavedViews_NameTakenPerOwnerOrFactory", testSavedViewsNameTaken},
-		{"SavedViews_UpdateAndDelete", testSavedViewsUpdateAndDelete},
-		{"SavedViews_OtherOrgSeesNothing", testSavedViewsOtherOrgSeesNothing},
 		{"OpenToolApprovals_ByConnection", testOpenToolApprovals},
 	}
 	tests = append(append(append(tests, jonahTests...), fileTests...), startTests...)
 	tests = append(append(append(tests, triesTests...), keptTestsTests...), graderChecksTests...)
 	tests = append(append(append(tests, followUpsTests...), followUpFilingTests...), repositoriesTests...)
-	tests = append(append(tests, baseCommitTests...), ciWaitsTests...)
+	tests = append(append(append(tests, baseCommitTests...), ciWaitsTests...), savedViewsTests...)
 
 	return tests
+}
+
+// savedViewsTests are the cases of the saved views.
+var savedViewsTests = []suiteCase{
+	{"SavedViews_SharedFirstThenOwnByName", testSavedViewsListOrderAndVisibility},
+	{"SavedViews_NameTakenPerOwnerOrFactory", testSavedViewsNameTaken},
+	{"SavedViews_UpdateAndDelete", testSavedViewsUpdateAndDelete},
+	{"SavedViews_OtherOrgSeesNothing", testSavedViewsOtherOrgSeesNothing},
 }
 
 // Run runs the suite. Tests run in parallel and call newHarness once each; every harness must

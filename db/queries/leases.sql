@@ -18,6 +18,11 @@ RETURNING *;
 -- name: StationLeases :many
 SELECT * FROM leases WHERE factory_id = $1 AND station = $2 ORDER BY slot;
 
+-- name: LeasesOfFactory :many
+-- Every lease of the factory, as StationLeases reads them station by station: what the board's
+-- cards and lanes read once per request.
+SELECT * FROM leases WHERE factory_id = $1 ORDER BY station, slot;
+
 -- name: HeartbeatLease :one
 -- acquired_at fences the lease: a holder whose claim was requeued and re-claimed matches nothing.
 UPDATE leases SET heartbeat_at = sqlc.arg(heartbeat_at), expires_at = sqlc.arg(expires_at)

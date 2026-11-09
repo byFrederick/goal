@@ -293,6 +293,8 @@ type Assembly struct {
 	ID     ItemID
 	Number int64
 	Title  string
+	// IntegrationBranch is the assembly's integration branch; "" in mode trunk (Item's).
+	IntegrationBranch string
 	// Parts are in number order.
 	Parts []Part
 }

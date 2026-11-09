@@ -182,6 +182,10 @@ type Store interface {
 	// Leases returns the live leases held at a station; their slots are the station's WIP.
 	Leases(ctx context.Context, factory domain.FactoryID, station string) ([]domain.Lease, error)
 
+	// FactoryLeases returns the live leases held at every station of a factory, by station then
+	// slot: what Leases returns for each station, in one read.
+	FactoryLeases(ctx context.Context, factory domain.FactoryID) ([]domain.Lease, error)
+
 	// ClaimNext takes the next waiting item at c.Station in pull order (FOR UPDATE SKIP
 	// LOCKED), sets it in_progress, inserts a lease on c.Slot and appends a claimed event.
 	// It returns ErrOrgFull or ErrFactoryFull when the organization's or the factory's leases
@@ -400,8 +404,8 @@ type Store interface {
 	SearchItems(ctx context.Context, q ItemSearch) ([]domain.Item, error)
 
 	// Assemblies returns, by id, those of ids that are items of the factory with parts (items
-	// whose ParentID they are), each with every one of its parts in number order, wherever they
-	// are. Ids of items without parts or of another factory's items are absent.
+	// whose ParentID they are), each with its integration branch and every one of its parts in
+	// number order, wherever they are. Ids of items without parts or of another factory's items are absent.
 	Assemblies(ctx context.Context, factory domain.FactoryID, ids []domain.ItemID) (map[domain.ItemID]domain.Assembly, error)
 
 	// StationLoads returns the load of every station of a factory that has open items: how
@@ -520,6 +524,10 @@ type Store interface {
 	// CIWaits returns the item's CI waits at station, open and ended, by start, each with its
 	// poll's latest state. An unknown item has none.
 	CIWaits(ctx context.Context, item domain.ItemID, station string) ([]domain.CIWaitRecord, error)
+
+	// CIWaitsOf returns what CIWaits returns for each of keys, in one read, by key; a key with no
+	// waits is absent.
+	CIWaitsOf(ctx context.Context, keys []domain.CIWaitKey) (map[domain.CIWaitKey][]domain.CIWaitRecord, error)
 
 	// OpenCIWaitsOnPoll returns the organization's open CI waits on key's host, repository and
 	// sha, by start: every wait one poll of that commit decides.

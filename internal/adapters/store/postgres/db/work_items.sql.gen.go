@@ -28,7 +28,7 @@ func (q *Queries) AddItemCost(ctx context.Context, arg AddItemCostParams) error 
 
 const assemblyParts = `-- name: AssemblyParts :many
 SELECT a.id AS assembly_id, a.number AS assembly_number, a.title AS assembly_title,
-       p.id, p.number, p.station, p.state
+       a.integration_branch AS assembly_integration_branch, p.id, p.number, p.station, p.state
 FROM work_items p
 JOIN work_items a ON a.id = p.parent_id
 WHERE p.parent_id = ANY ($1::uuid[]) AND p.part_key IS NOT NULL AND a.factory_id = $2
@@ -41,18 +41,19 @@ type AssemblyPartsParams struct {
 }
 
 type AssemblyPartsRow struct {
-	AssemblyID     uuid.UUID
-	AssemblyNumber int64
-	AssemblyTitle  string
-	ID             uuid.UUID
-	Number         int64
-	Station        string
-	State          string
+	AssemblyID                uuid.UUID
+	AssemblyNumber            int64
+	AssemblyTitle             string
+	AssemblyIntegrationBranch *string
+	ID                        uuid.UUID
+	Number                    int64
+	Station                   string
+	State                     string
 }
 
 // The parts of those of the factory's items among ids that have any (work_items_parent_id_idx),
-// each with its assembly's number and title, by assembly then part number. A part is a child
-// with a part_key, as Parts counts them (ADR 0012).
+// each with its assembly's number, title and integration branch, by assembly then part number. A
+// part is a child with a part_key, as Parts counts them (ADR 0012).
 func (q *Queries) AssemblyParts(ctx context.Context, arg AssemblyPartsParams) ([]AssemblyPartsRow, error) {
 	rows, err := q.db.Query(ctx, assemblyParts, arg.Ids, arg.FactoryID)
 	if err != nil {
@@ -66,6 +67,7 @@ func (q *Queries) AssemblyParts(ctx context.Context, arg AssemblyPartsParams) ([
 			&i.AssemblyID,
 			&i.AssemblyNumber,
 			&i.AssemblyTitle,
+			&i.AssemblyIntegrationBranch,
 			&i.ID,
 			&i.Number,
 			&i.Station,
