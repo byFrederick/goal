@@ -274,9 +274,14 @@
                 "description": "stdio: give the sidecar outbound network access (Docker's default bridge; host.docker.internal is the host). Without it the sidecar has no network at all, which suits servers that only work on their stdio. Servers that browse, call APIs or reach a database need it."
               }
             },
-            "oneOf": [
-              { "properties": { "transport": { "const": "http" } }, "required": ["url"] },
-              { "properties": { "transport": { "const": "stdio" } }, "anyOf": [ { "required": ["image"] }, { "required": ["command"] } ] }
+            "allOf": [
+              {
+                "description": "An mcp connection over http needs url; one over stdio needs image or command.",
+                "oneOf": [
+                  { "properties": { "transport": { "const": "http" } }, "required": ["url"] },
+                  { "properties": { "transport": { "const": "stdio" } }, "anyOf": [ { "required": ["image"] }, { "required": ["command"] } ] }
+                ]
+              }
             ]
           }
         },
@@ -608,6 +613,7 @@
       "allOf": [
         { "if": { "properties": { "kind": { "const": "agent" } } }, "then": { "oneOf": [ { "required": ["agent"] }, { "required": ["route"] } ] } },
         {
+          "description": "A station with action is a human station, or an agent station with a gate.",
           "if": { "required": ["action"] },
           "then": {
             "oneOf": [
