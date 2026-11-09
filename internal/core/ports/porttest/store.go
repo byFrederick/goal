@@ -459,6 +459,31 @@ func (s *Store) SetStart(ctx context.Context, id domain.ItemID, from domain.Posi
 	return clone(it), nil
 }
 
+// FactoryLeases implements ports.Store.
+func (s *Store) FactoryLeases(ctx context.Context, factory domain.FactoryID) ([]domain.Lease, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := []domain.Lease{}
+
+	for _, l := range s.leases {
+		if _, ok := s.visible(l.ItemID, org); ok && l.FactoryID == factory {
+			out = append(out, l)
+		}
+	}
+
+	slices.SortFunc(out, func(a, b domain.Lease) int {
+		return cmp.Or(cmp.Compare(a.Station, b.Station), cmp.Compare(a.Slot, b.Slot))
+	})
+
+	return out, nil
+}
+
 // Leases implements ports.Store.
 func (s *Store) Leases(ctx context.Context, factory domain.FactoryID, station string) ([]domain.Lease, error) {
 	org, err := orgOf(ctx)
@@ -1210,6 +1235,31 @@ func (s *Store) ItemEvents(ctx context.Context, id domain.ItemID, after int64, l
 
 		if e.ItemID == id && e.ID > after {
 			out = append(out, e)
+		}
+	}
+
+	return out, nil
+}
+
+// AskEvents implements ports.Store.
+func (s *Store) AskEvents(ctx context.Context, ids []domain.ItemID) (map[domain.ItemID][]domain.Event, error) {
+	org, err := orgOf(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := map[domain.ItemID][]domain.Event{}
+
+	for _, e := range s.events {
+		if !slices.Contains(ids, e.ItemID) || !slices.Contains(domain.AskKinds, e.Kind) {
+			continue
+		}
+
+		if _, ok := s.visible(e.ItemID, org); ok {
+			out[e.ItemID] = append(out[e.ItemID], e)
 		}
 	}
 

@@ -139,7 +139,7 @@ func (s *Store) Assemblies(ctx context.Context, factory domain.FactoryID, ids []
 
 		a, ok := out[id]
 		if !ok {
-			a = domain.Assembly{ID: id, Number: r.AssemblyNumber, Title: r.AssemblyTitle}
+			a = domain.Assembly{ID: id, Number: r.AssemblyNumber, Title: r.AssemblyTitle, IntegrationBranch: deref(r.AssemblyIntegrationBranch)}
 		}
 
 		a.Parts = append(a.Parts, domain.Part{

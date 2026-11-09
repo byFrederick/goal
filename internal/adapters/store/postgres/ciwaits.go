@@ -239,6 +239,43 @@ func (s *Store) CIWaits(ctx context.Context, item domain.ItemID, station string)
 	return out, nil
 }
 
+// CIWaitsOf implements ports.Store. Keys whose item is not a UUID name no item, which has none.
+func (s *Store) CIWaitsOf(ctx context.Context, keys []domain.CIWaitKey) (map[domain.CIWaitKey][]domain.CIWaitRecord, error) {
+	out := map[domain.CIWaitKey][]domain.CIWaitRecord{}
+	seen := map[domain.CIWaitKey]bool{}
+
+	var arg db.CIWaitsOfKeysParams
+
+	for _, k := range keys {
+		if seen[k] || !isUUID(string(k.Item)) {
+			continue
+		}
+
+		seen[k] = true
+		arg.ItemIds, arg.Stations = append(arg.ItemIds, uuid.MustParse(string(k.Item))), append(arg.Stations, k.Station)
+	}
+
+	if len(arg.ItemIds) == 0 {
+		return out, nil
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.CIWaitsOfKeysRow, error) {
+		return q.CIWaitsOfKeys(ctx, arg)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ci waits of %d items: %w", len(arg.ItemIds), err)
+	}
+
+	for _, r := range rows {
+		w := ciWaitFrom(r.CiWait)
+		w.Poll = ciPollFrom(r.CiPoll)
+		k := domain.CIWaitKey{Item: w.Item, Station: w.Station}
+		out[k] = append(out[k], w)
+	}
+
+	return out, nil
+}
+
 // OpenCIWaitsOnPoll implements ports.Store.
 func (s *Store) OpenCIWaitsOnPoll(ctx context.Context, key domain.CIPollKey) ([]domain.CIWaitRecord, error) {
 	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.CiWait, error) {

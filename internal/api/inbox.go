@@ -94,6 +94,21 @@ func (w workInbox) itemEntries(ctx context.Context, byID map[domain.FactoryID]*c
 		byFactory[a.Item.FactoryID] = append(byFactory[a.Item.FactoryID], a)
 	}
 
+	// Only an item waiting for a person may have an open question or tool approval: their events
+	// are read in one query for all of them.
+	var waiting []domain.ItemID
+
+	for _, a := range items {
+		if a.Item.State == domain.StateWaitingHuman {
+			waiting = append(waiting, a.Item.ID)
+		}
+	}
+
+	asks, err := w.s.items.AskEvents(ctx, waiting)
+	if err != nil {
+		return nil, err
+	}
+
 	out := make([]gen.InboxEntry, 0, len(items))
 
 	for id, list := range byFactory {
@@ -111,18 +126,7 @@ func (w workInbox) itemEntries(ctx context.Context, byID map[domain.FactoryID]*c
 		}
 
 		for i, a := range list {
-			var (
-				q  *gen.ItemQuestion
-				ta *gen.ToolApproval
-			)
-
-			// Only an item waiting for a person may have an open question or tool approval.
-			if a.Item.State == domain.StateWaitingHuman {
-				if q, ta, err = w.s.openAsks(ctx, a.Item.ID); err != nil {
-					return nil, err
-				}
-			}
-
+			q, ta := asksOf(asks[a.Item.ID])
 			out = append(out, itemEntry(f, l, a, cards[i], q, ta))
 		}
 	}
