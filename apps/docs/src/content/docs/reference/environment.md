@@ -13,68 +13,68 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 
 | Name | Class | Required | Default | Meaning |
 | --- | --- | --- | --- | --- |
-| `AWS_REGION` | config | no |  | The object storage bucket's region (auto on R2). |
+| `AWS_REGION` | config | no |  | The object storage bucket's region (auto on R2). Unset, goald and the CLI take the AWS profile's region, else us-east-1; the tasks use us-east-1. |
 | `CLAUDE_CODE_OAUTH_TOKEN` | secret | no |  | Retired: a factory's model key, a secret, replaces it; goald ignores it and warns while it is set. |
 | `GOAL_AGENT_EGRESS` | config | no |  | Retired: compose's goal-egress service replaced it; goald ignores it and warns while it is set. |
-| `GOAL_AGENT_IMAGE` | config | no |  | The image every run's sandbox runs (goal-agent); a factory's runtime.image is ignored. |
-| `GOAL_ALLOW_PRIVATE_UPSTREAMS` | config | no |  | true lets environment and repository tests, merges, knowledge sources and the conversion API reach this machine's and the LAN's servers; refused unless goald listens on loopback. |
-| `GOAL_AUTH` | config | no |  | session (the default) turns sign-in on; none makes every request the single local user, on loopback only. |
-| `GOAL_AUTH_EMAIL` | config | no |  | off turns email sign-in codes and all mail off; it needs GOAL_AUTH_GOOGLE=on. |
-| `GOAL_AUTH_GOOGLE` | config | no |  | on also offers sign-in with Google, with GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. |
+| `GOAL_AGENT_IMAGE` | config | no | `ghcr.io/byfrederick/goal-agent:0.2.0` | The image every run's sandbox runs (goal-agent); a factory's runtime.image is ignored. |
+| `GOAL_ALLOW_PRIVATE_UPSTREAMS` | config | no | `false` | true lets environment and repository tests, merges, knowledge sources and the conversion API reach this machine's and the LAN's servers; refused unless goald listens on loopback. |
+| `GOAL_AUTH` | config | no | `session` | session (the default) turns sign-in on; none makes every request the single local user, on loopback only. |
+| `GOAL_AUTH_EMAIL` | config | no | `on` | off turns email sign-in codes and all mail off; it needs GOAL_AUTH_GOOGLE=on. |
+| `GOAL_AUTH_GOOGLE` | config | no | `off` | on also offers sign-in with Google, with GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. |
 | `GOAL_AUTH_PROXY_SECRET` | secret | goald under GOAL_AUTH=session |  | The secret goald sends with every request it forwards to the auth service, which refuses any other; goal up generates one per start. |
-| `GOAL_AUTH_UPSTREAM` | config | no |  | Where goald's /api/auth proxy reaches the auth service. |
+| `GOAL_AUTH_UPSTREAM` | config | no | `http://127.0.0.1:8081` | Where goald's /api/auth proxy reaches the auth service. |
 | `GOAL_DATABASE_URL` | secret | no |  | goald's PostgreSQL URL, as goal_app under row-level security; by default compose's database with GOAL_PG_APP_PASSWORD. |
 | `GOAL_DEFAULT_AGENT_IMAGE` | config | no |  | Retired: GOAL_AGENT_IMAGE replaced it; goald ignores it and warns while it is set. |
-| `GOAL_DEFINITION_CACHE_BYTES` | config | no |  | How many bytes of no-longer-current factory definition files goald keeps for the runs pinned to them. |
+| `GOAL_DEFINITION_CACHE_BYTES` | config | no | `67108864` | How many bytes of no-longer-current factory definition files goald keeps for the runs pinned to them. |
 | `GOAL_DOCS_DIR` | config | no |  | The docs site's build (apps/docs/dist/docs) that goald serves read-only at /docs; unset, /docs is 404. goal up sets it when the build exists; on Cloudflare the control Worker's assets serve the docs instead. |
 | `GOAL_EGRESS_ADDRESSES` | public | no |  | The addresses agents' traffic leaves the install from, comma-separated CIDRs, shown on the organization's models and policies screen; empty by default. |
 | `GOAL_EGRESS_IMAGE` | config | no |  | Retired: compose's goal-egress service replaced it; goald ignores it and warns while it is set. |
 | `GOAL_EGRESS_NAME` | config | no |  | Retired: compose's goal-egress service replaced it; goald ignores it and warns while it is set. |
 | `GOAL_GATEWAY_KEY` | secret | goald always; the CLI only reads it when set |  | Signs the per-task MCP gateway tokens; at least 32 bytes, and it never reaches a task. |
-| `GOAL_GATEWAY_KEY_REF` | config | no |  | The Secrets reference that names the gateway key (env:GOAL_GATEWAY_KEY by default). |
-| `GOAL_GATEWAY_LISTEN` | config | no |  | The gateway's own listener, serving only /mcp and /run; required when GOAL_LISTEN is off loopback. |
+| `GOAL_GATEWAY_KEY_REF` | config | no | `env:GOAL_GATEWAY_KEY` | The Secrets reference that names the gateway key (env:GOAL_GATEWAY_KEY by default). |
+| `GOAL_GATEWAY_LISTEN` | config | no |  | The gateway's own listener, serving only /mcp and /run; required when GOAL_LISTEN is off loopback. Unset, GOAL_LISTEN serves the gateway too. |
 | `GOAL_GATEWAY_URL` | config | the worker always (goald fills it in from its listeners) |  | The MCP gateway's URL: for goald it defaults from the listeners; the worker needs it to fetch its run's bundle. |
 | `GOAL_GITHUB_API_URL` | config | no |  | Retired: a repository's code host gives its API; goald ignores it and warns while it is set. |
 | `GOAL_GITHUB_TOKEN` | secret | no |  | Retired: a factory's repository.token, a secret, replaces it; goald ignores it and warns while it is set. |
 | `GOAL_GITHUB_WEB_URL` | config | no |  | Retired: the repository's URL gives its host; goald ignores it and warns while it is set. |
-| `GOAL_JONAH_REVIEW_EVERY` | config | no |  | How often goald queues the daily Jonah reviews that are due and runs the queued reviews. 1m when unset. |
-| `GOAL_JONAH_REVIEW_LEASE_MARGIN` | config | no |  | How long a Jonah review's lease lasts beyond its run's time limit; a review whose goald died is taken again once the lease ends. 5m when unset. |
-| `GOAL_JONAH_REVIEW_TIMEOUT` | config | no |  | The time limit of one Jonah review run. 30m when unset. |
-| `GOAL_JONAH_TRIES_PER_FACTORY` | config | no |  | How many of a factory's tries of past items run at once, on every goald together. 2 when unset. |
-| `GOAL_JONAH_TRY_EVERY` | config | no |  | How often goald queues the tries of past items of Jonah's proposals and runs the queued tries. 1m when unset. |
-| `GOAL_JONAH_TRY_LEASE_MARGIN` | config | no |  | How long a try's lease lasts beyond its run's time limit; a try whose goald died is taken again once the lease ends. 5m when unset. |
-| `GOAL_JONAH_TRY_TIMEOUT` | config | no |  | The time limit of one try of a past item. 30m when unset. |
+| `GOAL_JONAH_REVIEW_EVERY` | config | no | `1m` | How often goald queues the daily Jonah reviews that are due and runs the queued reviews. 1m when unset. |
+| `GOAL_JONAH_REVIEW_LEASE_MARGIN` | config | no | `5m` | How long a Jonah review's lease lasts beyond its run's time limit; a review whose goald died is taken again once the lease ends. 5m when unset. |
+| `GOAL_JONAH_REVIEW_TIMEOUT` | config | no | `30m` | The time limit of one Jonah review run. 30m when unset. |
+| `GOAL_JONAH_TRIES_PER_FACTORY` | config | no | `2` | How many of a factory's tries of past items run at once, on every goald together. 2 when unset. |
+| `GOAL_JONAH_TRY_EVERY` | config | no | `1m` | How often goald queues the tries of past items of Jonah's proposals and runs the queued tries. 1m when unset. |
+| `GOAL_JONAH_TRY_LEASE_MARGIN` | config | no | `5m` | How long a try's lease lasts beyond its run's time limit; a try whose goald died is taken again once the lease ends. 5m when unset. |
+| `GOAL_JONAH_TRY_TIMEOUT` | config | no | `30m` | The time limit of one try of a past item. 30m when unset. |
 | `GOAL_KB_WORKERS` | config | no | `2` | How many knowledge sources one goald syncs at once (0: none). |
 | `GOAL_LEGACY_IMPORT` | config | no |  | Retired: the legacy import is gone; goald ignores it and warns while it is set. |
 | `GOAL_LISTEN` | config | no | `127.0.0.1:8080` | goald's address for the API, the UI and, without GOAL_GATEWAY_LISTEN, the gateway. |
-| `GOAL_LOG_FORMAT` | config | no |  | goald's log format: json or text. |
-| `GOAL_LOG_LEVEL` | config | no |  | goald's log level: debug, info, warn or error. |
+| `GOAL_LOG_FORMAT` | config | no |  | goald's log format: json or text. goald defaults to json; goal up and compose give goald text. |
+| `GOAL_LOG_LEVEL` | config | no | `info` | goald's log level: debug, info, warn or error. |
 | `GOAL_MASTER_KEYS` | secret | goald once a secret or connection is sealed under a key, unless GOAL_MASTER_KEY_FILE holds it |  | The keys that seal the organizations' secrets in PostgreSQL, &lt;id&gt;:&lt;base64 of 32 bytes&gt;, comma-separated, the first active. |
 | `GOAL_MASTER_KEY_FILE` | config | no |  | A file of master keys, one per line and mode 0600, used instead of GOAL_MASTER_KEYS. |
-| `GOAL_MAX_RUNS` | config | no |  | How many agent runs one goald runs at once, shared fairly across organizations (0: no cap). |
+| `GOAL_MAX_RUNS` | config | no | `0` | How many agent runs one goald runs at once, shared fairly across organizations (0: no cap). |
 | `GOAL_MIGRATE_DATABASE_URL` | secret | no |  | The PostgreSQL URL migrations run with, as goal_owner; by default compose's database with GOAL_PG_OWNER_PASSWORD. |
-| `GOAL_MODELS` | public | no |  | The models the factory editor offers, comma-separated, as id or id=Label; the first is the default. |
+| `GOAL_MODELS` | public | no | `claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5` | The models the factory editor offers, comma-separated, as id or id=Label; the first is the default. |
 | `GOAL_ORG_RETENTION` | config | no | `7d` | How long a deleted organization's rows and bucket objects are kept before they are purged: a Go duration or a number of days. |
 | `GOAL_PG_APP_PASSWORD` | secret | no |  | The goal_app role's password, which goal db init sets and goald's default database URL uses. |
 | `GOAL_PG_OWNER_PASSWORD` | secret | no |  | The goal_owner role's password, which goal db init sets and the default migration URL uses. |
-| `GOAL_PUBLIC_URL` | public | no |  | The one origin people open goald at; sign-in links and cookies follow it. Required when GOAL_LISTEN is off loopback. |
-| `GOAL_REFRESH_EVERY` | config | no |  | How often goald reconciles the current factory definition versions with PostgreSQL, a safety net behind the notices that reload them at once (default 30s). |
+| `GOAL_PUBLIC_URL` | public | no |  | The one origin people open goald at; sign-in links and cookies follow it. Required when GOAL_LISTEN is off loopback. goald and the CLI default it to http://&lt;GOAL_LISTEN&gt; on loopback; the auth service and compose to http://127.0.0.1:8080. |
+| `GOAL_REFRESH_EVERY` | config | no | `30s` | How often goald reconciles the current factory definition versions with PostgreSQL, a safety net behind the notices that reload them at once (default 30s). |
 | `GOAL_RUN_DIR` | config | no |  | Retired: a run's sandbox holds its workspace; goald ignores it and warns while it is set. |
 | `GOAL_S3_ACCESS_KEY` | secret | no |  | The object storage access key. |
-| `GOAL_S3_BUCKET` | config | yes |  | The bucket that holds factory definition blobs and the catalogs. |
-| `GOAL_S3_ENDPOINT` | config | no |  | The S3-compatible endpoint of the bucket (RustFS locally, R2 on Cloudflare); unset, AWS S3. |
+| `GOAL_S3_BUCKET` | config | yes |  | The bucket that holds factory definition blobs and the catalogs; the tasks default it to goal-local. |
+| `GOAL_S3_ENDPOINT` | config | no |  | The S3-compatible endpoint of the bucket (RustFS locally, R2 on Cloudflare); unset, goald and the CLI use AWS S3, and the tasks http://127.0.0.1:9000. |
 | `GOAL_S3_SECRET_KEY` | secret | no |  | The object storage secret key. |
-| `GOAL_SANDBOX` | config | no |  | Where runs' sandboxes run: docker (the default) or cloudflare, which the control Worker sets. |
+| `GOAL_SANDBOX` | config | no | `docker` | Where runs' sandboxes run: docker (the default) or cloudflare, which the control Worker sets. |
 | `GOAL_SANDBOX_KEY` | secret | no |  | The bearer goald's calls to the control Worker's sandbox API carry; required with GOAL_SANDBOX=cloudflare. |
-| `GOAL_SANDBOX_NETWORK` | config | no |  | The Docker network agent containers run on, reaching out only through goal-egress. |
+| `GOAL_SANDBOX_NETWORK` | config | no | `goal_agents` | The Docker network agent containers run on, reaching out only through goal-egress. |
 | `GOAL_SANDBOX_URL` | config | no |  | The control Worker's sandbox API, which goald calls with GOAL_SANDBOX=cloudflare. |
-| `GOAL_SMTP_FROM` | public | no |  | The sender of sign-in codes, invitations and notification email. |
-| `GOAL_SMTP_PLAINTEXT` | config | no |  | on sends mail unencrypted, allowed only to compose's Mailpit; off loopback smtp:// must otherwise offer STARTTLS. |
+| `GOAL_SMTP_FROM` | public | no | `Goal <goal@localhost>` | The sender of sign-in codes, invitations and notification email. |
+| `GOAL_SMTP_PLAINTEXT` | config | no | `off` | on sends mail unencrypted, allowed only to compose's Mailpit; off loopback smtp:// must otherwise offer STARTTLS. |
 | `GOAL_SMTP_URL` | secret | no |  | Where sign-in codes, invitations and notification email are mailed, with user:password for a real server; the auth service defaults to compose's Mailpit, and goald sends no email while it is unset. |
 | `GOAL_TASK_ENV` | config | no |  | Retired: a run's model comes from its factory's runtime.modelKey and its environment files; goald ignores it and warns while it is set. |
 | `GOAL_TICK_EVERY` | config | no | `5s` | How often goald's engine moves work along. |
-| `GOAL_TRUSTED_PROXIES` | config | no |  | CIDRs of the proxies in front of goald whose X-Forwarded-For names the client; the control Worker sets it. |
-| `GOAL_UPLOAD_MAX_BYTES` | config | no |  | The largest file that may be uploaded to the knowledge base, in bytes. |
+| `GOAL_TRUSTED_PROXIES` | config | no |  | CIDRs of the proxies in front of goald whose X-Forwarded-For names the client; the control Worker sets it. Unset, goald believes no proxy. |
+| `GOAL_UPLOAD_MAX_BYTES` | config | no | `26214400` | The largest file that may be uploaded to the knowledge base, in bytes. |
 | `GOAL_WORKERS_AI_KEY` | secret | no |  | The bearer token of Workers AI, which converts uploaded PDF and Office files to Markdown for knowledge sources. |
 | `GOAL_WORKERS_AI_URL` | config | no |  | The account's Workers AI API root (https://api.cloudflare.com/client/v4/accounts/&lt;id&gt;/ai); set, goald converts PDF and Office files, and unset, it refuses them. |
 | `GOAL_WORKSPACE_ROOT` | config | no |  | Retired: a run's sandbox holds its workspace; goald ignores it and warns while it is set. |
@@ -83,31 +83,31 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 
 | Name | Class | Required | Default | Meaning |
 | --- | --- | --- | --- | --- |
-| `GOAL_EGRESS_GATEWAY` | config | no |  | goald's gateway listener as goal-egress reaches it; goal up derives it from GOAL_GATEWAY_URL or the listener. |
+| `GOAL_EGRESS_GATEWAY` | config | no |  | goald's gateway listener as goal-egress reaches it; goal up derives it from GOAL_GATEWAY_URL or the listener, and compose defaults it to http://host.docker.internal:8080. Unset, goal-egress serves no gateway. |
 
 ## The goal CLI (`cmd/goal`)
 
 | Name | Class | Required | Default | Meaning |
 | --- | --- | --- | --- | --- |
-| `AWS_REGION` | config | no |  | The object storage bucket's region (auto on R2). |
+| `AWS_REGION` | config | no |  | The object storage bucket's region (auto on R2). Unset, goald and the CLI take the AWS profile's region, else us-east-1; the tasks use us-east-1. |
 | `BETTER_AUTH_SECRET` | secret | no |  | The auth service's secret for session signing and token encryption; it or BETTER_AUTH_SECRETS is required under sign-in. |
 | `BETTER_AUTH_SECRETS` | secret | no |  | Versioned auth service secrets, newest first (2:&lt;new&gt;,1:&lt;old&gt;), used instead of BETTER_AUTH_SECRET to rotate it. |
 | `BROWSER` | config | no |  | The program, with its arguments, that goal login opens the sign-in page with instead of the system's URL opener. |
 | `GOAL_API_KEY` | secret | no |  | An API key (goal_sk_) or personal token (goal_pat_) the CLI acts with instead of a goal login session. |
-| `GOAL_API_URL` | config | no |  | Where the goal CLI finds goald. |
-| `GOAL_AUTH` | config | no |  | session (the default) turns sign-in on; none makes every request the single local user, on loopback only. |
+| `GOAL_API_URL` | config | no |  | Where the goal CLI finds goald; unset, the URL in the CLI's config, else http://127.0.0.1:8080. |
+| `GOAL_AUTH` | config | no | `session` | session (the default) turns sign-in on; none makes every request the single local user, on loopback only. |
 | `GOAL_AUTH_DATABASE_URL` | secret | no |  | The auth service's PostgreSQL URL, as the goal_auth role; by default compose's database with GOAL_PG_AUTH_PASSWORD. |
 | `GOAL_AUTH_PROXY_SECRET` | secret | goald under GOAL_AUTH=session |  | The secret goald sends with every request it forwards to the auth service, which refuses any other; goal up generates one per start. |
 | `GOAL_BOOTSTRAP_OWNER_EMAIL` | config | no |  | The first owner's address: until someone signs in it is the only one that may, and becomes platform admin; goal up requires it under sign-in. |
 | `GOAL_DATABASE_ADMIN_URL` | secret | no |  | The bootstrap superuser's PostgreSQL URL that goal db init creates the roles with; by default compose's superuser. |
 | `GOAL_DATABASE_URL` | secret | no |  | goald's PostgreSQL URL, as goal_app under row-level security; by default compose's database with GOAL_PG_APP_PASSWORD. |
 | `GOAL_DOCS_DIR` | config | no |  | The docs site's build (apps/docs/dist/docs) that goald serves read-only at /docs; unset, /docs is 404. goal up sets it when the build exists; on Cloudflare the control Worker's assets serve the docs instead. |
-| `GOAL_EGRESS_GATEWAY` | config | no |  | goald's gateway listener as goal-egress reaches it; goal up derives it from GOAL_GATEWAY_URL or the listener. |
+| `GOAL_EGRESS_GATEWAY` | config | no |  | goald's gateway listener as goal-egress reaches it; goal up derives it from GOAL_GATEWAY_URL or the listener, and compose defaults it to http://host.docker.internal:8080. Unset, goal-egress serves no gateway. |
 | `GOAL_GATEWAY_KEY` | secret | goald always; the CLI only reads it when set |  | Signs the per-task MCP gateway tokens; at least 32 bytes, and it never reaches a task. |
-| `GOAL_GATEWAY_LISTEN` | config | no |  | The gateway's own listener, serving only /mcp and /run; required when GOAL_LISTEN is off loopback. |
+| `GOAL_GATEWAY_LISTEN` | config | no |  | The gateway's own listener, serving only /mcp and /run; required when GOAL_LISTEN is off loopback. Unset, GOAL_LISTEN serves the gateway too. |
 | `GOAL_GATEWAY_URL` | config | the worker always (goald fills it in from its listeners) |  | The MCP gateway's URL: for goald it defaults from the listeners; the worker needs it to fetch its run's bundle. |
 | `GOAL_LISTEN` | config | no | `127.0.0.1:8080` | goald's address for the API, the UI and, without GOAL_GATEWAY_LISTEN, the gateway. |
-| `GOAL_LOG_FORMAT` | config | no |  | goald's log format: json or text. |
+| `GOAL_LOG_FORMAT` | config | no |  | goald's log format: json or text. goald defaults to json; goal up and compose give goald text. |
 | `GOAL_MASTER_KEYS` | secret | goald once a secret or connection is sealed under a key, unless GOAL_MASTER_KEY_FILE holds it |  | The keys that seal the organizations' secrets in PostgreSQL, &lt;id&gt;:&lt;base64 of 32 bytes&gt;, comma-separated, the first active. |
 | `GOAL_MASTER_KEY_FILE` | config | no |  | A file of master keys, one per line and mode 0600, used instead of GOAL_MASTER_KEYS. |
 | `GOAL_MIGRATE_DATABASE_URL` | secret | no |  | The PostgreSQL URL migrations run with, as goal_owner; by default compose's database with GOAL_PG_OWNER_PASSWORD. |
@@ -116,17 +116,17 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_PG_AUTH_PASSWORD` | secret | no |  | The goal_auth role's password, which goal db init sets and the auth service's default database URL uses. |
 | `GOAL_PG_OWNER_PASSWORD` | secret | no |  | The goal_owner role's password, which goal db init sets and the default migration URL uses. |
 | `GOAL_PG_PASSWORD` | secret | no |  | The local PostgreSQL bootstrap superuser's password, used only by goal db init to create the roles. |
-| `GOAL_PUBLIC_URL` | public | no |  | The one origin people open goald at; sign-in links and cookies follow it. Required when GOAL_LISTEN is off loopback. |
+| `GOAL_PUBLIC_URL` | public | no |  | The one origin people open goald at; sign-in links and cookies follow it. Required when GOAL_LISTEN is off loopback. goald and the CLI default it to http://&lt;GOAL_LISTEN&gt; on loopback; the auth service and compose to http://127.0.0.1:8080. |
 | `GOAL_S3_ACCESS_KEY` | secret | no |  | The object storage access key. |
-| `GOAL_S3_BUCKET` | config | yes |  | The bucket that holds factory definition blobs and the catalogs. |
-| `GOAL_S3_ENDPOINT` | config | no |  | The S3-compatible endpoint of the bucket (RustFS locally, R2 on Cloudflare); unset, AWS S3. |
+| `GOAL_S3_BUCKET` | config | yes |  | The bucket that holds factory definition blobs and the catalogs; the tasks default it to goal-local. |
+| `GOAL_S3_ENDPOINT` | config | no |  | The S3-compatible endpoint of the bucket (RustFS locally, R2 on Cloudflare); unset, goald and the CLI use AWS S3, and the tasks http://127.0.0.1:9000. |
 | `GOAL_S3_SECRET_KEY` | secret | no |  | The object storage secret key. |
 | `GOAL_SKILLS_DIRECTORY_TOKEN` | secret | no |  | The bearer token of the skills directory API, which only goal catalog skills sync --search needs. |
-| `GOAL_SKILLS_DIRECTORY_URL` | config | no |  | The skills directory goal catalog skills sync reads. |
-| `GOAL_SKILLS_GITHUB_API_URL` | config | no |  | The GitHub API goal catalog skills sync reads skills from. |
+| `GOAL_SKILLS_DIRECTORY_URL` | config | no | `https://skills.sh` | The skills directory goal catalog skills sync reads. |
+| `GOAL_SKILLS_GITHUB_API_URL` | config | no | `https://api.github.com` | The GitHub API goal catalog skills sync reads skills from. |
 | `GOAL_SKILLS_GITHUB_TOKEN` | secret | no |  | An optional GitHub token for goal catalog skills sync, which raises GitHub's rate limit. |
 | `HOME` | config | no |  | The user's home, under which the CLI keeps its config when XDG_CONFIG_HOME is unset. |
-| `XDG_CONFIG_HOME` | config | no |  | Where the CLI keeps its config and goal up the Mailpit UI password (default ~/.config). |
+| `XDG_CONFIG_HOME` | config | no | `$HOME/.config` | Where the CLI keeps its config and goal up the Mailpit UI password (default ~/.config). |
 
 ## The auth service (`apps/auth`)
 
@@ -137,15 +137,15 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `BETTER_AUTH_TRUSTED_ORIGINS` | config | no |  | Must stay unset: the auth service refuses to start while it is set, since GOAL_PUBLIC_URL is the only trusted origin. |
 | `BETTER_AUTH_URL` | public | no |  | Left unset; when set it must equal GOAL_PUBLIC_URL. |
 | `GOAL_AUTH_DATABASE_URL` | secret | no |  | The auth service's PostgreSQL URL, as the goal_auth role; by default compose's database with GOAL_PG_AUTH_PASSWORD. |
-| `GOAL_AUTH_EMAIL` | config | no |  | off turns email sign-in codes and all mail off; it needs GOAL_AUTH_GOOGLE=on. |
-| `GOAL_AUTH_GOOGLE` | config | no |  | on also offers sign-in with Google, with GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. |
-| `GOAL_AUTH_LISTEN` | config | no |  | The auth service's address, on loopback only; goald's /api/auth proxy is the way in. |
+| `GOAL_AUTH_EMAIL` | config | no | `on` | off turns email sign-in codes and all mail off; it needs GOAL_AUTH_GOOGLE=on. |
+| `GOAL_AUTH_GOOGLE` | config | no | `off` | on also offers sign-in with Google, with GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. |
+| `GOAL_AUTH_LISTEN` | config | no | `127.0.0.1:8081` | The auth service's address, on loopback only; goald's /api/auth proxy is the way in. |
 | `GOAL_AUTH_PROXY_SECRET` | secret | goald under GOAL_AUTH=session |  | The secret goald sends with every request it forwards to the auth service, which refuses any other; goal up generates one per start. |
 | `GOAL_BOOTSTRAP_OWNER_EMAIL` | config | no |  | The first owner's address: until someone signs in it is the only one that may, and becomes platform admin; goal up requires it under sign-in. |
 | `GOAL_PG_AUTH_PASSWORD` | secret | no |  | The goal_auth role's password, which goal db init sets and the auth service's default database URL uses. |
-| `GOAL_PUBLIC_URL` | public | no |  | The one origin people open goald at; sign-in links and cookies follow it. Required when GOAL_LISTEN is off loopback. |
-| `GOAL_SMTP_FROM` | public | no |  | The sender of sign-in codes, invitations and notification email. |
-| `GOAL_SMTP_PLAINTEXT` | config | no |  | on sends mail unencrypted, allowed only to compose's Mailpit; off loopback smtp:// must otherwise offer STARTTLS. |
+| `GOAL_PUBLIC_URL` | public | no |  | The one origin people open goald at; sign-in links and cookies follow it. Required when GOAL_LISTEN is off loopback. goald and the CLI default it to http://&lt;GOAL_LISTEN&gt; on loopback; the auth service and compose to http://127.0.0.1:8080. |
+| `GOAL_SMTP_FROM` | public | no | `Goal <goal@localhost>` | The sender of sign-in codes, invitations and notification email. |
+| `GOAL_SMTP_PLAINTEXT` | config | no | `off` | on sends mail unencrypted, allowed only to compose's Mailpit; off loopback smtp:// must otherwise offer STARTTLS. |
 | `GOAL_SMTP_URL` | secret | no |  | Where sign-in codes, invitations and notification email are mailed, with user:password for a real server; the auth service defaults to compose's Mailpit, and goald sends no email while it is unset. |
 | `GOOGLE_CLIENT_ID` | secret | no |  | The Google OAuth client's id, for sign-in with Google. |
 | `GOOGLE_CLIENT_SECRET` | secret | no |  | The Google OAuth client's secret, for sign-in with Google. |
@@ -157,42 +157,42 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_FEEDBACK` | config | no |  | The reviewer's feedback on an earlier attempt, which the agent's task prompt includes. |
 | `GOAL_GATEWAY_TOKEN` | secret | yes |  | The run's gateway token, which the worker fetches its bundle and reaches the MCP gateway with. |
 | `GOAL_GATEWAY_URL` | config | the worker always (goald fills it in from its listeners) |  | The MCP gateway's URL: for goald it defaults from the listeners; the worker needs it to fetch its run's bundle. |
-| `GOAL_GIT_ATTEMPT_TIMEOUT` | config | no |  | The time limit in seconds of each attempt of a network git step in goal-agent prepare (the clone, the base branch's push and fetch); a cut-off attempt is retried. 300 when unset. |
+| `GOAL_GIT_ATTEMPT_TIMEOUT` | config | no | `300` | The time limit in seconds of each attempt of a network git step in goal-agent prepare (the clone, the base branch's push and fetch); a cut-off attempt is retried. 300 when unset. |
 
 ## The control Worker (`apps/control-worker`, its vars and Secrets Store bindings in `deploy/cloudflare/wrangler.jsonc`)
 
 | Name | Class | Required | Default | Meaning |
 | --- | --- | --- | --- | --- |
-| `AWS_REGION` | config | no |  | The object storage bucket's region (auto on R2). |
+| `AWS_REGION` | config | no |  | The object storage bucket's region (auto on R2). Unset, goald and the CLI take the AWS profile's region, else us-east-1; the tasks use us-east-1. |
 | `BETTER_AUTH_SECRET` | secret | no |  | The auth service's secret for session signing and token encryption; it or BETTER_AUTH_SECRETS is required under sign-in. |
 | `BETTER_AUTH_SECRETS` | secret | no |  | Versioned auth service secrets, newest first (2:&lt;new&gt;,1:&lt;old&gt;), used instead of BETTER_AUTH_SECRET to rotate it. |
-| `GOAL_AGENT_IMAGE` | config | no |  | The image every run's sandbox runs (goal-agent); a factory's runtime.image is ignored. |
-| `GOAL_AUTH` | config | no |  | session (the default) turns sign-in on; none makes every request the single local user, on loopback only. |
+| `GOAL_AGENT_IMAGE` | config | no | `ghcr.io/byfrederick/goal-agent:0.2.0` | The image every run's sandbox runs (goal-agent); a factory's runtime.image is ignored. |
+| `GOAL_AUTH` | config | no | `session` | session (the default) turns sign-in on; none makes every request the single local user, on loopback only. |
 | `GOAL_AUTH_DATABASE_URL` | secret | no |  | The auth service's PostgreSQL URL, as the goal_auth role; by default compose's database with GOAL_PG_AUTH_PASSWORD. |
-| `GOAL_AUTH_EMAIL` | config | no |  | off turns email sign-in codes and all mail off; it needs GOAL_AUTH_GOOGLE=on. |
-| `GOAL_AUTH_GOOGLE` | config | no |  | on also offers sign-in with Google, with GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. |
+| `GOAL_AUTH_EMAIL` | config | no | `on` | off turns email sign-in codes and all mail off; it needs GOAL_AUTH_GOOGLE=on. |
+| `GOAL_AUTH_GOOGLE` | config | no | `off` | on also offers sign-in with Google, with GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. |
 | `GOAL_AUTH_PROXY_SECRET` | secret | goald under GOAL_AUTH=session |  | The secret goald sends with every request it forwards to the auth service, which refuses any other; goal up generates one per start. |
 | `GOAL_BOOTSTRAP_OWNER_EMAIL` | config | no |  | The first owner's address: until someone signs in it is the only one that may, and becomes platform admin; goal up requires it under sign-in. |
 | `GOAL_DATABASE_URL` | secret | no |  | goald's PostgreSQL URL, as goal_app under row-level security; by default compose's database with GOAL_PG_APP_PASSWORD. |
 | `GOAL_EGRESS_ADDRESSES` | public | no |  | The addresses agents' traffic leaves the install from, comma-separated CIDRs, shown on the organization's models and policies screen; empty by default. |
 | `GOAL_GATEWAY_KEY` | secret | goald always; the CLI only reads it when set |  | Signs the per-task MCP gateway tokens; at least 32 bytes, and it never reaches a task. |
 | `GOAL_KB_WORKERS` | config | no | `2` | How many knowledge sources one goald syncs at once (0: none). |
-| `GOAL_LOG_FORMAT` | config | no |  | goald's log format: json or text. |
-| `GOAL_LOG_LEVEL` | config | no |  | goald's log level: debug, info, warn or error. |
+| `GOAL_LOG_FORMAT` | config | no |  | goald's log format: json or text. goald defaults to json; goal up and compose give goald text. |
+| `GOAL_LOG_LEVEL` | config | no | `info` | goald's log level: debug, info, warn or error. |
 | `GOAL_MASTER_KEYS` | secret | goald once a secret or connection is sealed under a key, unless GOAL_MASTER_KEY_FILE holds it |  | The keys that seal the organizations' secrets in PostgreSQL, &lt;id&gt;:&lt;base64 of 32 bytes&gt;, comma-separated, the first active. |
-| `GOAL_MAX_RUNS` | config | no |  | How many agent runs one goald runs at once, shared fairly across organizations (0: no cap). |
+| `GOAL_MAX_RUNS` | config | no | `0` | How many agent runs one goald runs at once, shared fairly across organizations (0: no cap). |
 | `GOAL_MIGRATE_DATABASE_URL` | secret | no |  | The PostgreSQL URL migrations run with, as goal_owner; by default compose's database with GOAL_PG_OWNER_PASSWORD. |
-| `GOAL_MODELS` | public | no |  | The models the factory editor offers, comma-separated, as id or id=Label; the first is the default. |
+| `GOAL_MODELS` | public | no | `claude-opus-5-5,claude-sonnet-5-5,claude-haiku-5-5` | The models the factory editor offers, comma-separated, as id or id=Label; the first is the default. |
 | `GOAL_ORG_RETENTION` | config | no | `7d` | How long a deleted organization's rows and bucket objects are kept before they are purged: a Go duration or a number of days. |
-| `GOAL_PUBLIC_URL` | public | no |  | The one origin people open goald at; sign-in links and cookies follow it. Required when GOAL_LISTEN is off loopback. |
+| `GOAL_PUBLIC_URL` | public | no |  | The one origin people open goald at; sign-in links and cookies follow it. Required when GOAL_LISTEN is off loopback. goald and the CLI default it to http://&lt;GOAL_LISTEN&gt; on loopback; the auth service and compose to http://127.0.0.1:8080. |
 | `GOAL_S3_ACCESS_KEY` | secret | no |  | The object storage access key. |
-| `GOAL_S3_BUCKET` | config | yes |  | The bucket that holds factory definition blobs and the catalogs. |
-| `GOAL_S3_ENDPOINT` | config | no |  | The S3-compatible endpoint of the bucket (RustFS locally, R2 on Cloudflare); unset, AWS S3. |
+| `GOAL_S3_BUCKET` | config | yes |  | The bucket that holds factory definition blobs and the catalogs; the tasks default it to goal-local. |
+| `GOAL_S3_ENDPOINT` | config | no |  | The S3-compatible endpoint of the bucket (RustFS locally, R2 on Cloudflare); unset, goald and the CLI use AWS S3, and the tasks http://127.0.0.1:9000. |
 | `GOAL_S3_SECRET_KEY` | secret | no |  | The object storage secret key. |
 | `GOAL_SANDBOX_KEY` | secret | no |  | The bearer goald's calls to the control Worker's sandbox API carry; required with GOAL_SANDBOX=cloudflare. |
-| `GOAL_SMTP_FROM` | public | no |  | The sender of sign-in codes, invitations and notification email. |
+| `GOAL_SMTP_FROM` | public | no | `Goal <goal@localhost>` | The sender of sign-in codes, invitations and notification email. |
 | `GOAL_SMTP_URL` | secret | no |  | Where sign-in codes, invitations and notification email are mailed, with user:password for a real server; the auth service defaults to compose's Mailpit, and goald sends no email while it is unset. |
-| `GOAL_UPLOAD_MAX_BYTES` | config | no |  | The largest file that may be uploaded to the knowledge base, in bytes. |
+| `GOAL_UPLOAD_MAX_BYTES` | config | no | `26214400` | The largest file that may be uploaded to the knowledge base, in bytes. |
 | `GOAL_WORKERS_AI_KEY` | secret | no |  | The bearer token of Workers AI, which converts uploaded PDF and Office files to Markdown for knowledge sources. |
 | `GOAL_WORKERS_AI_URL` | config | no |  | The account's Workers AI API root (https://api.cloudflare.com/client/v4/accounts/&lt;id&gt;/ai); set, goald converts PDF and Office files, and unset, it refuses them. |
 | `GOOGLE_CLIENT_ID` | secret | no |  | The Google OAuth client's id, for sign-in with Google. |
@@ -204,47 +204,47 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | --- | --- | --- | --- | --- |
 | `BETTER_AUTH_SECRET` | secret | no |  | The auth service's secret for session signing and token encryption; it or BETTER_AUTH_SECRETS is required under sign-in. |
 | `BETTER_AUTH_SECRETS` | secret | no |  | Versioned auth service secrets, newest first (2:&lt;new&gt;,1:&lt;old&gt;), used instead of BETTER_AUTH_SECRET to rotate it. |
-| `GOAL_AUTH_GOOGLE` | config | no |  | on also offers sign-in with Google, with GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. |
+| `GOAL_AUTH_GOOGLE` | config | no | `off` | on also offers sign-in with Google, with GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. |
 | `GOAL_AUTH_PROXY_SECRET` | secret | goald under GOAL_AUTH=session |  | The secret goald sends with every request it forwards to the auth service, which refuses any other; goal up generates one per start. |
 | `GOAL_BOOTSTRAP_OWNER_EMAIL` | config | no |  | The first owner's address: until someone signs in it is the only one that may, and becomes platform admin; goal up requires it under sign-in. |
-| `GOAL_DOCKER_GID` | config | no |  | The Docker socket's group on Linux, which goald's container joins under goal up --compose. |
+| `GOAL_DOCKER_GID` | config | no | `0` | The Docker socket's group on Linux, which goald's container joins under goal up --compose. |
 | `GOAL_DOCS_DIR` | config | no |  | The docs site's build (apps/docs/dist/docs) that goald serves read-only at /docs; unset, /docs is 404. goal up sets it when the build exists; on Cloudflare the control Worker's assets serve the docs instead. |
-| `GOAL_EGRESS_GATEWAY` | config | no |  | goald's gateway listener as goal-egress reaches it; goal up derives it from GOAL_GATEWAY_URL or the listener. |
-| `GOAL_LOG_FORMAT` | config | no |  | goald's log format: json or text. |
+| `GOAL_EGRESS_GATEWAY` | config | no |  | goald's gateway listener as goal-egress reaches it; goal up derives it from GOAL_GATEWAY_URL or the listener, and compose defaults it to http://host.docker.internal:8080. Unset, goal-egress serves no gateway. |
+| `GOAL_LOG_FORMAT` | config | no |  | goald's log format: json or text. goald defaults to json; goal up and compose give goald text. |
 | `GOAL_PG_APP_PASSWORD` | secret | no |  | The goal_app role's password, which goal db init sets and goald's default database URL uses. |
 | `GOAL_PG_AUTH_PASSWORD` | secret | no |  | The goal_auth role's password, which goal db init sets and the auth service's default database URL uses. |
 | `GOAL_PG_OWNER_PASSWORD` | secret | no |  | The goal_owner role's password, which goal db init sets and the default migration URL uses. |
 | `GOAL_PG_PASSWORD` | secret | no |  | The local PostgreSQL bootstrap superuser's password, used only by goal db init to create the roles. |
-| `GOAL_PUBLIC_URL` | public | no |  | The one origin people open goald at; sign-in links and cookies follow it. Required when GOAL_LISTEN is off loopback. |
+| `GOAL_PUBLIC_URL` | public | no |  | The one origin people open goald at; sign-in links and cookies follow it. Required when GOAL_LISTEN is off loopback. goald and the CLI default it to http://&lt;GOAL_LISTEN&gt; on loopback; the auth service and compose to http://127.0.0.1:8080. |
 | `GOAL_S3_ACCESS_KEY` | secret | no |  | The object storage access key. |
 | `GOAL_S3_SECRET_KEY` | secret | no |  | The object storage secret key. |
-| `GOAL_SANDBOX_NETWORK` | config | no |  | The Docker network agent containers run on, reaching out only through goal-egress. |
-| `GOAL_SMTP_FROM` | public | no |  | The sender of sign-in codes, invitations and notification email. |
+| `GOAL_SANDBOX_NETWORK` | config | no | `goal_agents` | The Docker network agent containers run on, reaching out only through goal-egress. |
+| `GOAL_SMTP_FROM` | public | no | `Goal <goal@localhost>` | The sender of sign-in codes, invitations and notification email. |
 | `GOOGLE_CLIENT_ID` | secret | no |  | The Google OAuth client's id, for sign-in with Google. |
 | `GOOGLE_CLIENT_SECRET` | secret | no |  | The Google OAuth client's secret, for sign-in with Google. |
 | `HOME` | config | no |  | The user's home, under which the CLI keeps its config when XDG_CONFIG_HOME is unset. |
-| `XDG_CONFIG_HOME` | config | no |  | Where the CLI keeps its config and goal up the Mailpit UI password (default ~/.config). |
+| `XDG_CONFIG_HOME` | config | no | `$HOME/.config` | Where the CLI keeps its config and goal up the Mailpit UI password (default ~/.config). |
 
 ## The Taskfiles (`Taskfile.yml` and the area Taskfiles it includes)
 
 | Name | Class | Required | Default | Meaning |
 | --- | --- | --- | --- | --- |
-| `AWS_REGION` | config | no |  | The object storage bucket's region (auto on R2). |
+| `AWS_REGION` | config | no |  | The object storage bucket's region (auto on R2). Unset, goald and the CLI take the AWS profile's region, else us-east-1; the tasks use us-east-1. |
 | `CLOUDFLARE_ACCOUNT_ID` | config | no |  | The Cloudflare account the Terraform and deploy tasks act on (the operator's environment or CI). |
 | `CLOUDFLARE_API_TOKEN` | secret | no |  | The Cloudflare API token the Terraform and deploy tasks use (the operator's environment or CI). |
 | `GITHUB_ACTIONS` | config | no |  | Set to true by CI; the Terraform tasks then expect GOOGLE_OAUTH_ACCESS_TOKEN instead of the operator's own sign-in. |
 | `GOAL_E2E_MODEL_KEY` | secret | no |  | The model key (an Anthropic API key) that task e2e:secrets gives its factory's runs as the secret model-key; the test skips while it is unset. |
 | `GOAL_E2E_REPOSITORY_TOKEN` | secret | no |  | A fine-grained token for GOAL_E2E_REPOSITORY_URL's repository (contents and pull requests, read and write) that task e2e:secrets stores as the secret repo-token; the test skips while it is unset. |
 | `GOAL_E2E_REPOSITORY_URL` | config | no |  | The private github.com repository that task e2e:secrets runs an item on, used for nothing else: the test pushes and merges branches there and deletes them after; it never writes the default branch. |
-| `GOAL_FACTORIES_DIR` | config | no |  | The local working copy of the factory definitions that the factory tasks read and write, outside this repository. |
+| `GOAL_FACTORIES_DIR` | config | no | `../goal-factories` | The local working copy of the factory definitions that the factory tasks read and write, outside this repository. |
 | `GOAL_S3_ACCESS_KEY` | secret | no |  | The object storage access key. |
-| `GOAL_S3_BUCKET` | config | yes |  | The bucket that holds factory definition blobs and the catalogs. |
-| `GOAL_S3_ENDPOINT` | config | no |  | The S3-compatible endpoint of the bucket (RustFS locally, R2 on Cloudflare); unset, AWS S3. |
+| `GOAL_S3_BUCKET` | config | yes |  | The bucket that holds factory definition blobs and the catalogs; the tasks default it to goal-local. |
+| `GOAL_S3_ENDPOINT` | config | no |  | The S3-compatible endpoint of the bucket (RustFS locally, R2 on Cloudflare); unset, goald and the CLI use AWS S3, and the tasks http://127.0.0.1:9000. |
 | `GOAL_S3_SECRET_KEY` | secret | no |  | The object storage secret key. |
 | `GOAL_TF_STATE_ACCESS_KEY` | secret | no |  | The access key of the R2 bucket that holds the Terraform state. |
 | `GOAL_TF_STATE_SECRET_KEY` | secret | no |  | The secret key of the R2 bucket that holds the Terraform state. |
 | `GOOGLE_OAUTH_ACCESS_TOKEN` | secret | no |  | In CI, the Google access token the Terraform tasks use for the Google provider. |
 | `PLANETSCALE_SERVICE_TOKEN` | secret | no |  | The PlanetScale service token the Terraform tasks use. |
 | `PLANETSCALE_SERVICE_TOKEN_ID` | config | no |  | The id of the PlanetScale service token the Terraform tasks use. |
-| `SOPS_AGE_KEY_FILE` | config | no |  | The operator's age key file, which decrypts the platform secrets under deploy/terraform/secrets/. |
-| `XDG_CONFIG_HOME` | config | no |  | Where the CLI keeps its config and goal up the Mailpit UI password (default ~/.config). |
+| `SOPS_AGE_KEY_FILE` | config | no | `$HOME/.config/sops/age/keys.txt` | The operator's age key file, which decrypts the platform secrets under deploy/terraform/secrets/. |
+| `XDG_CONFIG_HOME` | config | no | `$HOME/.config` | Where the CLI keeps its config and goal up the Mailpit UI password (default ~/.config). |
