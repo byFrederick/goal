@@ -33,12 +33,12 @@ func (d *Digests) userTx(ctx context.Context, fn func(q *db.Queries) error) erro
 }
 
 // digestLock is the session advisory lock key of the digest job, per schema as the schedules' is.
-const digestLock = "SELECT pg_try_advisory_lock(hashtext('goal.notify.digest.' || current_schema()))"
+const digestLock = "hashtext('goal.notify.digest.' || current_schema())"
 
 // WithDigestLock implements ports.Digests. As Intake.WithScheduleLock, the lock is a session
-// advisory lock on a connection of its own (withSessionLock), so a pooler cannot drop it.
+// advisory lock on the store's lock connection (sessionLocks), so a pooler cannot drop it.
 func (d *Digests) WithDigestLock(ctx context.Context, fn func(ctx context.Context) error) (bool, error) {
-	return withSessionLock(ctx, d.s, digestLock, "digest lock", fn)
+	return d.s.locks.with(ctx, digestLock, "digest lock", fn)
 }
 
 // DigestRecipients implements ports.Digests.

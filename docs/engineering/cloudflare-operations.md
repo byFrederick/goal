@@ -91,7 +91,7 @@ Every secret comes from the one place that makes it, and nobody copies one by ha
 
 The master keys stay in SOPS, not `random_password`, on purpose: they must be escrowed outside the state (losing them loses every organization's credentials), they rotate as a list (`k2:<new>,k1:<old>`, then `goal db rekey`), and a generated one would be replaced, with no way back, by any `-replace` or recreation of its resource. Everything else Goal can make again: a lost generated secret is rotated, not recovered.
 
-The URLs follow prototype 4-2 (`modules/database-urls`): port 5432 (never PgBouncer's 6432, which drops notifications and session advisory locks), the PostgreSQL database `goal`, users `<role>.<branch-id>` with the branch id of the administrator's user name, `sslmode=verify-full&sslrootcert=system` for goald and goal db init (pgx; goald's image carries a CA bundle), `sslmode=verify-full` alone for the auth service (node-postgres reads `sslrootcert` as a file), goald's pool capped at `pool_max_conns=8` (Connection budget, below), passwords URL-encoded.
+The URLs follow prototype 4-2 (`modules/database-urls`): port 5432 (never PgBouncer's 6432, which drops notifications and session advisory locks), the PostgreSQL database `goal`, users `<role>.<branch-id>` with the branch id of the administrator's user name, `sslmode=verify-full&sslrootcert=system` for goald and goal db init (pgx; goald's image carries a CA bundle), `sslmode=verify-full` alone for the auth service (node-postgres reads `sslrootcert` as a file), goald's pool capped at `pool_max_conns=14` with idle connections closed after `pool_max_conn_idle_time=5m` (Connection budget, below), passwords URL-encoded.
 
 ### Connection budget
 
@@ -99,22 +99,24 @@ PS-5 has `max_connections = 25` and reserves 3 for superusers, which leaves 22 f
 
 | Holder | Connections | Set in |
 | --- | --- | --- |
-| goald's pool (pgxpool) | 8 | `goald_pool_max_conns` in `deploy/terraform/locals.tf`, sent as `pool_max_conns` in `GOAL_DATABASE_URL` |
-| goald's listeners, held for goald's whole life | 4 | the definition cache and the feed's item, definition and access notices (`cmd/goald/main.go`, `internal/adapters/store/postgres/listener.go`) |
-| goald's lock connections, one per minute loop | up to 4 | schedules, Jonah's review sweep, Jonah's try sweep and the digest (`withSessionLock` in `internal/adapters/store/postgres/intake.go`, `WithDigestLock` in `digests.go`) |
+| goald's pool (pgxpool) | 14 | `goald_pool_max_conns` in `deploy/terraform/locals.tf`, sent as `pool_max_conns` in `GOAL_DATABASE_URL` |
+| goald's listening connection, held while anything listens | 1 | one connection LISTENs for the definition cache and the feed's item, definition and access notices (`listenHub` in `internal/adapters/store/postgres/listener.go`) |
+| goald's lock connection, held from goald's start | 1 | the session advisory locks of the schedules, Jonah's sweeps, the watches and the digest (`sessionLocks` in `internal/adapters/store/postgres/lockconn.go`) |
 | the auth service's pool (pg.Pool) | 4 | `poolMax` in `apps/auth/src/db.ts` |
 | migrations, at goald's start only | 2 | `migrateRequiring` in `internal/adapters/store/postgres/postgres.go` |
 | **Total** | **22** | |
 
-goald's listeners and lock connections are outside its pool: goald opens them from the pool's config with their own connect, so `pool_max_conns` does not cap them. goald therefore holds up to 16 connections, not 8. Migrations finish before the pool fills, so the steady state is 20, which leaves 2 for an operator's session.
+goald's listening and lock connections are outside its pool: goald opens them from the pool's config with their own connect, so `pool_max_conns` does not cap them. goald therefore holds up to 16 connections, not 14; the `db pool` line's `outside_conns` says how many of the two are open. The lock connection takes each loop's lock in turn on one session and refuses a key this goald already holds, and it redials when it is lost, which frees every lock it held. Migrations finish before the pool fills, so the steady state is 20, which leaves 2 for an operator's session.
 
-pgxpool keeps an idle connection for 30 minutes, so after a burst, such as goald's restart after a deploy, its pool stays at or near `max_conns` for half an hour. The signs that the budget is exceeded:
+goald's URL sets `pool_max_conn_idle_time=5m`, so after a burst, such as goald's restart after a deploy, its pool shrinks back within 5 minutes instead of pgxpool's default 30.
+
+The signs that the budget is exceeded:
 
 - goald's `db pool` line ([Slow requests](#slow-requests-pool-starvation-or-a-slow-query), below) shows `total_conns` at or near `max_conns` while `idle_conns` is high.
 - goald's minute loops log `connect: … SQLSTATE 53300`, such as `schedules failed: schedule lock: connect: …`, and the same for `jonah review sweep`, `jonah try sweep` and `notify digest`.
 - The auth container logs `auth.refused` with "remaining connection slots are reserved for roles with the SUPERUSER attribute" and exits; `/api/auth/get-session` answers 503, so nobody can sign in.
 
-A new limit takes effect only when its process starts: goald's when the Worker restarts goald after the URL secret changes (Deploys), auth's when its new image is deployed. Between the Terraform apply and that deploy, a goald that restarts on its own holds the new pool size while auth may still hold an older, larger pool, so dispatch the deploy right after the apply.
+A new limit takes effect only when its process starts: goald's when the Worker restarts goald after the URL secret changes (Deploys), auth's when its new image is deployed. Between the Terraform apply and that deploy, a goald that restarts on its own holds the new pool size while auth may still hold an older, larger pool, so dispatch the deploy right after the apply. A goald image from before the shared listening and lock connections holds up to 8 connections outside its pool, so it must not run with a pool of 14.
 
 *Check:* the PlanetScale dashboard shows the database's open connections, or, as the administrator on the `goal` database:
 
@@ -223,7 +225,7 @@ goald's logs tell the two apart: a request that waited for a database connection
 - **`api request`**, one line per request ([internal/api/accesslog.go](../../internal/api/accesslog.go)), carries two database fields beside `duration_ms`:
   - `queries`: the round trips the request made to PostgreSQL. Every store call is its own transaction, so one call counts at least three (BEGIN with `set_config`, the query, COMMIT).
   - `db_wait_ms`: the total time the request waited for a connection from goald's pool, over all its store calls.
-- **`db pool`**, once a minute ([internal/adapters/store/postgres/poolstats.go](../../internal/adapters/store/postgres/poolstats.go)), is pgxpool's `Stat()` for goald's pool. `acquire_count`, `empty_acquire_count` (acquires that found no idle connection and waited), `canceled_acquire_count` (acquires whose request ended while waiting) and `acquire_duration_ms` (the total time acquires took) count from goald's start, so compare two lines. `acquired_conns`, `idle_conns`, `total_conns` and `max_conns` are the connections at that moment; `max_conns` is `goald_pool_max_conns` in `deploy/terraform/locals.tf`.
+- **`db pool`**, once a minute ([internal/adapters/store/postgres/poolstats.go](../../internal/adapters/store/postgres/poolstats.go)), is pgxpool's `Stat()` for goald's pool. `acquire_count`, `empty_acquire_count` (acquires that found no idle connection and waited), `canceled_acquire_count` (acquires whose request ended while waiting) and `acquire_duration_ms` (the total time acquires took) count from goald's start, so compare two lines. `acquired_conns`, `idle_conns`, `total_conns` and `max_conns` are the connections at that moment; `max_conns` is `goald_pool_max_conns` in `deploy/terraform/locals.tf`. `outside_conns` is how many of goald's two connections outside the pool, the listening and the lock connection, are open (0 to 2), so `total_conns` plus `outside_conns` is all goald holds.
 
 What each pattern means:
 

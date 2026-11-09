@@ -277,17 +277,18 @@ const accessChannel = "goal_access"
 
 var _ ports.AccessNotices = (*AccessNotices)(nil)
 
-// AccessNotices implements ports.AccessNotices with LISTEN goal_access on a connection of its own.
+// AccessNotices implements ports.AccessNotices with LISTEN goal_access on the store's one
+// listening connection (listenHub).
 // A notice is not read back: it only makes listeners end what it names, which is safe to do for
 // a forged one (the client reconnects and is checked again).
 type AccessNotices struct {
 	l listener[ports.AccessNotice]
 }
 
-// NewAccessNotices listens with the connection config of s's pool. log may be nil.
+// NewAccessNotices listens on s's listening connection. log may be nil.
 func NewAccessNotices(s *Store, log *slog.Logger) *AccessNotices {
 	return &AccessNotices{l: listener[ports.AccessNotice]{
-		cfg: s.pool.Config().ConnConfig, log: discardIfNil(log), channels: []string{accessChannel}, name: "access notices",
+		hub: s.listen, log: discardIfNil(log), channels: []string{accessChannel}, name: "access notices",
 		resync: ports.AccessNotice{Resync: true}, decode: accessNoticeFrom,
 		readBack: func(_ context.Context, n ports.AccessNotice) (ports.AccessNotice, bool, error) { return n, true, nil },
 	}}

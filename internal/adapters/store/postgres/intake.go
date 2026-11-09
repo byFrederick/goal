@@ -3,13 +3,11 @@ package postgres
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/byFrederick/goal/internal/adapters/store/postgres/db"
 	"github.com/byFrederick/goal/internal/core/domain"
@@ -524,44 +522,12 @@ func (in *Intake) FailureStreak(ctx context.Context, factory domain.FactoryID, t
 }
 
 // scheduleLock is the session advisory lock key of the schedules, per schema as Migrate's is.
-const scheduleLock = "SELECT pg_try_advisory_lock(hashtext('goal.intake.schedules.' || current_schema()))"
+const scheduleLock = "hashtext('goal.intake.schedules.' || current_schema())"
 
-// WithScheduleLock implements ports.Intake. The lock is a session advisory lock on a connection
-// of its own (withSessionLock).
+// WithScheduleLock implements ports.Intake. The lock is a session advisory lock on the store's
+// lock connection (sessionLocks).
 func (in *Intake) WithScheduleLock(ctx context.Context, fn func(ctx context.Context) error) (bool, error) {
-	return withSessionLock(ctx, in.s, scheduleLock, "schedule lock", fn)
-}
-
-// withSessionLock runs fn when the advisory lock query lock (a pg_try_advisory_lock) takes its
-// lock, and reports whether it did. The lock is taken on a connection of its own, opened from
-// the pool's config and not taken from the pool, straight to PostgreSQL (ADR 0026 decision 4: a
-// pooler that drops session locks must not sit between); closing that connection frees it, even
-// if goald dies while fn runs.
-func withSessionLock(ctx context.Context, s *Store, lock, name string, fn func(ctx context.Context) error) (ran bool, err error) {
-	conn, err := pgx.ConnectConfig(ctx, s.pool.Config().ConnConfig.Copy())
-	if err != nil {
-		return false, fmt.Errorf("%s: connect: %w", name, err)
-	}
-
-	defer func() {
-		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), closeTimeout)
-		defer cancel()
-
-		if cerr := conn.Close(closeCtx); cerr != nil {
-			err = errors.Join(err, fmt.Errorf("%s: close: %w", name, cerr))
-		}
-	}()
-
-	var held bool
-	if err := conn.QueryRow(ctx, lock).Scan(&held); err != nil {
-		return false, fmt.Errorf("%s: %w", name, err)
-	}
-
-	if !held {
-		return false, nil
-	}
-
-	return true, fn(ctx)
+	return in.s.locks.with(ctx, scheduleLock, "schedule lock", fn)
 }
 
 // CreatedSince implements ports.Intake.

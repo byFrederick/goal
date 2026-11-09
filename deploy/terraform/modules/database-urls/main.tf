@@ -6,8 +6,10 @@
 #   sslmode=verify-full&sslrootcert=system;
 # - the auth service (node-postgres) takes sslmode=verify-full alone: it reads sslrootcert as a file
 #   path and verifies against Node's bundled CAs without one;
-# - goald's pool is capped (pool_max_conns, read by pgxpool only); its listeners reuse the pool's
-#   connection settings without the pool parameters, and migrations need no cap.
+# - goald's pool is capped (pool_max_conns, read by pgxpool only) and closes a connection idle for
+#   5 minutes (pool_max_conn_idle_time), so a burst does not keep the whole pool for pgxpool's
+#   default 30; its listening and lock connections reuse the pool's connection settings without
+#   the pool parameters, and migrations need no cap.
 # Passwords are URL-encoded, so whatever the provider generates goes in unchanged.
 locals {
   server = "${var.host}:5432/${var.database}"

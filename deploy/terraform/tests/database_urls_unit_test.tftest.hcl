@@ -14,7 +14,7 @@ variables {
     app   = "app"
     auth  = "auth"
   }
-  goald_pool_max_conns = 8
+  goald_pool_max_conns = 14
 }
 
 run "valid_inputs_pass" {
@@ -27,6 +27,11 @@ run "valid_inputs_pass" {
   assert {
     condition     = output.auth_url == "postgres://goal_auth.br4nch:auth@db.example.com:5432/goal?sslmode=verify-full"
     error_message = "The auth URL names port 5432, database goal and verify-full only."
+  }
+
+  assert {
+    condition     = nonsensitive(output.app_url) == "postgres://goal_app.br4nch:app@db.example.com:5432/goal?sslmode=verify-full&sslrootcert=system&pool_max_conns=14&pool_max_conn_idle_time=5m"
+    error_message = "goald's URL caps its pool and closes connections idle for 5 minutes."
   }
 }
 
