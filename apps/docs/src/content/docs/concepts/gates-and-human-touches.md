@@ -21,7 +21,7 @@ A station has a gate when its `gate` block is set. The gate's agent returns a ve
 
 On approval the item moves on to the next station. On rejection the item goes back to the station named by `board.stations[].gate.onReject`, and its rework count goes up by one. See [rework](/docs/concepts/rework/).
 
-At a station with `waitFor: ci`, an approval whose run pushed commits takes effect only once CI on those commits passes, and a merge on approval waits with it. When CI fails, the gate's agent runs again with the failing checks in its brief. A rejection does not wait for CI. [Wait for CI](/docs/concepts/stations-and-flow/#after-a-run-pushes) explains the hold and its rounds.
+At a station with `waitFor: ci`, an approval whose run pushed commits takes effect only once CI on those commits passes, and a merge on approval waits with it. At a gate with `action: merge`, an approval whose run pushed nothing waits too, on the current head of each pull request the merge takes. When CI fails, the gate's agent runs again with the failing checks in its brief. A rejection does not wait for CI. [Wait for CI](/docs/concepts/stations-and-flow/#after-a-run-pushes) explains the hold and its rounds.
 
 A gate's rejections are limited by `board.stations[].gate.maxRework`, from 0 to 5. When it is omitted, the limit is 0, so the first rejection goes to a person. The limit is compared with the item's total rework count, from every source, not only this gate's rejections. Once the count has reached it, the next rejection leaves the item waiting for a person at the gate's station. A person then approves it or rejects it.
 

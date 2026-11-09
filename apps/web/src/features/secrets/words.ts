@@ -117,9 +117,9 @@ export function reminderText(s: Pick<Secret, 'expires_at' | 'remind_days'>): str
   return `${plural(s.remind_days, 'day')} before, to owners and admins`;
 }
 
-/** The .env or YAML format of a pasted text: YAML when it has the top-level secrets: map, else .env. */
+/** The .env or YAML format of a pasted text: YAML when it has a top-level secrets: map or the older credentials: map, else .env. */
 export function importFormat(text: string): 'env' | 'yaml' {
-  return /^secrets:\s*$/m.test(text) ? 'yaml' : 'env';
+  return /^(?:secrets|credentials):\s*$/m.test(text) ? 'yaml' : 'env';
 }
 
 /** How many names an import writes: the new ones, and the existing ones too when they are replaced. */
