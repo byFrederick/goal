@@ -2,7 +2,8 @@ import pg from 'pg';
 
 /**
  * poolMax is the most connections the auth service holds: its 4 of the 22 PS-5 leaves to Goal,
- * beside goald's 16 and migrations' 2 (docs/engineering/cloudflare-operations.md, Connection budget).
+ * beside goald's pool of 8, its 4 listeners and up to 4 lock connections, and migrations' 2
+ * (docs/engineering/cloudflare-operations.md, Connection budget).
  */
 export const poolMax = 4;
 

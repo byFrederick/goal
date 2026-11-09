@@ -41,10 +41,11 @@ locals {
         branch       = "main"
       }
       postgres_database = "goal"
-      # PS-5 allows 22 connections to Goal (spec 4 §5.12), split as goald's pool and its listeners
-      # 16, the auth service's pool 4 (apps/auth/src/db.ts) and migrations 2 (runbook, Connection
-      # budget).
-      goald_pool_max_conns = 16
+      # PS-5 allows 22 connections to Goal (spec 4 §5.12), split as goald's pool 8, goald's
+      # listeners 4 and lock connections up to 4 (both outside the pool, so pool_max_conns does not
+      # cap them), the auth service's pool 4 (apps/auth/src/db.ts) and migrations 2 at goald's
+      # start (runbook, Connection budget).
+      goald_pool_max_conns = 8
     }
   }
 
