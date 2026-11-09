@@ -33,13 +33,21 @@ An agent station can also have a [gate](/docs/concepts/gates-and-human-touches/)
 
 Two things can change this path. A [gate](/docs/concepts/gates-and-human-touches/) can send the item back to an earlier station, which is [rework](/docs/concepts/rework/). An item can also be split into [parts](/docs/concepts/assemblies-and-parts/), which move on as separate items.
 
-The station's output must pass the contract named by its `output` field and the commands in its `checks` before the item moves on.
+The station's output must pass the contract named by its `output` field and the [command checks](#command-checks) in its `checks` before the item moves on. Output that fails its contract or a check gets one retry: the failure goes back to the agent, and the item blocks if the second try fails too.
 
-A command check runs in the run's workspace with `CI=true` and `GOAL_BASE_BRANCH`, the branch the item's pull request goes into. For a [part](/docs/concepts/assemblies-and-parts/) that builds on its assembly's [integration branch](/docs/concepts/integration-branches/), it is that branch. It is empty when the pull request goes into the repository's default branch: an item with no assembly, or an assembly's landing. That pull request gets CI, which [wait for CI](#wait-for-ci) already waits on, so a check can skip what CI repeats:
+`GOAL_BASE_BRANCH` is the branch the item's pull request goes into. For a [part](/docs/concepts/assemblies-and-parts/) that builds on its assembly's [integration branch](/docs/concepts/integration-branches/), it is that branch. It is empty when the pull request goes into the repository's default branch: for an item with no assembly, for an assembly's landing, and for any part that is not on an integration branch. CI runs on that pull request, and goald waits for it only at a station with `waitFor` (see [wait for CI](/docs/concepts/stations-and-flow/#wait-for-ci)). A check can skip what CI repeats:
 
 ```sh
 if [ -n "$GOAL_BASE_BRANCH" ]; then task check:changed; else echo "CI checks this branch"; fi
 ```
+
+## Command checks
+
+A station's `checks` list holds entries of three kinds: `schema`, `evidence-links` or a command string such as `go test ./...`. Only command checks run. The schema accepts `schema` and `evidence-links` entries, but goald drops them.
+
+Each command runs in the run's box after the agent finishes, without credentials, with `CI=true` and `GOAL_BASE_BRANCH` set (see above). A command that runs longer than 30 minutes stops and counts as failed.
+
+goald records a `check_passed` or `check_failed` event for each check. When a check fails, its output goes back to the agent in a second run at the same station. If that run fails the contract or a check again, the item blocks for a person.
 
 ## Merge stations take turns
 
@@ -104,13 +112,17 @@ The decision is ADR 0044 (`docs/adr/0044-goald-waits-for-ci.md` in the repositor
 
 The line's rules for how work is released and paced sit in `board.flow`. Some of them are used today and some are not:
 
-- `board.flow.assemblies`, `board.flow.dependencies` and `board.flow.retry` decide how parts, branches, overlaps and retries behave. Each has its own page.
+- `board.flow.assemblies`, `board.flow.dependencies` and `board.flow.retry` decide how parts, branches, overlaps and retries behave. They have no concept page; the [definition reference](/docs/reference/definition/) lists their fields.
 - `board.flow.expedite` and `board.flow.andon` are covered in [expedite and priority](/docs/concepts/expedite-and-priority/) and [andon](/docs/concepts/andon/).
 - `board.flow.targets` gives the flow metrics their targets.
-- `board.flow.release` and `board.flow.constraint` are accepted by the schema. The engine does not act on them yet. Queue stations release everything they hold.
+- `board.flow.release` and `board.flow.constraint` are accepted by the schema. The engine does not act on them yet. Queue stations release the items they hold except those with a future start (see [work items](/docs/concepts/work-items/)) and those with an open need.
 - A station's `buffer` is accepted by the schema. The engine does not keep buffers yet.
 
 The [WIP and budget](/docs/concepts/wip-and-budget/) page covers the caps the engine does enforce.
+
+## Retries after a lost box
+
+When a run's box is lost, or its prepare fails before the agent starts, goald runs the item again in a new box; the branch keeps what was pushed. `board.flow.retry.transient.attempts` is the most runs one claim makes for these causes together, and defaults to 3. The wait before a new run starts at 15 seconds and doubles with each loss. When the limit is reached, the item blocks and the reason says what was lost. The [definition reference](/docs/reference/definition/) lists the field.
 
 ## Where the flow shows up
 

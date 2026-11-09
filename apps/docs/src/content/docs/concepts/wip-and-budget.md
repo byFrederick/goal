@@ -18,7 +18,7 @@ The `wip` cap applies at agent stations, where agents claim work. Two WIP settin
 
 ## The weekly budget
 
-A factory's weekly budget is `runtime.budget.weeklyUsd`. It caps what the factory's agent runs may cost over the last 7 days, counted as a rolling window of 7 times 24 hours. The cost counted is the cost of the runs the factory started in that window, except Jonah's: they show in the factory's spend but never use up its weekly budget ([Jonah](/docs/concepts/jonah/)).
+A factory's weekly budget is `runtime.budget.weeklyUsd`. A `weeklyUsd` of 0, or none, means no cap: the factory is never used up. Otherwise it caps what the factory's agent runs may cost over the last 7 days, counted as a rolling window of 7 times 24 hours. The cost counted is the cost of the runs the factory started in that window, except Jonah's: they show in the factory's spend but never use up its weekly budget ([Jonah](/docs/concepts/jonah/)).
 
 Spend is checked once per engine tick. A factory is exhausted when its spend reaches the cap. Then the engine claims no new agent work for it. Queue releases and decisions by people carry on as before.
 
@@ -48,7 +48,25 @@ A trigger can skip events while the weekly budget is spent: `board.triggers[].li
 
 ## Where the budget shows up
 
-The factory's screens show the spend against the weekly cap, and "Budget used up" once the cap is reached.
+- **Spend** shows the last 7 days against the weekly cap, and an "Over budget" chip on a factory whose budget is used up.
+- **Needs you** lists the used-up budget, as described next.
+
+## A used-up budget on Needs you
+
+A factory whose weekly budget is used up has an entry on **Needs you** titled "Weekly budget used up · $X of $Y". The line starts no new agent work while the entry is open. The entry carries `resumes_at`, the time the budget has room again on its own: the earliest moment the spend of the runs still in the 7-day window falls below the cap, as each run leaves the window 7 days after it started. The engine resumes on its first tick after that time.
+
+Raising `weeklyUsd` removes the entry at once. To free the line sooner, raise the cap in the factory definition. `onExhausted` decides what happens to the runs in progress, as described above.
+
+## Slot caps
+
+A slot is one agent running. Two caps limit how many run at once, whatever each station's `wip` allows:
+
+- an organization cap, across all its factories, and
+- a cap for each factory.
+
+Each is a whole number from 1 to 1,000, or none for no cap. Set them in the organization's **Settings → Slots**: one field for the organization and one for each factory. `goal org update <slug> --max-slots N` sets the organization cap (0 means no cap); see the [CLI reference](/docs/reference/cli/).
+
+Running trigger checks count against both caps, as well as running agents. A full cap holds new work until a slot frees.
 
 ## Related
 

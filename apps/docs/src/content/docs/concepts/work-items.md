@@ -25,15 +25,27 @@ An item's state says what is happening to it at its current station.
 
 | State | What it means |
 | --- | --- |
-| `queued` | Waiting at a station for a free agent slot, or for a person's decision at a queue station. |
+| `queued` | Waiting to be claimed: for a free agent slot, for the items it needs to be done, for an open CI wait to end, or for its start time. |
 | `in_progress` | An agent run holds the item. |
-| `waiting_human` | Waiting for a person to approve, reject or merge it. |
+| `waiting_human` | Waiting for a person: to approve, reject or merge it, to answer an open question, or to decide on a tool approval. Approve is refused while a question or tool approval is open; answer or decide it first. |
 | `blocked` | Stopped. A person pauses an item, or a run fails in a way that stops it. A person can retry, move or cancel it. |
 | `done` | Finished at the done station. |
-| `cancelled` | Closed by a person before it finished. |
+| `cancelled` | Closed before it finished. A person can cancel it. An agent can close an item whose origin is `trigger` or `follow-up` through `board.flow.outputs.close`. An assembly whose parts were all cancelled is cancelled too. |
 | `assembly` | Split into parts. It is never claimed by an agent and closes when its parts do. |
 
 An item waiting for a free slot is `queued`. The API's state list also has `ready`, but the engine does not set it.
+
+## Start times
+
+An item can wait to start, at the line's first station, where no agent works on it. Three things set the wait:
+
+- `at` is a time. A time without a zone is read in the time zone of the person's notification settings, or UTC when none is saved or the item is filed with an API key.
+- `in` is a wait from now, in whole hours, days or weeks, such as `36h`, `7d` or `2w`. It counts from the moment the item is filed, or for a follow-up from the moment the work landed. Use `at` or `in`, not both.
+- `after` names open items of the same factory that must be done first. It can go with `at` or `in`.
+
+A start is at most 365 days ahead. The item moves on within seconds after its time has passed and its items are done. The wait does not count as lead time.
+
+A person sets a start in New item's Start control, with `goal run` and the API when filing, and changes it with `goal start` or the item's banner, **Change**. **Start now** clears the time. It is on the item's page and under Coming up in Intake. An item that waits only for other items has no Start now, because those items still hold it. Once the item has left the first station, its start cannot change. The commands, the API paths and where each screen shows a waiting item are in [Submit and follow items](/docs/guides/submit-and-follow-items/#start-an-item-later).
 
 ## Work types
 
@@ -116,7 +128,7 @@ A triage item's plan has at most 3 parts; a plan with more is refused like any b
 
 - The **Board** screen shows items in columns by station.
 - Each item's page shows its state, its runs, its events and its trace.
-- The **Inbox** lists items that wait for a person.
+- The **Needs you** screen lists items that wait for a person.
 
 ## Related
 

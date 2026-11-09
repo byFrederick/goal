@@ -53,7 +53,9 @@ type Intake interface {
 	DeliveryBySender(ctx context.Context, webhook domain.WebhookEndpointID, deliveryID string) (domain.WebhookDelivery, error)
 	// DeliveryDays counts the deliveries of the organization's webhooks open to the factory
 	// (ListEndpoints), or of all its webhooks for factory "", received at or after since, per
-	// webhook and UTC day, by webhook then day; a day without deliveries has no entry.
+	// webhook and UTC day, by webhook then day; a day without deliveries has no entry. Delivered
+	// adds the day's accepted deliveries no enabled trigger named (UnnamedDays), from the UTC day
+	// of since on; Refused counts only kept refused rows.
 	DeliveryDays(ctx context.Context, factory domain.FactoryID, since time.Time) ([]domain.DeliveryDay, error)
 	// PruneDeliveries deletes, in every organization, the deliveries received more than
 	// domain.DeliveryRetention before now, and the ledger ids and daily counts more than
