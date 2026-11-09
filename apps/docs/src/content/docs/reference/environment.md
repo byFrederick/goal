@@ -239,6 +239,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_E2E_REPOSITORY_TOKEN` | secret | no |  | A fine-grained token for GOAL_E2E_REPOSITORY_URL's repository (contents and pull requests, read and write) that task e2e:secrets stores as the secret repo-token; the test skips while it is unset. |
 | `GOAL_E2E_REPOSITORY_URL` | config | no |  | The private github.com repository that task e2e:secrets runs an item on, used for nothing else: the test pushes and merges branches there and deletes them after; it never writes the default branch. |
 | `GOAL_FACTORIES_DIR` | config | no | `../goal-factories` | The local working copy of the factory definitions that the factory tasks read and write, outside this repository. |
+| `GOAL_GATEWAY_KEY` | secret | goald always; the CLI only reads it when set |  | Signs the per-task MCP gateway tokens; at least 32 bytes, and it never reaches a task. |
 | `GOAL_PG_APP_PASSWORD` | secret | no |  | The goal_app role's password, which goal db init sets and goald's default database URL uses. |
 | `GOAL_PG_OWNER_PASSWORD` | secret | no |  | The goal_owner role's password, which goal db init sets and the default migration URL uses. |
 | `GOAL_S3_ACCESS_KEY` | secret | no |  | The object storage access key. |
