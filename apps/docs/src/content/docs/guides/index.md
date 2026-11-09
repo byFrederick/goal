@@ -17,6 +17,7 @@ Each guide starts with the result you get and lists the steps to reach it. Comma
 - [Ask an agent what to file](./checks/): add a check to a schedule trigger so an agent reads a source and files what is new.
 - [Act on an item](./act-on-an-item/): answer a question, approve, deny, send back, merge, retry, move, note, pause, cancel or re-lane an item.
 - [Navigate and use shortcuts](./navigate-and-shortcuts/): find your way around the sidebar, the rail, the menus, search and the phone drawer, and see every keyboard shortcut.
+- [Use the Floor and Home](/docs/guides/use-the-floor-and-home/): see one factory's line and what waits on you, and every factory at a glance.
 - [Read the Board, the item Timeline and Runs](./read-the-board-timeline-and-runs/): find what is moving, what is waiting and what each agent run did.
 - [Read Spend and box usage](./read-spend-and-box-usage/): see what agents cost over a window, and the CPU and memory their run boxes use by agent and station.
 - [Factory settings](/docs/guides/factory-settings/): set a factory's repository, model key, environments, budgets and flow choices, and publish them as a new version.

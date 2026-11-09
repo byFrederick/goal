@@ -93,19 +93,19 @@ Goal watches every published version at each station it changes. A station's out
 
 When a Jonah proposal's own number gets worse, Needs you shows a `watch_worse` entry that is not tied to an item. A person's publish never raises one; its watches show on the version.
 
-Undo this change (`POST …/jonah/proposals/{number}/undo`, which needs `definition:edit`) writes a new proposal whose replacements are the published ones reversed, checked against the current version, whatever has been published since. The new proposal names the one it undoes, waits in Proposals like any other and publishes only when a person approves it. A file the proposal added stays in place; the reversed edits stop referring to it. The undo is refused with `undo-conflict`, naming the file, when the text the change wrote no longer appears exactly once. While an undo of the proposal is open, the Needs you entry goes away and a second undo is refused with `undo-open`.
+Undo this change (`POST …/jonah/proposals/{number}/undo`, which needs `definition:edit`) writes a new proposal whose replacements are the published ones reversed, checked against the current version, whatever has been published since. The new proposal names the one it undoes, waits in Proposals like any other and publishes only when a person approves it. A file the proposal added stays in place; the reversed edits stop referring to it. The undo is refused with `undo-conflict`, naming the file, when the text the change wrote no longer appears exactly once. The undo is refused with `proposal-not-published` (409) for a proposal that was never published. While an undo of the proposal is open, or once it is published or applied, the Needs you entry goes away and a second undo is refused with `undo-open`.
 
 ## Try another model
 
 Try another model proposes a different model for one agent, as an ordinary proposal. Run `goal agent try-model <agent> <model>`, or call `POST …/agents/{agent}/model-proposal` (it needs `definition:edit`).
 
 - **The estimate comes first.** Goal picks the agent's five newest finished items: done items whose first run of a claim by the agent is at a station of the current version that can be tried. It shows how each went on the line, such as "passed first time, $0.42" or "sent back 2 times at review, $1.10". It plans three tries per item and prices them at each item's original run cost × 3. It also shows what is left of Jonah's budget. Nothing is stored yet. `goal agent try-model` asks before it goes on; `--yes` skips the question.
-- **Then the proposal.** Once you confirm, goald writes a proposal against the current version. Its one edit is a replacement in `factory.yaml` that changes the agent's `model`, checked like a review's edits. The items with their line results are what it was tried on, and its page shows the estimate and the tries in place of Why and Found in, since the proposal has no evidence of sent-back runs. Three tries per item are queued with it, each rerunning the item's original run on the new model, in a box with only the model key; they run while Jonah is on for the factory. From there you approve, edit or reject it like any other proposal, and the watch follows it once it is published.
-- **Refusals.** The model must be one the organization's policy allows, and not the agent's model already (`model-not-allowed`). An agent that needs MCP servers or secrets cannot be tried (`agent-not-triable`). An agent with no finished item gets `no-finished-items`. Tries that would cost more than what is left of Jonah's budget get `learning-budget-exhausted`, with the estimate.
+- **Then the proposal.** Once you confirm, goald writes a proposal against the current version. Its one edit is a replacement in `factory.yaml` that changes the agent's `model`, checked like a review's edits. The items with their line results are what it was tried on, and its page shows the estimate and the tries in place of Why and Found in, since the proposal has no evidence of sent-back runs. Three tries per item are queued with it, each rerunning the item's original run on the new model, in a box with the model key and the environment's `env`, for setup only; they run while Jonah is on for the factory. From there you approve, edit or reject it like any other proposal, and the watch follows it once it is published.
+- **Refusals.** The model must be one the organization's policy allows, and not the agent's model already (`model-not-allowed`). An agent that names a connection, or whose environment has MCP servers or files, cannot be tried (`agent-not-triable`). An agent with no finished item gets `no-finished-items`. Tries that would cost more than what is left of Jonah's budget get `learning-budget-exhausted`, with the estimate.
 
 ## Tried on past items
 
-Before you decide a proposal, goald tries it on past items. A proposal that changes what an agent gets, at a station whose agents need no MCP server or secret, is tried once on each item it cites, at most five, newest first. Each try reruns the item's original run with the proposal applied, in a box with only the model key. A model proposal gets three tries per item. A proposal that changes only memory or the flow, or reaches only stations that can't be tried, has no tries.
+Before you decide a proposal, goald tries it on past items. A proposal that changes what an agent gets, at a station whose agents name no connection and whose environments have no MCP servers or files, is tried once on each item it cites, at most five, newest first. Each try reruns the item's original run with the proposal applied, in a box with the model key and the environment's `env`, for setup only. A model proposal gets three tries per item. A proposal that changes only memory or the flow, or reaches only stations that can't be tried, has no tries.
 
 Tries run only while Jonah is on, while no item waits at an agent station, and while Jonah's budget for the last 7 days has money left. Their cost counts against that budget.
 
@@ -146,7 +146,7 @@ Try again adds tries to an open proposal, so you get more evidence before you de
 
 - **What it adds.** One more try of each item the proposal was tried on, or three more for a model proposal. Each new try reruns the same run of the item, at the same station and on the same model, and is queued like the proposal's first tries. `tried` lists the new attempts after the earlier ones.
 - **The estimate comes first.** Goal prices each new try at its item's original run cost and shows what is left of Jonah's budget. Nothing is queued yet. `goal jonah try` asks before it queues; `--yes` skips the question. Through the API, `{"confirm": true}` queues the tries.
-- **When it is refused.** 409 `learning-budget-exhausted`, with the estimate, when the tries cost more than what is left of Jonah's budget. 409 `proposal-decided` for a proposal that is no longer proposed, and 409 `proposal-not-tried` for one that has no tries yet: Jonah queues its first ones. 422 `proposal-not-triable` for a proposal that can't be tried, such as one that changes only memory or the flow.
+- **When it is refused.** 409 `learning-budget-exhausted`, with the estimate, when the tries cost more than what is left of Jonah's budget. 409 `proposal-decided` for a proposal that is no longer proposed, and 409 `proposal-not-tried` for one that has no tries yet: Jonah queues its first ones. 409 `proposal-stale` when the proposal's edits no longer apply. 422 `proposal-not-triable` for a proposal that can't be tried, such as one that changes only memory or the flow.
 
 ## Kept tests
 
@@ -168,7 +168,7 @@ Removing a kept test removes its tries. Deleting the factory or the organization
 
 ### When a kept test passes
 
-A kept test's try reruns the item's first run at the station, on the changed definition, in a box with only the model key. It passes when its run succeeds, its output satisfies the station's contract, the station's checks pass and, at a station with a gate, the output approves, as the gate did for the item the first time. Any other outcome fails it, with why: a failing check, a broken contract, a gate that rejects, or a run that failed. A try that could not be carried out, such as a lost box or a commit that is gone, is `error`, never `failed`.
+A kept test's try reruns the item's first run at the station, on the changed definition, in a box with the model key and the environment's `env`, for setup only. It passes when its run succeeds, its output satisfies the station's contract, the station's checks pass and, at a station with a gate, the output approves, as the gate did for the item the first time. Any other outcome fails it, with why: a failing check, a broken contract, a gate that rejects, or a run that failed. A try that could not be carried out, such as a lost box or a commit that is gone, is `error`, never `failed`.
 
 ### Kept tests at publish
 
@@ -177,7 +177,7 @@ When the publish dialog opens, it calls `POST …/draft/kept-tests` (`definition
 - **Reuse:** each try records a key of the exact content it runs on. A kept test that already has a try of the draft's content, from a proposal or an earlier publish, reuses it and queues nothing. So publishing a tried proposal does not rerun its kept tests, and calling the route again starts nothing new.
 - **Order:** a publish's tries are claimed before any proposal's. Like every try, they wait while an item waits at an agent station, and while Jonah's budget for the last 7 days is used up.
 - **The answer:** `state` is `trying`, `done` or `budget_used`, as for a proposal's tries. Each test comes with its `result`: null until its try is queued, then `running`, `passed`, `failed` or `error`, with the reason, the error and the try's run.
-- **Tests that can't be tried** are answered `error` with why, and nothing is queued for them: a station whose agent needs MCP servers or secrets, an item with no finished first run there, a draft that deletes a file, or a factory with Jonah off.
+- **Tests that can't be tried** are answered `error` with why, and nothing is queued for them: a station whose agent names a connection or whose environment has MCP servers or files, an item with no finished first run there, a draft that deletes a file, or a factory with Jonah off.
 - **No draft:** the route answers 404 `no-draft`.
 
 Publishing never reads these results: a failing kept test is a warning. Approving a proposal publishes it without the dialog and starts no kept tests of its own.
@@ -192,6 +192,10 @@ Jonah spends a share of what the line spends. Its budget is `learning.jonah.shar
 - A line that spent nothing in the last 7 days gives Jonah no budget, and `0%` turns its spend off.
 
 The keys of `learning.jonah` are in the [definition reference](/docs/reference/definition/), and factory settings edit them in their Jonah section.
+
+## Jonah's model
+
+`learning.jonah.model` sets the model of the review run. When it is omitted, the review uses `runtime.model`. It does not change the model of tries, which rerun an item's original run, or of the grader, which uses the current line's model. The key is in the [definition reference](/docs/reference/definition/).
 
 ## How often it runs
 
@@ -213,4 +217,4 @@ goald runs the review loop every minute by default (`GOAL_JONAH_REVIEW_EVERY`). 
 - `goal spend` shows what runs cost, Jonah's included.
 - An item's Teardown keeps the item as a test, an agent's page has Try another model, the publish dialog shows the kept tests the draft reaches, Versions shows each change's watch, and Needs you shows a proposal whose number got worse.
 
-The flags are in the [CLI reference](../../reference/). The decisions behind Jonah are ADR 0034 and ADR 0039 (`docs/adr/0034-jonah-proposals.md` and `docs/adr/0039-jonah-learns-from-the-line.md` in the repository).
+The flags are in the [CLI reference](/docs/reference/cli/). The decisions behind Jonah are ADR 0034 and ADR 0039 (`docs/adr/0034-jonah-proposals.md` and `docs/adr/0039-jonah-learns-from-the-line.md` in the repository).
