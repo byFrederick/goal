@@ -307,7 +307,7 @@ func docsDir(dir string) (string, error) {
 	}
 
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		return "", fmt.Errorf("%s %q is not a directory (the docs build, apps/docs/dist/docs: task docs:build)", docsDirEnv, dir)
+		return "", fmt.Errorf("%s %q is not a directory (the docs build, apps/docs/dist/docs: task docs:site:build)", docsDirEnv, dir)
 	}
 
 	return dir, nil

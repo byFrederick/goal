@@ -55,7 +55,7 @@ const (
 	proxySecretEnv = "GOAL_AUTH_PROXY_SECRET" //nolint:gosec // a variable name, not a credential
 	// authServer is the auth service's build (task auth:build), from the repository root.
 	authServer = "apps/auth/dist/server.js"
-	// docsBuild is the docs site's build (task docs:build), from the repository root: the
+	// docsBuild is the docs site's build (task docs:site:build), from the repository root: the
 	// directory whose files goald serves at /docs (GOAL_DOCS_DIR).
 	docsBuild  = "apps/docs/dist/docs"
 	docsDirEnv = "GOAL_DOCS_DIR"
