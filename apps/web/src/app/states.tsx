@@ -2,7 +2,7 @@ import { isCancelledError, useQueryErrorResetBoundary } from '@tanstack/react-qu
 import { type ErrorComponentProps, Link, useRouter } from '@tanstack/react-router';
 import { useEffect, useRef } from 'react';
 import { ApiError, NetworkError } from '../api/client';
-import { isStarting, restartDelay } from '../api/retry';
+import { isStarting, noteRestartRetry, restartAttempt, restartDelay } from '../api/retry';
 import { InfoTip } from '../features/jonah/info-tip';
 import { Button } from '../ui/button';
 import { PageShape, PendingSkeleton } from './route-skeletons';
@@ -44,21 +44,21 @@ export function ErrorScreen({ error, reset }: ErrorComponentProps) {
   const retried = useRef(false);
   const kind = loadFailure(error);
 
-  const attempt = useRef(0);
-
   useEffect(() => queryReset.reset(), [queryReset]);
 
   // A restarting goald is asked again by itself, after Retry-After; a still-failing answer waits the next delay.
   useEffect(() => {
     if (kind !== 'starting') return;
     const wait = error instanceof ApiError ? error.retryAfterSeconds : undefined;
+    const path = router.state.location.pathname;
+    const attempt = restartAttempt(path);
     const timer = window.setTimeout(
       () => {
-        attempt.current += 1;
+        noteRestartRetry(path, attempt);
         reset();
         router.invalidate();
       },
-      restartDelay(attempt.current, wait),
+      restartDelay(attempt, wait),
     );
     return () => window.clearTimeout(timer);
   }, [kind, error, reset, router]);

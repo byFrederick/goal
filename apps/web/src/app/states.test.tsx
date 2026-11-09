@@ -71,4 +71,29 @@ describe('the restarting screen', () => {
     expect(router.state.location.pathname).toBe('/');
     vi.unstubAllGlobals();
   });
+  it('waits 2, 4, 8 then 15 s between loads when a 503 has no Retry-After and keeps failing', async () => {
+    const loads: number[] = [];
+    const root = createRootRoute();
+    const t0 = Date.now();
+    const page = createRoute({
+      getParentRoute: () => root,
+      path: '/slow',
+      loader: () => {
+        loads.push(Math.round((Date.now() - t0) / 1000));
+        throw new ApiError({ title: 'Service unavailable', status: 503 });
+      },
+      component: () => <h1>The floor</h1>,
+      errorComponent: ErrorScreen,
+    });
+    const router = createRouter({
+      routeTree: root.addChildren([page]),
+      history: createMemoryHistory({ initialEntries: ['/slow'] }),
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    render(<RouterProvider router={router} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(loads).toEqual([0, 2, 6, 14, 29]);
+  });
 });

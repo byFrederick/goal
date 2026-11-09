@@ -32,3 +32,16 @@ export function restartDelay(attempt: number, retryAfterSeconds?: number): numbe
   if (retryAfterSeconds !== undefined) return Math.min(retryAfterSeconds * 1000, retryAfterCapMs);
   return restartBackoffMs[attempt] ?? restartCapMs;
 }
+
+const sameRunMs = 10_000;
+let lastRestart: { path: string; attempt: number; at: number } | undefined;
+
+/** The attempt number for a restarting screen that just appeared: it goes on from the retry that loaded this page a moment ago, else starts at 0. */
+export function restartAttempt(path: string, now = Date.now()): number {
+  return lastRestart && lastRestart.path === path && now - lastRestart.at < sameRunMs ? lastRestart.attempt : 0;
+}
+
+/** Records that the screen loaded the page again by itself, so the next failure waits longer. */
+export function noteRestartRetry(path: string, attempt: number, now = Date.now()): void {
+  lastRestart = { path, attempt: attempt + 1, at: now };
+}
