@@ -262,6 +262,8 @@ func (s *server) lanes(ctx context.Context, l domain.Line, st domain.Station, lo
 	// Busy comes from the leases, not the cards: the board shows at most boardOpenItems.
 	busy := map[string]int{}
 
+	var leases []domain.Lease
+
 	if load.InProgress > 0 {
 		all, err := held.all(ctx)
 		if err != nil {
@@ -271,6 +273,7 @@ func (s *server) lanes(ctx context.Context, l domain.Line, st domain.Station, lo
 		for _, ls := range all {
 			if ls.Station == st.ID {
 				busy[ls.Agent]++
+				leases = append(leases, ls)
 			}
 		}
 	}
@@ -280,7 +283,11 @@ func (s *server) lanes(ctx context.Context, l domain.Line, st domain.Station, lo
 	out := make([]gen.BoardLane, 0, len(agents))
 
 	for _, name := range agents {
-		lane := gen.BoardLane{Key: name, Kind: gen.BoardLaneKindAgent, Role: domain.Humanize(name), Slots: &slots, Busy: busy[name]}
+		ls := slotsOfLane(st, name, leases)
+		lane := gen.BoardLane{
+			Key: name, Kind: gen.BoardLaneKindAgent, Role: domain.Humanize(name), Slots: &slots, Busy: busy[name],
+			KeptSlots: &ls.kept, KeptBusy: &ls.keptBusy, SharedSlots: &ls.shared, SharedBusy: &ls.sharedBusy,
+		}
 
 		if model := modelOf(l, name); model != "" {
 			lane.Model, lane.ModelLabel = &model, new(cmp.Or(labels[model], model))
@@ -292,6 +299,51 @@ func (s *server) lanes(ctx context.Context, l domain.Line, st domain.Station, lo
 	slices.SortStableFunc(out, func(a, b gen.BoardLane) int { return strings.Compare(a.Role, b.Role) })
 
 	return out, nil
+}
+
+// laneSlots are an agent lane's slots as claims lay them out (domain.Station.SlotLanes): those
+// kept for its counted lanes and the shared ones it can take, each with the live leases in them.
+type laneSlots struct {
+	kept, keptBusy, shared, sharedBusy int
+}
+
+// slotsOfLane are agent's slots at station st, counting the leases held there: the slots
+// kept for the lanes st routes to agent with a count and agent's leases in them; the shared slots
+// when agent works a lane without a count or is st's one agent, with every agent's leases in them.
+func slotsOfLane(st domain.Station, agent string, leases []domain.Lease) laneSlots {
+	shares := st.Agent == agent
+	for lane, a := range st.Route {
+		if _, counted := st.RouteAgents[lane]; a == agent && !counted {
+			shares = true
+		}
+	}
+
+	kept, shared := map[int]bool{}, map[int]bool{}
+
+	for i, sl := range st.SlotLanes() {
+		switch {
+		case sl.Lane == "":
+			if shares {
+				shared[i] = true
+			}
+		case st.Route[sl.Lane] == agent:
+			kept[i] = true
+		}
+	}
+
+	out := laneSlots{kept: len(kept), shared: len(shared)}
+
+	for _, l := range leases {
+		switch {
+		case l.Station != st.ID:
+		case kept[l.Slot] && l.Agent == agent:
+			out.keptBusy++
+		case shared[l.Slot]:
+			out.sharedBusy++
+		}
+	}
+
+	return out
 }
 
 // modelOf is the model agent runs: its own, else the line runtime's; "" when neither names one.

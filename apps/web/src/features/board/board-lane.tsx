@@ -206,7 +206,9 @@ function Lane({
 
 /** The lane's role mark, role, model and slot boxes (filled: busy). A person lane has no slots. */
 function LaneHeader({ lane }: { lane: BoardLane }) {
-  const hasSlots = lane.kind === 'agent' && lane.slots !== null;
+  const kept = lane.kept_slots ?? 0;
+  const shared = lane.shared_slots ?? 0;
+  const hasSlots = lane.kind === 'agent' && kept + shared > 0;
   return (
     <header className="flex min-w-0 items-center gap-2 px-1">
       <span
@@ -225,30 +227,54 @@ function LaneHeader({ lane }: { lane: BoardLane }) {
           </span>
         ) : null}
       </div>
-      {hasSlots ? <Slots slots={lane.slots ?? 0} busy={lane.busy} /> : null}
+      {hasSlots ? (
+        <Slots kept={kept} keptBusy={lane.kept_busy ?? 0} shared={shared} sharedBusy={lane.shared_busy ?? 0} />
+      ) : null}
     </header>
   );
 }
 
-/** One box a slot: filled while the lane's agent holds it, outlined while free. */
-function Slots({ slots, busy }: { slots: number; busy: number }) {
-  const filled = Math.min(busy, slots);
+/** One group of slot boxes: filled while the lane's agent holds a slot, outlined while free. */
+function SlotGroup({ slots, busy }: { slots: number; busy: number }) {
   return (
-    <span className="flex min-w-0 max-w-[50%] shrink items-center">
-      <span className="sr-only">
-        {filled} of {slots} slots busy
-      </span>
-      <SegmentMeter
-        total={slots}
-        filled={filled}
-        segmentWidth={10}
-        height={10}
-        gap={4}
-        segmentClassName="border"
-        tones={{ filled: 'border-run bg-run', empty: 'border-rule' }}
-        track="bg-rule"
-        className="shrink"
-      />
+    <SegmentMeter
+      total={slots}
+      filled={Math.min(busy, slots)}
+      segmentWidth={10}
+      height={10}
+      gap={4}
+      segmentClassName="border"
+      tones={{ filled: 'border-run bg-run', empty: 'border-rule' }}
+      track="bg-rule"
+      className="shrink"
+    />
+  );
+}
+
+const slotsPhrase = (busy: number, slots: number, group: string) =>
+  `${Math.min(busy, slots)} of ${slots} ${group} ${slots === 1 ? 'slot' : 'slots'} busy`;
+
+/** The slots the lane can use: the ones kept for it, then, after a wider gap, the station's shared ones. */
+function Slots({
+  kept,
+  keptBusy,
+  shared,
+  sharedBusy,
+}: {
+  kept: number;
+  keptBusy: number;
+  shared: number;
+  sharedBusy: number;
+}) {
+  const phrases = [
+    kept > 0 ? slotsPhrase(keptBusy, kept, 'kept') : null,
+    shared > 0 ? slotsPhrase(sharedBusy, shared, 'shared') : null,
+  ].filter(Boolean);
+  return (
+    <span className="flex min-w-0 max-w-[50%] shrink items-center gap-3">
+      <span className="sr-only">{phrases.join(', ')}</span>
+      {kept > 0 ? <SlotGroup slots={kept} busy={keptBusy} /> : null}
+      {shared > 0 ? <SlotGroup slots={shared} busy={sharedBusy} /> : null}
     </span>
   );
 }

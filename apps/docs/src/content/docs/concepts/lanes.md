@@ -27,7 +27,7 @@ route:
   frontend: frontend-engineer
 ```
 
-An entry is either an agent name or an object with `agent` and `agents`. With `agents`, the station keeps that many of its slots for the lane, and the lane uses no other slots. Entries without a count share the remaining slots and never take a kept one. See `board.stations[].route` in the [definition reference](/docs/reference/definition/).
+An entry is either an agent name or an object with `agent` and `agents`. With `agents`, the station keeps that many of its slots for the lane, and the lane uses no other slots. Entries without a count share the remaining slots and never take a kept one. The board's lane header draws a counted lane's kept slots first, then the shared ones. See `board.stations[].route` in the [definition reference](/docs/reference/definition/).
 
 If an item's lane has no entry in a routed station's `route`, the engine blocks the item with the reason. A person can then set a lane that has a route and retry the item.
 

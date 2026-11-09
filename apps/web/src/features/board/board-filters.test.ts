@@ -46,6 +46,10 @@ const lane = (over: Partial<BoardLane>): BoardLane => ({
   model_label: null,
   slots: 2,
   busy: 0,
+  kept_slots: 0,
+  kept_busy: 0,
+  shared_slots: 2,
+  shared_busy: 0,
   ...over,
 });
 
