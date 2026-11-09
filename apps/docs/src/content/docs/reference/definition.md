@@ -24,7 +24,7 @@ object, required.
 - `id`: string matching `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, required. Immutable UUID. Keys the database rows and bucket prefixes, so the name and folder can change freely.
 - `name`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, required. Human-friendly slug shown in the UI and CLI. Safe to rename.
 - `title`: string.
-- `purpose`: string. What the factory is for, in one or two sentences. Agents read it before every item.
+- `purpose`: string, at most 500 characters. What the factory is for, in one or two sentences. Agents read it before every item.
 - `description`: string. Deprecated alias of purpose, read when purpose is absent.
 - `owner`: string.
 
@@ -37,7 +37,7 @@ object, required.
   - `modelKey`: string. The {{secret}} that gives every run its model: a Claude subscription token (sk-ant-oat…) or an Anthropic API key. Jonah's reviews and the tries of past items use it too.
   - `modelConnection`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`. Removed by ADR 0037 (moved-to-environment): set modelKey. Accepted so versions published before still load and run until Goal converts them.
   - `size`: one of `"small"`, `"medium"`, `"large"`. Removed by ADR 0037 (moved-to-environment): set size in each environment file. Accepted so versions published before still load and run until Goal converts them.
-  - `tools`: array of string. Removed by ADR 0037 (moved-to-environment): set tools in each environment file. Accepted so versions published before still load and run until Goal converts them.
+  - `tools`: array of string, at most 50 items. Removed by ADR 0037 (moved-to-environment): set tools in each environment file. Accepted so versions published before still load and run until Goal converts them.
   - `repository`: object. The shorthand for one runtime.repositories entry that writes and is the default, named after the URL's last segment (repo when that is not a slug). It is cloned into each run's box before the agent starts, on the item's branch (goal/&lt;number&gt;-&lt;slug&gt;).
     - `url`: string matching `^https://[^/@]+/.+`, required. https clone URL without credentials
     - `token`: string. The {{secret}} that clones, pushes, and reads and merges pull requests. Omit it for a public repository. It reaches the agent's environment only when an environment file names it.
@@ -53,11 +53,11 @@ object, required.
   - `image`: string. Removed in phase 4 (field-removed): set image in an environment file.
   - `auth`: one of `"claude-subscription"`, `"anthropic-api-key"`, `"bedrock"`. Removed in phase 4 (field-removed): set modelKey.
   - `budget`: object.
-    - `dailyUsd`: number.
-    - `weeklyUsd`: number. Spend cap over a rolling 7 days.
+    - `dailyUsd`: number, at least 0. A daily spend figure that is shown but never enforced; weeklyUsd is the cap.
+    - `weeklyUsd`: number, at least 0. Spend cap over a rolling 7 days.
     - `onExhausted`: one of `"drain"`, `"stop"`. At the weekly cap: drain starts no new agent work and lets running tasks finish; stop also stops them. Default drain.
-    - `perItemUsd`: number.
-    - `maxTurnsPerTask`: integer.
+    - `perItemUsd`: number, at least 0.
+    - `maxTurnsPerTask`: integer, at least 1.
 - `connections`: array of string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$` or object. Removed by ADR 0037 (moved-to-environment): what agents reach is in environments/&lt;name&gt;.yaml. Accepted so versions published before still load and run until Goal converts them.
   - `connector`: string matching `^[a-z][a-z0-9-]*[a-z0-9](@[A-Za-z0-9._-]+)?$`, required. A catalog connector, curated or org-private: name, or name@version.
   - `name`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`. Unique in the factory; defaults to the connector's name.
@@ -79,19 +79,21 @@ object, required.
   - `network`: boolean, default `false`; only when `type` is `"mcp"`. stdio: give the sidecar outbound network access (Docker's default bridge; host.docker.internal is the host). Without it the sidecar has no network at all, which suits servers that only work on their stdio. Servers that browse, call APIs or reach a database need it.
   - `roleArn`: string matching `^arn:aws:iam::\d{12}:role/.+$`, required; only when `type` is `"aws"`.
   - `region`: string; only when `type` is `"aws"`.
+  - Rules:
+    - An mcp connection over http needs url; one over stdio needs image or command.
 - `knowledge`: object.
   - `sources`: array of string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$` or object. The organization's knowledge sources the factory's runs read (ADR 0038 decision 5), at most 10 (knowledge-too-many), each listed once (knowledge-source-duplicate). An entry is a source's name, or an object that also says which runs read it (appliesTo) and when (readWhen).
     - `name`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, required. The organization's knowledge source.
     - `appliesTo`: object. The runs that read the source: ADR 0014's rule scope, matched as a rule's appliesTo is. A run matches when every key set names its agent, station, lane or work type. Without appliesTo, every run reads it.
-      - `agents`: array of string.
-      - `stations`: array of string.
-      - `lanes`: array of string.
-      - `workTypes`: array of string.
-    - `readWhen`: string matching `^[^\r\n]*$`. One line that replaces the source's own read-when line in this factory's prompt: when its runs should open it.
+      - `agents`: array of string, at least 1 item.
+      - `stations`: array of string, at least 1 item.
+      - `lanes`: array of string, at least 1 item.
+      - `workTypes`: array of string, at least 1 item.
+    - `readWhen`: string matching `^[^\r\n]*$`, 1 to 160 characters. One line that replaces the source's own read-when line in this factory's prompt: when its runs should open it.
 - `knowledgeBase`: object. Removed in phase 4 (field-removed): set knowledge.sources. Accepted so versions published before still load; goald does not run them.
-  - `collections`: array of string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, required.
+  - `collections`: array of string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, at least 1 item, required.
   - `retrieval`: object.
-    - `topK`: integer.
+    - `topK`: integer, 1 to 50.
   - `ingestion`: object.
     - `schedule`: string.
 - `secrets`: object. Removed in phase 4 (field-removed): connections hold credentials. Accepted so versions published before still load; goald does not run them.
@@ -99,19 +101,19 @@ object, required.
   - `vault`: string.
 - `skills`: array of object.
   - `name`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, required.
-  - `source`: string matching `^(\./.+|skills\.sh:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+)$`, required. A local folder (./skills/x) or a skills.sh reference (skills.sh:owner/repo@skill), pinned by the lockfile.
+  - `source`: string matching `^(\./.+|skills\.sh:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+)$`, required. A local folder (./skills/x), which goald ships to the agent, or a skills.sh reference (skills.sh:owner/repo@skill), which goald does not fetch: the agent gets that skill only when the repository vendors it in .claude/skills.
   - `origin`: string matching `^skills\.sh:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+#[0-9a-f]{40}$`. Where a vendored skill came from: the skills.sh skill and the commit it was copied at. The source stays the local folder (./skills/&lt;name&gt;) it was copied into. Written by the builder; read-only in the UI.
 - `rules`: array of object. Factory rules (ADR 0014): always-on guidance for the agents each rule's appliesTo targets. Each is a markdown file under rules/ with frontmatter (description, appliesTo, paths).
   - `name`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, required.
   - `source`: string matching `^\./rules/.+\.md$`, required. The rule's markdown file inside the definition, under rules/ (./rules/secrets.md).
-- `contracts`: map of string. Named JSON Schemas that station outputs must satisfy. An output contract becomes the model's tool input\_schema, so its top level must be "type": "object" with no oneOf, anyOf or allOf there (nested under a property is fine).
-- `agents`: array of object, required.
+- `contracts`: map of string. Named JSON Schemas that station outputs must satisfy; each value is the path of a JSON Schema file in the factory folder. An output contract becomes the model's tool input\_schema, so its top level must be "type": "object" with no oneOf, anyOf or allOf there (nested under a property is fine).
+- `agents`: array of object, at least 1 item, required.
   - `name`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, required.
   - `description`: string.
   - `prompt`: string, required.
   - `model`: string matching `^claude-[a-z0-9-]+$`.
-  - `maxTurns`: integer. Overrides runtime.budget.maxTurnsPerTask for this agent.
-  - `perItemUsd`: number. Overrides runtime.budget.perItemUsd for this agent.
+  - `maxTurns`: integer, at least 1. Overrides runtime.budget.maxTurnsPerTask for this agent.
+  - `perItemUsd`: number, at least 0. Overrides runtime.budget.perItemUsd for this agent.
   - `skills`: array of string.
   - `environment`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`. The environment file the agent's box gets, environments/&lt;name&gt;.yaml; default when omitted.
   - `connections`: array of string. Removed by ADR 0037 (moved-to-environment): set environment. Accepted so versions published before still load and run until Goal converts them.
@@ -146,7 +148,7 @@ object, required.
       - `skipBots`: boolean. Drop events whose sender is a bot.
       - `match`: map of string or array of string. Payload fields by dot path (check\_run.app.slug), each matched against a value or a list of values; all must match.
     - `only`: object. Checks made before an item is created, in this order.
-      - `failuresInARow`: integer. Passes when the same check failed on the last n events for it.
+      - `failuresInARow`: integer, at least 1. Passes when the same check failed on the last n events for it.
       - `dedupe`: string matching `^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`. An event field, dotted (check.name); passes when no open item this trigger created holds the same value of it.
       - `modelAgrees`: object. Ignored (ADR 0040): the model check is removed. A trigger that has it skips every event that reaches it, and the definition loads with the warning field-ignored: turn the trigger into a check.
         - `question`: string, required. The yes or no question the model answered. Ignored.
@@ -160,17 +162,17 @@ object, required.
       - `expedite`: boolean. Put the item in the expedite flow.
       - `title`: string. The item's title; {{field}} placeholders take the event's normalized fields, and {{payload.&lt;path&gt;}} any field of its body, each quoted, on one line and at most 200 characters. The title is cut to 300 characters.
       - `brief`: string. The item's brief, or the path of a Markdown file in the definition that holds it (./triggers/&lt;name&gt;.md), as an agent's prompt is; {{field}} and {{payload.&lt;path&gt;}} placeholders take the event's values, which reach agents only as untrusted data.
-      - `repositories`: array of string. The item's repositories, each matched against runtime.repositories, owner patterns included and in any case: an entry's name, host/owner/name, an https URL, or a template such as {{repo}} (owner/name, on the host of the entry that covers it). A value that renders empty adds none; an item that names none gets the default entry. An event whose value no entry matches is skipped at Create.
+      - `repositories`: array of string, at most 10 items. The item's repositories, each matched against runtime.repositories, owner patterns included and in any case: an entry's name, host/owner/name, an https URL, or a template such as {{repo}} (owner/name, on the host of the entry that covers it). A value that renders empty adds none; an item that names none gets the default entry. An event whose value no entry matches is skipped at Create.
       - `trusted`: boolean. File the item a delivery makes as trusted, so a person need not merge its work. Refused for the gitlab and token senders, and on a GitHub webhook unless filter.authors is set.
     - `limits`: object. Caps on what the trigger creates.
-      - `perDay`: integer. At most this many items created by the trigger since the start of the UTC day.
-      - `perHour`: integer. At most this many items created by the trigger in the hour before an event. Defaults to 10 for an event trigger; a schedule has none.
-      - `perCheck`: integer. Only with check: at most this many items one check files; what is over it is skipped, "over the limit". Defaults to 5. A check's perDay counts the items the trigger filed, not its firings.
+      - `perDay`: integer, at least 1. At most this many items created by the trigger since the start of the UTC day.
+      - `perHour`: integer, at least 1. At most this many items created by the trigger in the hour before an event. Defaults to 10 for an event trigger; a schedule has none.
+      - `perCheck`: integer, at least 1. Only with check: at most this many items one check files; what is over it is skipped, "over the limit". Defaults to 5. A check's perDay counts the items the trigger filed, not its firings.
       - `pauseOnBudget`: boolean. Skip events while the factory's budget is spent (today the weekly budget).
     - `check`: object. When on is schedule, and only then: each firing runs an agent that looks at the source and answers what to file, instead of filing an item (ADR 0040). The cron may fire at most every 5 minutes, and one check per trigger runs at a time. Publish warns when the agent may use tools that aren't read-only; a check never edits or runs commands, and clones nothing.
       - `agent`: string, required. An agent of the factory; the check runs with its environment, tools and model.
-      - `brief`: string, required. What to look for and what is worth an item, or the path of a Markdown file in the definition that holds it (./triggers/&lt;name&gt;.md).
-      - `maxUsd`: number, default `0.1`. The most one check may spend.
+      - `brief`: string, at least 1 character, required. What to look for and what is worth an item, or the path of a Markdown file in the definition that holds it (./triggers/&lt;name&gt;.md).
+      - `maxUsd`: number, more than 0, default `0.1`. The most one check may spend.
       - `timeout`: string matching `^[0-9]+(s|m|h)$`, default `"5m"`. How long one check may run, such as 5m; at most 1h.
   - `intake`: array of object. Ignored: board.triggers replaces it (ADR 0026, ADR 0040). Still accepted so existing definitions load, with the warning field-ignored.
     - `source`: one of `"manual"`, `"github-issues"`, `"schedule"`, `"webhook"`, `"email"`, required.
@@ -179,47 +181,50 @@ object, required.
     - `cron`: string.
     - `template`: string.
     - `type`: string.
-  - `stations`: array of object, required.
+  - `stations`: array of object, at least 2 items, required.
     - `id`: string matching `^[a-z][a-z0-9-]{1,38}[a-z0-9]$`, required.
-    - `name`: string. Display name; id stays the key everything references.
-    - `description`: string. The note shown under the station.
+    - `name`: string, at most 40 characters. Display name; id stays the key everything references.
+    - `description`: string, at most 200 characters. The note shown under the station.
     - `kind`: one of `"queue"`, `"agent"`, `"human"`, `"done"`, required.
     - `agent`: string.
     - `route`: map of string or object. Pick the agent by the item's lane instead of one fixed agent, e.g. { backend: backend-engineer, frontend: frontend-engineer }. An entry is an agent name or { agent, agents }: an entry with agents: n gets n of the station's slots kept for its lane, and that lane uses no others; entries without a count share the station's remaining slots. The counts add up to at most the station's agents.
       - `agent`: string, required.
-      - `agents`: integer. Slots of the station kept for this lane; the lane uses no others.
-    - `agents`: integer. Parallel agent containers at this station.
-    - `wip`: integer. Max items in progress at this station.
-    - `buffer`: integer. Items kept ready in front of the station (use at the constraint).
+      - `agents`: integer, 1 to 20. Slots of the station kept for this lane; the lane uses no others.
+    - `agents`: integer, 1 to 20. Parallel agent containers at this station.
+    - `wip`: integer, at least 1. Max items in progress at this station.
+    - `buffer`: integer, at least 0. Items to keep ready in front of the station. Not enforced yet: goald accepts the value and ignores it.
     - `output`: string. Name of a contract the station's result must satisfy.
-    - `checks`: array of object. Checks the station's output must pass before the item moves on. A command check runs in the run's workspace with CI=true and GOAL\_BASE\_BRANCH, the branch the item's pull request goes into; GOAL\_BASE\_BRANCH is empty when that is the repository's default branch.
+    - `checks`: array of string or object. Checks the station's output must pass before the item moves on. A command check runs in the run's workspace with CI=true and GOAL\_BASE\_BRANCH, the branch the item's pull request goes into; GOAL\_BASE\_BRANCH is empty when that is the repository's default branch. It runs with no credentials and stops after 30 minutes. A check, or its shorthand: "schema", "evidence-links" or a command line ("go test ./...").
       - `kind`: one of `"schema"`, `"evidence-links"`, `"command"`, required.
       - `min`: integer.
       - `run`: string.
-    - `action`: one of `"merge"`. On a human station or an agent station with a gate: what goald does when the human or the gate approves. merge merges every pull request the item's outputs name first (the pull\_request and pull\_requests fields of each station's latest output, the gate's own included), each through the factory's code host connection for its host; at a gate goald merges as the engine, and a refused merge blocks the item at the gate.
+    - `action`: one of `"merge"`. On a human station or an agent station with a gate: what goald does when the human or the gate approves. merge merges every pull request the item's outputs name first (the pull\_request and pull\_requests fields of each station's latest output, the gate's own included), each signing in with the token of the most specific runtime.repositories entry that covers its repository and writes (runtime.repository.token when that entry has none, or when there is no runtime.repositories); at a gate goald merges as the engine, and a refused merge blocks the item at the gate.
     - `merges`: one of `"serialize"`, `"allow"`. Only on a station with action merge: how many items it integrates into the same merge target at once. A merge target is the branch an item's pull request merges into: the default branch for a standalone item or an assembly's landing, and the assembly's integration branch for a part. serialize (the default): one item per merge target at a time; allow: several at once.
     - `waitFor`: `"ci"` or object. Make goald wait for CI on the item's pushed commits (ADR 0044): a run at the station starts only once CI on the item's current commits has finished, and after a run pushes, the item moves on only once CI on what it pushed has passed. ci uses the defaults; { ci: { grace, max, rounds } } sets any of them, a field left out taking its default. Nothing here names a host, a CI system, a workflow or a check: goald reads every check the code host reports for the commit.
       - `ci`: object, required. Wait for CI, with any of the defaults changed. max must be above grace.
-        - `grace`: string matching `^[1-9][0-9]*(s|m|h)$`, default `"5m"`. How long after the run ended a first check may take to appear, such as 5m; a commit with no check by then gets no CI, and the wait ends.
+        - `grace`: string matching `^[1-9][0-9]*(s|m|h)$`, default `"5m"`. How long a first check may take to appear, such as 5m, counted from the commit's first CI poll or the start of the wait, whichever is earlier; a commit with no check by then gets no CI, and the wait ends.
         - `max`: string matching `^[1-9][0-9]*(s|m|h)$`, default `"60m"`. The longest goald waits for CI on one commit, such as 60m; CI not finished by then counts as failed, and the station runs again.
-        - `rounds`: integer, default `3`. How many CI rounds one visit to the station gets; after that many, the item blocks for a person, naming the failing checks.
+        - `rounds`: integer, at least 1, default `3`. How many CI rounds one visit to the station gets; after that many, the item blocks for a person, naming the failing checks.
     - `context`: array of one of `"inflight"`. What goald preloads into the feedback of every run at this station. inflight: an In flight section listing up to 30 of the factory's open items and assemblies with the paths each expects to change, ranked by overlap with the item.
     - `gate`: object.
-      - `onReject`: string, required.
-      - `maxRework`: integer.
+      - `onReject`: string, required. The station a rejected item goes back to, where the work is redone. It must name a station before this one.
+      - `maxRework`: integer, 0 to 5.
+    - Rules:
+      - When `kind` is `"agent"`, exactly one of `agent` or `route` is set.
+      - A station with action is a human station, or an agent station with a gate.
   - `flow`: object.
     - `expedite`: object.
       - `types`: array of string.
-      - `wip`: integer.
+      - `wip`: integer, at least 1.
     - `constraint`: string. auto, or a station id.
-    - `release`: one of `"drum-buffer-rope"`, `"push"`.
-    - `andon`: object.
-      - `reworkRate`: number.
-      - `window`: integer.
+    - `release`: one of `"drum-buffer-rope"`, `"push"`. How work is released into the line. drum-buffer-rope is not enforced yet: goald accepts it and releases work as it would without it.
+    - `andon`: object. When one more rejection at a gate would bring its rework rate over the last window verdicts to reworkRate, the inbox shows a rework warning. goald only warns and never stops the line.
+      - `reworkRate`: number, 0 to 1.
+      - `window`: integer, at least 1.
     - `targets`: object. What the line aims for; flow metrics show each against its target. Omit a target to have none.
-      - `throughputPerDay`: number. Items done per day.
-      - `leadTimeHours`: number. p85 lead time, created to done, in hours.
-      - `expediteLeadTimeMinutes`: integer. Lead time of each expedite item, in minutes.
+      - `throughputPerDay`: number, more than 0. Items done per day.
+      - `leadTimeHours`: number, more than 0. p85 lead time, created to done, in hours.
+      - `expediteLeadTimeMinutes`: integer, at least 1. Lead time of each expedite item, in minutes.
     - `assemblies`: object. How runs keep item branches fresh, what a merge conflict does, whether items that edit the same files are built together whether a station's plan becomes an assembly, whether later runs hear what changed since a plan and whether an assembly's parts merge into an integration branch. Omitted keys take their defaults.
       - `freshBase`: one of `"rebase"`, `"merge"`. How a run brings an existing item branch up to date with the default branch; default rebase.
       - `onConflict`: one of `"rework"`, `"human"`. What a merge conflict does: send the item back as rework (default) or leave it to a person.
@@ -229,19 +234,19 @@ object, required.
       - `integration`: object. Whether an assembly's parts merge into one integration branch, goal/a&lt;root number&gt;-&lt;root title slug&gt;, that lands on the default branch at a gate (ADR 0033). Omitted keys take their defaults.
         - `mode`: one of `"trunk"`, `"branch"`. trunk (the default): each part merges into the default branch. branch: an assembly's parts merge into its integration branch, which lands at the landing station; the line needs a station with action merge.
         - `refresh`: one of `"onLand"`, `"eachPart"`. When the integration branch takes in the default branch: onLand (the default), when it lands, or eachPart, before each part runs.
-        - `minParts`: integer. The fewest parts an assembly needs for an integration branch; one with fewer stays on trunk. Default 0.
+        - `minParts`: integer, at least 0. The fewest parts an assembly needs for an integration branch; one with fewer stays on trunk. Default 0.
         - `landAt`: string. The station where the integration branch lands: an agent station with a gate and action merge. Default: the first station with action merge after the station whose plan made the assembly.
     - `dependencies`: object. Which station output fields set an item's dependencies. The platform names no field; an omitted key maps none.
-      - `paths`: string. The top-level output field whose list of file globs replaces the item's paths when a station finishes with a non-empty one. An entry may start with owner/name: to name its repository (acme/web:src/\*\*); an entry without one is in the item's first repository. Items whose paths overlap, in the same repository, wait for each other under assemblies.overlap serialize: the same path in two repositories does not overlap.
-      - `after`: string. The output property listing the open items of this factory, outside the output's plan, that the work must follow, as item refs &lt;factory&gt;#&lt;number&gt;. Each becomes a linked edge from the item, or from every part of its plan with no in-plan needs; a ref that is malformed, of another factory, unknown, done, cancelled or would close a cycle fails the output.
+      - `paths`: string, at least 1 character. The top-level output field whose list of file globs replaces the item's paths when a station finishes with a non-empty one. An entry may start with owner/name: to name its repository (acme/web:src/\*\*); an entry without one is in the item's first repository. Items whose paths overlap, in the same repository, wait for each other under assemblies.overlap serialize: the same path in two repositories does not overlap.
+      - `after`: string, at least 1 character. The output property listing the open items of this factory, outside the output's plan, that the work must follow, as item refs &lt;factory&gt;#&lt;number&gt;. Each becomes a linked edge from the item, or from every part of its plan with no in-plan needs; a ref that is malformed, of another factory, unknown, done, cancelled or would close a cycle fails the output.
     - `outputs`: object. Which station output fields goald reads besides the contract's own. The platform names no field; an omitted key maps none.
-      - `followUps`: string. The top-level output field that holds follow-ups: work an agent noticed outside its item. goald keeps the first 10 entries of each accepted output on the item, each text once. An entry is a string (text for triage) or an object with text and optionally for, an open item &lt;factory&gt;#&lt;number&gt; to note, or start, {at, in, after} with a title and optionally type, lane, repositories and factory, an item of its own filed when the work lands; start wins over for. A station contract that declares the field must declare it as a plain array: no $ref, no maxItems and no required on its items.
-      - `close`: string. The top-level output field whose text closes the item: when an accepted output gives 10 to 500 characters there, goald cancels the item at its station with that text as the reason, the agent the actor. Only an item a trigger or a follow-up filed, and never a part, can be closed. On a person's item, a part, an output that also plans parts, or a text outside the limits, the output fails its check and the agent asks a person instead. Empty or only whitespace closes nothing.
-      - `repositories`: string. The top-level output field whose list of repositories joins the item, recorded as joined output. Each entry is a runtime.repositories entry's name, owner/name or an https URL an entry covers, resolved as at filing. An item keeps at most 10 repositories: when the names would give it more, or one is not a repository of the factory, the output fails its check with the reason and the agent tries again. Repositories join only with an accepted output, never with a gate's rejection.
+      - `followUps`: string, at least 1 character. The top-level output field that holds follow-ups: work an agent noticed outside its item. goald keeps the first 10 entries of each accepted output on the item, each text once. An entry is a string (text for triage) or an object with text and optionally for, an open item &lt;factory&gt;#&lt;number&gt; to note, or start, {at, in, after} with a title and optionally type, lane, repositories and factory, an item of its own filed when the work lands; start wins over for. A station contract that declares the field must declare it as a plain array: no $ref, no maxItems and no required on its items.
+      - `close`: string, at least 1 character. The top-level output field whose text closes the item: when an accepted output gives 10 to 500 characters there, goald cancels the item at its station with that text as the reason, the agent the actor. Only an item a trigger or a follow-up filed, and never a part, can be closed. On a person's item, a part, an output that also plans parts, or a text outside the limits, the output fails its check and the agent asks a person instead. Empty or only whitespace closes nothing.
+      - `repositories`: string, at least 1 character. The top-level output field whose list of repositories joins the item, recorded as joined output. Each entry is a runtime.repositories entry's name, owner/name or an https URL an entry covers, resolved as at filing. An item keeps at most 10 repositories: when the names would give it more, or one is not a repository of the factory, the output fails its check with the reason and the agent tries again. Repositories join only with an accepted output, never with a gate's rejection.
     - `followUpsFrom`: array of string matching `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`. The factories, by metadata.id, this factory accepts follow-ups from: their notes and their items. None by default.
     - `retry`: object. How often a claim runs an item again after a failure that is not the item's fault. Omitted keys take their defaults.
       - `transient`: object. Runs whose sandbox was lost to its infrastructure (a redeploy, a box restart, a network blip) or whose prepare failed before the agent started (goal-agent prepare exited non-zero, such as a tool download that timed out): each runs again in a new box after a backoff that doubles with each loss.
-        - `attempts`: integer. The most runs one claim makes when its sandbox is lost or its prepare fails, both counted together; the failure that reaches it blocks the item. Default 3.
+        - `attempts`: integer, at least 1. The most runs one claim makes when its sandbox is lost or its prepare fails, both counted together; the failure that reaches it blocks the item. Default 3.
 - `learning`: object.
   - `librarian`: object. Ignored (ADR 0039): Jonah proposes knowledge from the line. A definition that has it loads with the warning field-ignored.
     - `agent`: string, required.
@@ -251,9 +256,9 @@ object, required.
     - `schedule`: string.
   - `jonah`: object. Jonah, which reviews the line once a day and proposes changes to the definition (ADR 0039).
     - `enabled`: boolean, default `true`. Whether Jonah reviews this factory at all.
-    - `proposeAfter`: integer, default `3`. The items with the same cause an observation needs before it becomes a proposal.
+    - `proposeAfter`: integer, 1 to 50, default `3`. The items with the same cause an observation needs before it becomes a proposal.
     - `share`: string matching `^(100(\.0+)?|[0-9]{1,2}(\.[0-9]+)?)%$`, default `"5%"`. Jonah's budget, as a percent of what the line spent in the last 7 days, from 0% to 100%. Each review may spend a fifth of it, and Jonah's spend never triggers runtime.budget.onExhausted.
-    - `weeklyUsd`: number. Ignored (ADR 0039): Jonah's budget is share. A definition that has it loads with the warning field-ignored.
+    - `weeklyUsd`: number, at least 0. Ignored (ADR 0039): Jonah's budget is share. A definition that has it loads with the warning field-ignored.
     - `model`: string matching `^claude-[a-z0-9-]+$`. The review run's model; runtime.model when omitted.
 
 ## starter
@@ -261,6 +266,6 @@ object, required.
 object. What a new factory made from this definition starts with (ADR 0032). Onboarding submits starter.item once, when the factory has no items yet.
 
 - `item`: object, required. A small, safe first item the person watches go through the line.
-  - `title`: string, required. The item's title.
+  - `title`: string, 1 to 200 characters, required. The item's title.
   - `type`: string. One of board.workTypes; when absent, the item gets the first work type, as submitItem does.
-  - `body`: string. The item's brief, in markdown.
+  - `body`: string, at most 20000 characters. The item's brief, in markdown.
