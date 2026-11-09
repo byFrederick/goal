@@ -65,6 +65,10 @@ const lane = (over: Partial<BoardLane>): BoardLane => ({
   model_label: 'Sonnet 5.5',
   slots: 2,
   busy: 1,
+  kept_slots: 0,
+  kept_busy: 0,
+  shared_slots: 2,
+  shared_busy: 1,
   ...over,
 });
 
@@ -143,7 +147,19 @@ describe('board lanes', () => {
           agents: [],
           wip_limit: null,
           lanes: [
-            { key: 'person', kind: 'person', role: 'Approve', model: null, model_label: null, slots: null, busy: 0 },
+            {
+              key: 'person',
+              kind: 'person',
+              role: 'Approve',
+              model: null,
+              model_label: null,
+              slots: null,
+              busy: 0,
+              kept_slots: null,
+              kept_busy: null,
+              shared_slots: null,
+              shared_busy: null,
+            },
           ],
           items: [],
         }),

@@ -34,13 +34,20 @@ func TestAPI_BoardLanesPerAgentRole(t *testing.T) {
 		t.Fatalf("board = %d", code)
 	}
 
-	slots := 2
+	// build's route has no counts: both lanes share its 2 slots, which backend's leases fill.
+	slots, none := 2, 0
 	want := map[string][]gen.BoardLane{
 		stInbox: {},
 		stBuild: {
 			// The runtime's model, not among goald's models, shows as its id.
-			{Key: agBackend, Kind: gen.BoardLaneKindAgent, Role: "Backend", Model: new("claude-fable-5-1"), ModelLabel: new("claude-fable-5-1"), Slots: &slots, Busy: 2},
-			{Key: "frontend", Kind: gen.BoardLaneKindAgent, Role: "Frontend", Model: new("claude-haiku-5-5"), ModelLabel: new("Haiku 5.5"), Slots: &slots, Busy: 0},
+			{
+				Key: agBackend, Kind: gen.BoardLaneKindAgent, Role: "Backend", Model: new("claude-fable-5-1"), ModelLabel: new("claude-fable-5-1"), Slots: &slots, Busy: 2,
+				KeptSlots: &none, KeptBusy: &none, SharedSlots: &slots, SharedBusy: &slots,
+			},
+			{
+				Key: "frontend", Kind: gen.BoardLaneKindAgent, Role: "Frontend", Model: new("claude-haiku-5-5"), ModelLabel: new("Haiku 5.5"), Slots: &slots, Busy: 0,
+				KeptSlots: &none, KeptBusy: &none, SharedSlots: &slots, SharedBusy: &slots,
+			},
 		},
 		stMerge: {{Key: "person", Kind: gen.BoardLaneKindPerson, Role: "Merge", Busy: 1}},
 		stDone:  {},

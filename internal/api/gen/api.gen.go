@@ -3210,6 +3210,12 @@ type BoardLane struct {
 	// Busy Agent lanes: the station's live leases held by that agent; a person lane: the items waiting on a person there
 	Busy int `json:"busy"`
 
+	// KeptBusy The live leases this agent holds in its kept slots; null for a person lane
+	KeptBusy *int `json:"kept_busy"`
+
+	// KeptSlots The station's slots kept for the item lanes routed to this agent with a count (`agents:`), cut off at the station's slots; 0 when none has a count; null for a person lane
+	KeptSlots *int `json:"kept_slots"`
+
 	// Key What cards name in board_lane: the agent's name, or `person` for a person lane
 	Key  string        `json:"key"`
 	Kind BoardLaneKind `json:"kind"`
@@ -3222,6 +3228,12 @@ type BoardLane struct {
 
 	// Role The name people read: the agent's name humanized ("infra-engineer" → "Infra engineer"), the station's id humanized for a person lane
 	Role string `json:"role"`
+
+	// SharedBusy The live leases in the shared slots, held by any agent of the station; 0 when shared_slots is; null for a person lane
+	SharedBusy *int `json:"shared_busy"`
+
+	// SharedSlots The station's shared slots, those kept for no lane, when this agent works a lane without a count or is the station's one agent; else 0; null for a person lane
+	SharedSlots *int `json:"shared_slots"`
 
 	// Slots How many runs the lane can have at once: the station's slots, min(agents, wip), shared by all its lanes; null for a person lane
 	Slots *int `json:"slots"`

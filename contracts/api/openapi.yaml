@@ -7169,7 +7169,7 @@ components:
     BoardLane:
       type: object
       description: One lane of a board station, by who works it (a role, never a numbered agent copy)
-      required: [key, kind, role, model, model_label, slots, busy]
+      required: [key, kind, role, model, model_label, slots, busy, kept_slots, kept_busy, shared_slots, shared_busy]
       properties:
         key:
           type: string
@@ -7201,6 +7201,29 @@ components:
           description: >-
             Agent lanes: the station's live leases held by that agent; a person lane: the items
             waiting on a person there
+        kept_slots:
+          type: integer
+          nullable: true
+          description: >-
+            The station's slots kept for the item lanes routed to this agent with a count (`agents:`),
+            cut off at the station's slots; 0 when none has a count; null for a person lane
+        kept_busy:
+          type: integer
+          nullable: true
+          description: >-
+            The live leases this agent holds in its kept slots; null for a person lane
+        shared_slots:
+          type: integer
+          nullable: true
+          description: >-
+            The station's shared slots, those kept for no lane, when this agent works a lane without a
+            count or is the station's one agent; else 0; null for a person lane
+        shared_busy:
+          type: integer
+          nullable: true
+          description: >-
+            The live leases in the shared slots, held by any agent of the station; 0 when shared_slots
+            is; null for a person lane
     Metrics:
       type: object
       required:
