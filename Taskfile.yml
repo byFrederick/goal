@@ -386,19 +386,32 @@ tasks:
         docker history --no-trunc --format '{{"{{"}}.Size{{"}}"}}\t{{"{{"}}.CreatedBy{{"}}"}}' {{.IMAGE}}
       # goald shares PostgreSQL's network namespace on compose's network (as the auth service shares
       # goald's), so it reaches postgres and rustfs by name. It gets the Docker socket because it
-      # pings Docker at start (GOAL_SANDBOX=docker); GOAL_DOCKER_GID as for compose's goald.
+      # pings Docker at start (GOAL_SANDBOX=docker); GOAL_DOCKER_GID as for compose's goald. Like
+      # compose's goald it reads .env when there is one, runs GOAL_AUTH=session (the production path,
+      # with its identity self-check) and blanks the auth service's secrets; the -e flags win over
+      # .env. Without GOAL_AUTH_PROXY_SECRET (CI has no .env) it gets a throwaway one; the identity
+      # service need not run, since goald only watches for it after it listens.
       - |
         set -eu
         docker rm -f {{.CONTAINER}} >/dev/null 2>&1 || true
         trap 'docker rm -f {{.CONTAINER}} >/dev/null 2>&1 || true' EXIT
         gid="${GOAL_DOCKER_GID:-$(stat -c %g /var/run/docker.sock 2>/dev/null || echo 0)}"
+        envfile=""
+        if [ -f .env ]; then envfile="--env-file .env"; fi
+        GOAL_AUTH_PROXY_SECRET="${GOAL_AUTH_PROXY_SECRET:-$(openssl rand -hex 32)}"
+        export GOAL_AUTH_PROXY_SECRET
         began=$(date +%s.%N)
+        # shellcheck disable=SC2086 # envfile is empty or two words
         docker run -d --name {{.CONTAINER}} --network "container:$(docker compose ps -q postgres)" \
           --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true \
-          -v /var/run/docker.sock:/var/run/docker.sock --group-add "$gid" \
+          -v /var/run/docker.sock:/var/run/docker.sock --group-add "$gid" $envfile \
           -e GOAL_LISTEN=0.0.0.0:8080 -e GOAL_GATEWAY_LISTEN=0.0.0.0:8090 \
           -e GOAL_GATEWAY_URL=http://goald:8090/mcp -e GOAL_PUBLIC_URL=http://127.0.0.1:8080 \
-          -e GOAL_AUTH_UPSTREAM=http://127.0.0.1:8081 \
+          -e GOAL_AUTH=session -e GOAL_AUTH_UPSTREAM=http://127.0.0.1:8081 -e GOAL_AUTH_PROXY_SECRET \
+          -e GOAL_SANDBOX_NETWORK="${GOAL_SANDBOX_NETWORK:-goal_agents}" -e GOAL_DOCS_DIR= \
+          -e BETTER_AUTH_SECRET= -e BETTER_AUTH_SECRETS= -e GOAL_PG_PASSWORD= -e GOAL_PG_AUTH_PASSWORD= \
+          -e GOAL_AUTH_DATABASE_URL= -e GOAL_DATABASE_ADMIN_URL= -e GOAL_BOOTSTRAP_OWNER_EMAIL= \
+          -e GOAL_SMTP_URL= -e GOOGLE_CLIENT_SECRET= -e GOAL_API_KEY= \
           -e GOAL_DATABASE_URL="postgres://goal_app:${GOAL_PG_APP_PASSWORD:-goal-app-dev-only}@postgres:5432/goal?sslmode=disable" \
           -e GOAL_MIGRATE_DATABASE_URL="postgres://goal_owner:${GOAL_PG_OWNER_PASSWORD:-goal-owner-dev-only}@postgres:5432/goal?sslmode=disable" \
           -e GOAL_S3_ENDPOINT=http://rustfs:9000 -e GOAL_S3_BUCKET -e GOAL_S3_ACCESS_KEY -e GOAL_S3_SECRET_KEY -e AWS_REGION \

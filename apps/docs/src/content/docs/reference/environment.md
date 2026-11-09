@@ -233,6 +233,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `CLOUDFLARE_ACCOUNT_ID` | config | no |  | The Cloudflare account the Terraform and deploy tasks act on (the operator's environment or CI). |
 | `CLOUDFLARE_API_TOKEN` | secret | no |  | The Cloudflare API token the Terraform and deploy tasks use (the operator's environment or CI). |
 | `GITHUB_ACTIONS` | config | no |  | Set to true by CI; the Terraform tasks then expect GOOGLE_OAUTH_ACCESS_TOKEN instead of the operator's own sign-in. |
+| `GOAL_AUTH_PROXY_SECRET` | secret | goald under GOAL_AUTH=session |  | The secret goald sends with every request it forwards to the auth service, which refuses any other; goal up generates one per start. |
 | `GOAL_DOCKER_GID` | config | no | `0` | The Docker socket's group on Linux, which goald's container joins under goal up --compose. |
 | `GOAL_E2E_MODEL_KEY` | secret | no |  | The model key (an Anthropic API key) that task e2e:secrets gives its factory's runs as the secret model-key; the test skips while it is unset. |
 | `GOAL_E2E_REPOSITORY_TOKEN` | secret | no |  | A fine-grained token for GOAL_E2E_REPOSITORY_URL's repository (contents and pull requests, read and write) that task e2e:secrets stores as the secret repo-token; the test skips while it is unset. |
@@ -244,6 +245,7 @@ Classes: **public** may be shown to anyone who uses the platform; **config** is 
 | `GOAL_S3_BUCKET` | config | yes |  | The bucket that holds factory definition blobs and the catalogs; the tasks default it to goal-local. |
 | `GOAL_S3_ENDPOINT` | config | no |  | The S3-compatible endpoint of the bucket (RustFS locally, R2 on Cloudflare); unset, goald and the CLI use AWS S3, and the tasks http://127.0.0.1:9000. |
 | `GOAL_S3_SECRET_KEY` | secret | no |  | The object storage secret key. |
+| `GOAL_SANDBOX_NETWORK` | config | no | `goal_agents` | The Docker network agent containers run on, reaching out only through goal-egress. |
 | `GOAL_TF_STATE_ACCESS_KEY` | secret | no |  | The access key of the R2 bucket that holds the Terraform state. |
 | `GOAL_TF_STATE_SECRET_KEY` | secret | no |  | The secret key of the R2 bucket that holds the Terraform state. |
 | `GOOGLE_OAUTH_ACCESS_TOKEN` | secret | no |  | In CI, the Google access token the Terraform tasks use for the Google provider. |
