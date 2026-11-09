@@ -17,8 +17,8 @@ const { AuthFailure, sendCode } = await import('./auth');
 
 /** The client's answer to a refused call: it hands the response to onError and returns the error. */
 function answers(status: number, headers: Record<string, string>) {
-  send.mockImplementation(async ({ fetchOptions }: { fetchOptions: FetchOptions }) => {
-    fetchOptions.onError({ response: new Response(null, { status, headers }) });
+  send.mockImplementation(async (arg?: { fetchOptions: FetchOptions }) => {
+    arg?.fetchOptions.onError({ response: new Response(null, { status, headers }) });
     return { data: null, error: { status } };
   });
 }
