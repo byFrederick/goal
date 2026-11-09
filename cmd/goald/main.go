@@ -169,7 +169,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	pool, err := openDatabase(ctx, s, clock, log)
+	pool, err := openDatabase(ctx, s, log)
 	if err != nil {
 		return err
 	}
@@ -178,6 +178,14 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// One value is the Store, Tenancy and Audit. Each binds its transactions to the organization
 	// in ctx: the engine takes it from each line, the API from the request.
 	store := postgres.New(pool)
+	defer store.Close()
+
+	// The minute loops' session locks share one connection outside the pool, open from the start.
+	if err := store.OpenLockConn(ctx); err != nil {
+		return err
+	}
+
+	go postgres.LogPoolStats(ctx, store.PoolStats, clock, postgres.PoolStatsInterval, log)
 
 	identity, proxySecret, err := authentication(ctx, s, store, secrets, log)
 	if err != nil {
@@ -780,9 +788,8 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 
 // openDatabase applies pending migrations as goal_owner on a pool of its own, closed before goald
 // serves anything, then opens goald's pool as goal_app and refuses a role that row-level security
-// would not bind. It logs the pool's "db pool" line once a minute until ctx ends, so pool
-// starvation shows in the logs. The caller closes the pool.
-func openDatabase(ctx context.Context, s settings, clock ports.Clock, log *slog.Logger) (*pgxpool.Pool, error) {
+// would not bind. The caller closes the pool.
+func openDatabase(ctx context.Context, s settings, log *slog.Logger) (*pgxpool.Pool, error) {
 	owner, err := postgres.Open(ctx, s.MigrateDatabaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("GOAL_MIGRATE_DATABASE_URL: %w (goal db init creates the roles)", err)
@@ -807,8 +814,6 @@ func openDatabase(ctx context.Context, s settings, clock ports.Clock, log *slog.
 	}
 
 	log.InfoContext(ctx, "database ready", slog.String("role_check", "passed"))
-
-	go postgres.LogPoolStats(ctx, postgres.PoolStats(pool), clock, postgres.PoolStatsInterval, log)
 
 	return pool, nil
 }

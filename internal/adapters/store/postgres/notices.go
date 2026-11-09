@@ -25,8 +25,8 @@ const (
 
 var _ ports.ItemNotices = (*Notices)(nil)
 
-// Notices implements ports.ItemNotices with LISTEN on a connection of its own, outside the
-// store's pool, so a long-lived listener never holds a pooled connection. Every notification is
+// Notices implements ports.ItemNotices with LISTEN on the store's one listening connection,
+// outside its pool, which every listener of the store shares (listenHub). Every notification is
 // read back through the row-level security of the organization it names before it is delivered
 // (review 2.2 M4): an item event from its item_events row, an organization event by the reader of
 // its name (orgEventReaders); one with nothing to read back is dropped.
@@ -34,11 +34,11 @@ type Notices struct {
 	l listener[ports.ItemNotice]
 }
 
-// NewNotices listens with the connection config of s's pool and reads notices back through s.
+// NewNotices listens on s's listening connection and reads notices back through s.
 // log may be nil.
 func NewNotices(s *Store, log *slog.Logger) *Notices {
 	return &Notices{l: listener[ports.ItemNotice]{
-		cfg: s.pool.Config().ConnConfig, log: discardIfNil(log), channels: []string{noticeChannel, orgEventChannel},
+		hub: s.listen, log: discardIfNil(log), channels: []string{noticeChannel, orgEventChannel},
 		name: "item notices", resync: ports.ItemNotice{Resync: true}, decode: itemNoticeFrom, readBack: s.readBackItemNotice,
 	}}
 }

@@ -139,8 +139,9 @@ func TestNotices_ReconnectsAndResyncsAfterTheConnectionIsLost(t *testing.T) {
 	factory := saveFactory(ctx, t, s)
 
 	app := "goal_test_listener_" + randomHex(t)
+	// The store's one listening connection serves every listener; set its name before it dials.
+	s.listen.cfg.RuntimeParams["application_name"] = app
 	listener := NewNotices(s, nil)
-	listener.l.cfg.RuntimeParams["application_name"] = app
 
 	notices := listening(t, listener, factory)
 
