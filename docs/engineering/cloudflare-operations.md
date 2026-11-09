@@ -103,10 +103,12 @@ PS-5 has `max_connections = 25` and reserves 3 for superusers, which leaves 22 f
 | goald's listening connection, held while anything listens | 1 | one connection LISTENs for the definition cache and the feed's item, definition and access notices (`listenHub` in `internal/adapters/store/postgres/listener.go`) |
 | goald's lock connection, held from goald's start | 1 | the session advisory locks of the schedules, Jonah's sweeps, the watches and the digest (`sessionLocks` in `internal/adapters/store/postgres/lockconn.go`) |
 | the auth service's pool (pg.Pool) | 4 | `poolMax` in `apps/auth/src/db.ts` |
-| migrations, at goald's start only | 2 | `migrateRequiring` in `internal/adapters/store/postgres/postgres.go` |
+| migrations, at goald's start only, and none when the database is at the latest version | 2 | `migrateRequiring` in `internal/adapters/store/postgres/postgres.go` |
 | **Total** | **22** | |
 
 goald's listening and lock connections are outside its pool: goald opens them from the pool's config with their own connect, so `pool_max_conns` does not cap them. goald therefore holds up to 16 connections, not 14; the `db pool` line's `outside_conns` says how many of the two are open. The lock connection takes each loop's lock in turn on one session and refuses a key this goald already holds, and it redials when it is lost, which frees every lock it held. Migrations finish before the pool fills, so the steady state is 20, which leaves 2 for an operator's session.
+
+A reload of the definition cache (goald's start, and each resync) loads up to 4 organizations at once and reads up to 4 definition files at once across all of them (`orgLoads` and `blobReads` in `internal/definitions/definitions.go`). Each read takes one connection of goald's pool for its query and gives it back before the bucket read, so a reload holds at most 8 of the pool's 14 and opens no connection of its own.
 
 goald's URL sets `pool_max_conn_idle_time=5m`, so after a burst, such as goald's restart after a deploy, its pool shrinks back within 5 minutes instead of pgxpool's default 30.
 
@@ -250,9 +252,22 @@ Queries that run outside a request (the engine, the scheduled jobs) are not in a
   - `goald bound`, with `addr` and `gateway_listen`, follows at once: goald binds its listeners before it opens the database, and from then on answers 503 `goald-starting` on every path until `goald listening`.
   - Each phase then carries `phase` and `took` (a duration in nanoseconds, as slog writes it): `startup phase` for `owner_pool` (opening the goal_owner pool), `migrate` and `lock_conn` (dialing the lock connection); `database ready` for `app_pool` (opening goald's pool and checking its role); `master keys loaded`, or the `no master key` warning, for `master_keys`; `factories loaded` for `factories` (loading every factory's definition); and `goald listening` for `listening` (building the API, the servers and the jobs).
   - `goald listening` also carries `startup`, the total from `goald starting` to listening; it is logged when the real handlers take over from the 503. Steps between phases, such as authentication and the sandboxes, count in the total only.
+  - What software#1010 cut, and the numbers it was measured with. Production's phase lines were not read: the box that made the change has no `wrangler` credentials and no Docker, so neither production nor a local Compose run was measured. The 16 s `factories` figure is the brief of software#1005's.
+
+    | Phase | Before | After | Where the number comes from |
+    | --- | --- | --- | --- |
+    | `factories`, production | 16 s | not measured | software#1005's brief; read the next deploy's `factories loaded` line for the after |
+    | `factories`, benchmark | 300 ms | 69 ms | `BenchmarkRefresh_ManyOrganizations` in `internal/definitions`: 8 organizations of one 5-file factory each, on a fake store that takes 5 ms a read |
+    | `migrate` at the latest version, production | not measured | not measured | read the next deploy's `startup phase` line with `phase` `migrate` |
+    | `migrate` at the latest version, local PostgreSQL 18 | 14.8 ms | 0.42 ms | a second `Migrate` on a migrated database over loopback, averaged over 10 calls |
+
+    The refresh now loads organizations and files concurrently (Connection budget, above), and `Migrate` reads the applied versions in one query and returns when every embedded migration is applied, without the lock connection, the advisory lock or goose.
 
   Read them with `wrangler tail goal --search "startup phase"` (or `--search "goald starting"`), or by those messages in the dashboard's observability. No line carries a connection string or a secret.
 - **A slow start after a deploy**, continued: the [Deploy outage](#deploy-outage) section below has the Worker's side of it.
+- **goald's image and local cold start.** `task goald:coldstart` measures both where Docker runs: it builds `cmd/goald/Dockerfile`'s runtime target, prints its uncompressed size, its compressed size (gzip of `docker save`) and each layer with the instruction that made it, then starts it against compose.yaml's PostgreSQL and RustFS and prints the seconds from `docker run` to `goald listening`, with goald's phase lines. ci's `goald image and cold start` job runs it on every pull request into main and writes the numbers to its job summary; it only reports ([testing.md](testing.md#required-checks)).
+  - **Measured:** not yet. The job first runs on the pull request that lands assembly software#1005 in main; copy its numbers here (image uncompressed and compressed, the goald layer, the cold start), with the date and the run's link.
+  - **What a deploy changes.** The runtime's layers run from what changes least to what changes on every deploy: the pinned Alpine base (busybox `wget` for the health check, and `ca-certificates-bundle`, the CA file Go reads), github-mcp-server from its own stage, then the goald binary. Both copies are `COPY --link`, so a source change touches only the goald layer, and the others keep their digests. There is no `apk add`: a newer CA bundle comes with a new `RUNTIME_IMAGE` digest.
 - **408 while applying container settings**, and **a leftover sandboxtest application**: bootstrap steps 8 and 9.
 - **`task check` in the operator's checkout.** `task tf:plan` saves the s3 backend in `deploy/terraform/.terraform/`; the offline tasks (`tf:validate`, `tf:test`, `tf:lint`, so the pre-push hook) use their own data directory, `deploy/terraform/.terraform/offline`, and never read it.
 
