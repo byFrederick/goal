@@ -997,3 +997,140 @@ describe('runTask environment', () => {
     expect(calls).toHaveLength(1);
   });
 });
+
+describe('runTask build cache', () => {
+  const key = 'a'.repeat(64);
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'goal-run-cache-'));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  /** Runs the task with prepare's state, a gateway serving the cache routes and tar faked; all in one order. */
+  async function cached(
+    state: unknown,
+    opts: { put?: number; messages?: unknown[]; throws?: Error; environment?: RunDeps['environment'] } = {},
+  ) {
+    const order: string[] = [];
+    const cacheDir = join(dir, 'gocache');
+    await mkdir(cacheDir);
+    const statePath = join(dir, 'build-cache.json');
+    if (state !== undefined) await writeFile(statePath, JSON.stringify(state));
+    const archive = join(dir, 'build-cache.tar.zst');
+    const g = gateway((url) => {
+      if (!url.pathname.startsWith('/run/build-cache/')) return Response.json({ notes: [] });
+      const r = g.requests.at(-1);
+      order.push(`${r?.init?.method ?? 'GET'} ${url.pathname.replace(key, '<key>')}`);
+      if (url.pathname.endsWith('/archive')) return new Response('', { status: opts.put ?? 200 });
+      if (url.pathname.endsWith('/done')) return new Response(null, { status: 204 });
+      return Response.json({ url: `/run/build-cache/${key}/archive`, method: 'PUT' });
+    });
+    const { fake } = scripted(opts.messages ?? [success], opts.throws ? { throws: opts.throws } : {});
+    const query = ((params: Parameters<typeof fake>[0]) => {
+      const inner = fake(params);
+      return (async function* () {
+        try {
+          yield* inner;
+        } finally {
+          order.push('agent ended');
+        }
+      })();
+    }) as unknown as typeof fake;
+    const events: WorkerEvent[] = [];
+    const logs: string[] = [];
+    const code = await runTask(spec, files, {
+      query,
+      emit: (e) => {
+        if (e.type === 'finished') order.push('finished');
+        events.push(e);
+      },
+      now: () => at,
+      env,
+      abortController: new AbortController(),
+      fetch: g.fetch,
+      notePollMs: 0,
+      ...(opts.environment ? { environment: opts.environment } : {}),
+      buildCache: {
+        state: statePath,
+        archive,
+        log: (l) => logs.push(l),
+        exec: async (command, args) => {
+          order.push(`exec ${command}`);
+          await writeFile(archive, 'packed');
+          expect(args.at(-1)).toBe(join(dir, 'gocache').slice(1));
+          return 0;
+        },
+      },
+    });
+    const finished = events.at(-1) as { build_cache?: string; status?: string };
+    return { code, finished, order, logs, requests: g.requests };
+  }
+
+  it('saves after a miss once the agent ended, before the finished line, which reports the miss', async () => {
+    const { code, finished, order } = await cached({ outcome: 'miss', key, dirs: [join(dir, 'gocache')] });
+
+    expect(code).toBe(0);
+    expect(finished).toMatchObject({ status: 'succeeded', build_cache: 'miss' });
+    expect(order).toEqual([
+      'agent ended',
+      'POST /run/build-cache/<key>',
+      'exec tar',
+      'PUT /run/build-cache/<key>/archive',
+      'POST /run/build-cache/<key>/done',
+      'finished',
+    ]);
+  });
+
+  it('sends the task token to the gateway and done the archive size', async () => {
+    const { requests } = await cached({ outcome: 'miss', key, dirs: [join(dir, 'gocache')] });
+    const cache = requests.filter((r) => r.url.pathname.startsWith('/run/build-cache/'));
+
+    expect(cache.map((r) => new Headers(r.init?.headers).get('Authorization'))).toEqual(
+      cache.map(() => 'Bearer gateway-token'),
+    );
+    expect(cache.at(-1)?.init?.body).toBe(JSON.stringify({ size_bytes: 'packed'.length }));
+  });
+
+  it('reports a hit, off or error from prepare and saves nothing', async () => {
+    for (const outcome of ['hit', 'off', 'error']) {
+      const { finished, order } = await cached({ outcome, key, dirs: [join(dir, 'gocache')] });
+      expect(finished.build_cache).toBe(outcome);
+      expect(order).toEqual(['agent ended', 'finished']);
+      await rm(join(dir, 'gocache'), { recursive: true });
+    }
+  });
+
+  it('leaves build_cache out without a state from prepare', async () => {
+    const { finished, order } = await cached(undefined);
+
+    expect(finished).not.toHaveProperty('build_cache');
+    expect(order).toEqual(['agent ended', 'finished']);
+  });
+
+  it('logs a failed save and changes neither the status nor the exit code', async () => {
+    const { code, finished, logs, order } = await cached(
+      { outcome: 'miss', key, dirs: [join(dir, 'gocache')] },
+      { put: 500 },
+    );
+
+    expect(code).toBe(0);
+    expect(finished).toMatchObject({ status: 'succeeded', build_cache: 'miss' });
+    expect(order).not.toContain('POST /run/build-cache/<key>/done');
+    expect(logs).toEqual(['goal-agent run: build cache save: upload: 500']);
+  });
+
+  it('saves after a crash too, as the agent built before it', async () => {
+    const { code, finished, order } = await cached(
+      { outcome: 'miss', key, dirs: [join(dir, 'gocache')] },
+      { messages: [], throws: new Error('Claude Code process exited with code 1') },
+    );
+
+    expect(code).toBe(1);
+    expect(finished).toMatchObject({ status: 'failed', build_cache: 'miss' });
+    expect(order.at(-2)).toBe('POST /run/build-cache/<key>/done');
+  });
+});

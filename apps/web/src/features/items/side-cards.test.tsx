@@ -118,6 +118,7 @@ function runOf(station: string, agent: string, cost: number): Run {
     cpu_seconds: null,
     peak_memory_bytes: null,
     box_size: null,
+    build_cache: null,
   };
 }
 
@@ -253,6 +254,26 @@ describe('DetailsCard', () => {
     expect(screen.getByRole('link', { name: '#318' }).getAttribute('href')).toBe(
       'https://github.com/acme/goal/pull/318',
     );
+  });
+
+  it.each([
+    ['hit', 'Cache hit'],
+    ['miss', 'Cache miss'],
+    ['off', 'Cache off'],
+    ['error', 'Cache error'],
+  ] as const)('shows the working run\u2019s build cache outcome %s as a Build cache row', async (outcome, label) => {
+    const withCache = runs.map((r) => (r.id === 'run-build' ? { ...r, build_cache: outcome } : r));
+    renderCards(() => <DetailsCard item={item()} factory={factory} events={events} trace={trace()} runs={withCache} />);
+
+    const details = await screen.findByRole('region', { name: 'Details' });
+    expect(details.textContent).toContain(`Build cache${label}`);
+  });
+
+  it('leaves the Build cache row out when the working run has no outcome', async () => {
+    renderCards(() => <DetailsCard item={item()} factory={factory} events={events} trace={trace()} runs={runs} />);
+
+    const details = await screen.findByRole('region', { name: 'Details' });
+    expect(details.textContent).not.toContain('Build cache');
   });
 
   it('names the run by its role, never by its numbered agent copy', async () => {

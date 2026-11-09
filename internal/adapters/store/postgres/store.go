@@ -182,6 +182,28 @@ func movedOrMissing(ctx context.Context, q *db.Queries, id uuid.UUID, from domai
 	return fmt.Errorf("item is %s at %s, not %s at %s: %w", row.State, row.Station, from.State, from.Station, ports.ErrConflict)
 }
 
+// FactoryLeases implements ports.Store.
+func (s *Store) FactoryLeases(ctx context.Context, factory domain.FactoryID) ([]domain.Lease, error) {
+	fid, err := parseID("factory", string(factory))
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.Lease, error) {
+		return q.LeasesOfFactory(ctx, fid)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("factory %s: leases: %w", factory, err)
+	}
+
+	out := make([]domain.Lease, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, leaseFrom(r))
+	}
+
+	return out, nil
+}
+
 // Leases implements ports.Store.
 func (s *Store) Leases(ctx context.Context, factory domain.FactoryID, station string) ([]domain.Lease, error) {
 	fid, err := parseID("factory", string(factory))
@@ -235,7 +257,9 @@ func (s *Store) ClaimNext(ctx context.Context, c ports.Claim) (domain.Item, doma
 			return slotTaken
 		}
 
-		next, err := q.LockNextWaitingItem(ctx, db.LockNextWaitingItemParams{FactoryID: factory, Station: c.Station.ID, Now: c.Now})
+		next, err := q.LockNextWaitingItem(ctx, db.LockNextWaitingItemParams{
+			FactoryID: factory, Station: c.Station.ID, Now: c.Now, Lane: optional(c.Lanes.Lane), ExcludeLanes: c.Lanes.Exclude,
+		})
 		if notFound(err) {
 			return fmt.Errorf("station %s: %w", c.Station.ID, ports.ErrNoWork)
 		}
@@ -806,7 +830,7 @@ func (s *Store) FinishRun(ctx context.Context, id domain.RunID, res domain.RunRe
 			InputTokens: res.InputTokens, OutputTokens: res.OutputTokens, CostUsd: res.CostUSD,
 			Error: optional(res.Error), EndedAt: &endedAt, Output: jsonOrNull(res.Output),
 			CpuSeconds: res.CPUSeconds, PeakMemoryBytes: res.PeakMemoryBytes,
-			PeakMemorySource: optional(string(res.PeakMemorySource)),
+			PeakMemorySource: optional(string(res.PeakMemorySource)), BuildCache: optional(string(res.BuildCache)),
 		})
 		if notFound(err) {
 			return nil // already finished
@@ -1144,6 +1168,35 @@ func (s *Store) ItemEvents(ctx context.Context, id domain.ItemID, after int64, l
 	}
 
 	return convertAll(rows, eventFrom)
+}
+
+// AskEvents implements ports.Store.
+func (s *Store) AskEvents(ctx context.Context, ids []domain.ItemID) (map[domain.ItemID][]domain.Event, error) {
+	out := map[domain.ItemID][]domain.Event{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+
+	uids, err := parseIDs("item", ids)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := fetch(ctx, s.read, func(q *db.Queries) ([]db.ItemEvent, error) { return q.AskEvents(ctx, uids) })
+	if err != nil {
+		return nil, fmt.Errorf("ask events of %d items: %w", len(ids), err)
+	}
+
+	events, err := convertAll(rows, eventFrom)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, e := range events {
+		out[e.ItemID] = append(out[e.ItemID], e)
+	}
+
+	return out, nil
 }
 
 // FactoryActivity implements ports.Store.

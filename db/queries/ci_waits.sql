@@ -88,3 +88,12 @@ FROM ci_waits w
 JOIN ci_polls p ON p.org_id = w.org_id AND p.host = w.host AND p.repo = w.repo AND p.sha = w.sha
 WHERE w.item_id = sqlc.arg(item_id) AND w.station = sqlc.arg(station)
 ORDER BY w.started_at, w.visit, w.repo, w.id;
+
+-- name: CIWaitsOfKeys :many
+-- CIWaitsAt for each (item, station) pair of the two arrays, zipped, in one read: what the board reads for
+-- its waiting cards. By pair, then as CIWaitsAt orders them.
+SELECT sqlc.embed(w), sqlc.embed(p)
+FROM (SELECT unnest(sqlc.arg(item_ids)::uuid[]) AS item_id, unnest(sqlc.arg(stations)::text[]) AS station) k
+JOIN ci_waits w ON w.item_id = k.item_id AND w.station = k.station
+JOIN ci_polls p ON p.org_id = w.org_id AND p.host = w.host AND p.repo = w.repo AND p.sha = w.sha
+ORDER BY w.item_id, w.station, w.started_at, w.visit, w.repo, w.id;

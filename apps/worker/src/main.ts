@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { cp, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { archiveFile, stateFile } from './cache.js';
 import { cgroupRoot, cpuStartFile, meminfoFile, selfCgroupFile } from './cgroup.js';
 import { runCheck } from './check.js';
 import { runDefinition } from './definition.js';
@@ -190,6 +191,10 @@ async function runAgent(): Promise<number> {
     // A check (ADR 0040 decision 19) runs its agent as a task that only reads (src/check.ts).
     const run = spec.check ? runCheck : runTask;
     return await run(spec, files, {
+      // A check neither saves nor reports the build cache (src/cache.ts).
+      ...(spec.check
+        ? {}
+        : { buildCache: { state: join(paths.goal, stateFile), archive: join(paths.goal, archiveFile), exec } }),
       query,
       emit,
       now,

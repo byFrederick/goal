@@ -506,7 +506,7 @@ func (s *Store) Assemblies(ctx context.Context, factory domain.FactoryID, ids []
 		}
 
 		slices.SortFunc(parts, func(a, b domain.Part) int { return cmp.Compare(a.Number, b.Number) })
-		out[id] = domain.Assembly{ID: a.ID, Number: a.Number, Title: a.Title, Parts: parts}
+		out[id] = domain.Assembly{ID: a.ID, Number: a.Number, Title: a.Title, IntegrationBranch: a.IntegrationBranch, Parts: parts}
 	}
 
 	return out, nil

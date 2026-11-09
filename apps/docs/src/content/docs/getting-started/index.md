@@ -13,7 +13,7 @@ A factory's stations, agents and work types are data in its definition, not code
 You use Goal in two places:
 
 - **The web app** shows the Board of a factory, the item screen, and the Needs you list of what waits for you.
-- **The `goal` CLI** does the same work from a terminal, and scripts can use it too. [Reference](/docs/reference/) lists every command.
+- **The `goal` CLI** does the same work from a terminal, and scripts can use it too. The [CLI reference](/docs/reference/cli/) lists every command.
 
 ## Read these pages in order
 

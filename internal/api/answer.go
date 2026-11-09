@@ -57,26 +57,23 @@ func answerOf(body *gen.ItemAnswer) (string, *int, error) {
 	return answer, nil, nil
 }
 
-// openAsks are an item's open question and open tool approval as the contract has them, read
-// from all its events at once, each nil when none is open. An item has at most one of them.
+// openAsks are an item's open question and open tool approval as the contract has them, each
+// nil when none is open. An item has at most one of them.
 func (s *server) openAsks(ctx context.Context, id domain.ItemID) (*gen.ItemQuestion, *gen.ToolApproval, error) {
-	var events []domain.Event
-
-	for after := int64(0); ; {
-		page, err := s.items.ItemEvents(ctx, id, after, maxEventLimit)
-		if err != nil {
-			return nil, nil, fmt.Errorf("read the events of item %s: %w", id, err)
-		}
-
-		events = append(events, page...)
-
-		if len(page) < maxEventLimit {
-			break
-		}
-
-		after = page[len(page)-1].ID
+	events, err := s.items.AskEvents(ctx, []domain.ItemID{id})
+	if err != nil {
+		return nil, nil, fmt.Errorf("read the asks of item %s: %w", id, err)
 	}
 
+	q, a := asksOf(events[id])
+
+	return q, a, nil
+}
+
+// asksOf are the open question and open tool approval in an item's events, as the contract has
+// them, each nil when none is open. events are the item's history in append order, or only its
+// events of domain.AskKinds (ports.Store.AskEvents).
+func asksOf(events []domain.Event) (*gen.ItemQuestion, *gen.ToolApproval) {
 	var (
 		question *gen.ItemQuestion
 		approval *gen.ToolApproval
@@ -92,7 +89,7 @@ func (s *server) openAsks(ctx context.Context, id domain.ItemID) (*gen.ItemQuest
 		approval = toolApprovalOf(a)
 	}
 
-	return question, approval, nil
+	return question, approval
 }
 
 // questionProblem maps the refusals of an answer: a choice outside the question's choices is

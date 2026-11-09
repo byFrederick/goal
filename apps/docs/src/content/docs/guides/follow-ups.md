@@ -33,7 +33,7 @@ Goald reads the first 10 entries of each accepted output, keeps each once per it
 | --- | --- |
 | A string, or an object with only `text` | The factory's triage item. |
 | `for: "<factory>#<number>"` | A note on that open item. |
-| `start: {title, at, in, after, type, lane, repositories, factory}` | An item of its own, filed when the work lands. `title` is required. `at`, `in` and `after` are an item's start (see [Start an item later](../submit-and-follow-items/#start-an-item-later)); `in` counts from when the work landed. `repositories` are the item's, each covered by one of the receiving factory's `runtime.repositories` entries; with none, the item takes its source item's that the receiving factory covers, else the default entry's. |
+| `start: {title, at, in, after, type, lane, repositories, factory}` | An item of its own, filed when the work lands. `title` is required. `at`, `in` and `after` are an item's start (see [Start an item later](/docs/guides/submit-and-follow-items/#start-an-item-later)); `in` counts from when the work landed. `repositories` are the item's, each covered by one of the receiving factory's `runtime.repositories` entries; with none, the item takes its source item's that the receiving factory covers, else the default entry's. |
 
 With both `for` and `start`, `start` wins. The field names are in the [definition reference](/docs/reference/definition/).
 
@@ -47,13 +47,17 @@ Each tick, goald delivers waiting notes as `item_note` events and, when an item 
 
 ## Triage
 
-Follow-ups with no `for` or `start`, and those that could not go where they said, wait for the factory's triage item. It collects for 24 hours or until an agent claims it, and its title names its sources, as in "Follow-ups from software#513 and 4 more". Its brief quotes each follow-up with the station and agent that wrote it, and says they are notes from work in progress and not requests from people. The factory's first agent plans parts of at most 3, writes one spec or closes the item. The triage item works on its sources' repositories, at most 10.
+Follow-ups with no `for` or `start`, and those that could not go where they said, wait for the factory's triage item. It collects for 24 hours or until an agent claims it, and its title names its sources, as in "Follow-ups from software#513 and 4 more". Its brief quotes each follow-up with the station and agent that wrote it, and says they are notes from work in progress and not requests from people. The agent at the line's first station plans parts of at most 3, writes one spec or closes the item. The triage item works on its sources' repositories, at most 10.
 
 The Intake page, `goal intake <factory>` and the intake API show the open triage item and the items whose follow-ups will join it. See [The triage item](/docs/concepts/work-items/#the-triage-item).
 
+## Follow-ups of untrusted work
+
+When untrusted work lands (an item made from a webhook delivery or a check, see [Untrusted items](/docs/guides/intake/#untrusted-items)), its follow-ups and notes join an untrusted triage item of their own, not the factory's shared one. That item is filed paused with the reason "Its follow-ups come from work that read outside text. Check them, then resume." It shows in Needs you. Read the follow-ups it quotes, then [resume the item](/docs/guides/act-on-an-item/#pause-and-resume) to let an agent work through them, or close it. Nothing from untrusted work is delivered or filed before a person resumes it.
+
 ## Close an item with nothing left to do
 
-An item that a trigger or a follow-up filed, such as a triage item, can be closed by the agent when nothing remains. Name the output field in `board.flow.outputs.close`, and the agent writes 10 to 500 characters of reason in it. Goald cancels the item with that reason, and the item shows "Closed by the architect". A person's item and a part are never closed this way: the output fails its check and the agent asks a person.
+An item that a trigger or a follow-up filed, such as a triage item, can be closed by the agent when nothing remains. Name the output field in `board.flow.outputs.close`, and the agent writes 10 to 500 characters of reason in it. Goald cancels the item with that reason, and the item shows "Closed by <agent>." followed by the reason. A person's item and a part are never closed this way: the output fails its check and the agent asks a person.
 
 ## File or drop a follow-up
 
@@ -62,8 +66,8 @@ On an item, each follow-up shows where it went or will go. Through the API, a pe
 - drop a waiting follow-up: `POST /v1/orgs/{org}/items/{item}/follow-ups/{id}/drop`. It is never delivered or filed.
 - file one from a dropped follow-up, or from one in a triage item that is done or cancelled, including one closed by its agent: `POST /v1/orgs/{org}/items/{item}/follow-ups/{id}/file`, with `{title, body, type, lane, start}` where only `title` is required. The new item has origin `follow-up` and you as its filer. It takes the follow-up's `start.repositories`, else its source item's.
 
-[Act on an item](../act-on-an-item/#drop-or-file-a-follow-up) has the permissions and the errors. Follow-ups of an item made from a webhook delivery are never delivered or filed on their own; a person drops one and then files it, or leaves it.
+[Act on an item](/docs/guides/act-on-an-item/#drop-or-file-a-follow-up) has the permissions and the errors. Follow-ups of untrusted work are handled as the next section says.
 
 ## Next
 
-To see what is waiting to be filed, read [Review what enters a factory](../intake/).
+To see what is waiting to be filed, read [Review what enters a factory](/docs/guides/intake/).

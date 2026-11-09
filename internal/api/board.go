@@ -55,7 +55,9 @@ func (s *server) GetBoard(ctx context.Context, req gen.GetBoardRequestObject) (g
 
 	constraint, source := l.ConstraintOf(l.Candidates(stats.list, stats.busyOver, 1), loads)
 
-	byStation, assemblies, err := s.boardCards(ctx, f, l, constraint)
+	held := s.heldLeases(l.FactoryID)
+
+	byStation, assemblies, err := s.boardCards(ctx, f, l, constraint, held)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +83,7 @@ func (s *server) GetBoard(ctx context.Context, req gen.GetBoardRequestObject) (g
 	labels := s.modelLabels(ctx)
 
 	for _, st := range l.Stations {
-		lanes, err := s.lanes(ctx, l, st, loads[st.ID], labels)
+		lanes, err := s.lanes(ctx, l, st, loads[st.ID], labels, held)
 		if err != nil {
 			return nil, err
 		}
@@ -123,8 +125,9 @@ func (s *server) stationLoads(ctx context.Context, f domain.FactoryID) (map[stri
 
 // boardCards renders the board's cards by station: every open item (up to boardOpenItems) and the
 // boardDoneItems newest done ones, those waiting at drum in its buffer; and, apart, the open
-// assemblies (up to boardOpenItems), which are on no station's column.
-func (s *server) boardCards(ctx context.Context, f *config.Factory, l domain.Line, drum string) (map[string][]gen.ItemCard, []gen.ItemCard, error) {
+// assemblies (up to boardOpenItems), which are on no station's column. held is the request's
+// read of the factory's leases, which the lanes share.
+func (s *server) boardCards(ctx context.Context, f *config.Factory, l domain.Line, drum string, held *heldLeases) (map[string][]gen.ItemCard, []gen.ItemCard, error) {
 	open, err := s.items.ListItems(ctx, ports.ItemQuery{FactoryID: l.FactoryID, States: openStates, Limit: boardOpenItems})
 	if err != nil {
 		return nil, nil, err
@@ -144,7 +147,7 @@ func (s *server) boardCards(ctx context.Context, f *config.Factory, l domain.Lin
 		return nil, nil, err
 	}
 
-	cards, err := s.cards(ctx, f, l, drum, slices.Concat(open, done, asms))
+	cards, err := s.cardsWith(ctx, f, l, drum, slices.Concat(open, done, asms), held)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -245,8 +248,9 @@ const personLane = "person"
 
 // lanes are station st's lanes, sorted by role: one per agent that works at an agent station,
 // with the station's shared slots and the live leases that agent holds there, one for the person
-// at a human station with the items waiting on them, none elsewhere.
-func (s *server) lanes(ctx context.Context, l domain.Line, st domain.Station, load domain.StationLoad, labels map[string]string) ([]gen.BoardLane, error) {
+// at a human station with the items waiting on them, none elsewhere. The leases come from held,
+// the request's one read of them.
+func (s *server) lanes(ctx context.Context, l domain.Line, st domain.Station, load domain.StationLoad, labels map[string]string, held *heldLeases) ([]gen.BoardLane, error) {
 	switch st.Kind {
 	case domain.KindHuman:
 		return []gen.BoardLane{{Key: personLane, Kind: gen.BoardLaneKindPerson, Role: domain.Humanize(st.ID), Busy: load.WaitingHuman}}, nil
@@ -259,13 +263,15 @@ func (s *server) lanes(ctx context.Context, l domain.Line, st domain.Station, lo
 	busy := map[string]int{}
 
 	if load.InProgress > 0 {
-		held, err := s.items.Leases(ctx, l.FactoryID, st.ID)
+		all, err := held.all(ctx)
 		if err != nil {
 			return nil, err
 		}
 
-		for _, ls := range held {
-			busy[ls.Agent]++
+		for _, ls := range all {
+			if ls.Station == st.ID {
+				busy[ls.Agent]++
+			}
 		}
 	}
 
@@ -403,7 +409,12 @@ func (s *server) listCards(ctx context.Context, f *config.Factory, items []domai
 // which part it is, and for a waiting item what holds it, read for the whole page at once. Nothing is held by the rope until
 // drum-buffer-rope is enforced.
 func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, drum string, items []domain.Item) ([]gen.ItemCard, error) {
-	leases, live, err := s.inProgress(ctx, l, items)
+	return s.cardsWith(ctx, f, l, drum, items, s.heldLeases(l.FactoryID))
+}
+
+// cardsWith is cards with the leases read through held, which the caller may share.
+func (s *server) cardsWith(ctx context.Context, f *config.Factory, l domain.Line, drum string, items []domain.Item, held *heldLeases) ([]gen.ItemCard, error) {
+	leases, live, err := s.inProgress(ctx, items, held)
 	if err != nil {
 		return nil, err
 	}
@@ -420,7 +431,7 @@ func (s *server) cards(ctx context.Context, f *config.Factory, l domain.Line, dr
 
 	ref := func(n int64) string { return domain.ItemRef{Factory: f.Metadata.Name, Number: n}.String() }
 
-	waiting, err := s.waiting(ctx, l.FactoryID, l, items, ref)
+	waiting, err := s.waiting(ctx, l.FactoryID, l, items, assemblyBranches(asms), ref)
 	if err != nil {
 		return nil, err
 	}
@@ -569,9 +580,10 @@ func ageSeconds(it domain.Item, now time.Time) int64 {
 // waiting reads, in one call, the open needs of the waiting ones of items of factory f and
 // derives what holds each of them, by item, with their needs written by ref; no entry for an
 // item that waits on nothing. A part held by a turn edge waits on its root's integration branch,
-// read once per root; every other item waits on the default branch. A waiting item with no open
-// need at a station of l that waits for CI has its CI waits there read, one call per item.
-func (s *server) waiting(ctx context.Context, f domain.FactoryID, l domain.Line, items []domain.Item, ref func(number int64) string) (map[domain.ItemID]*gen.ItemWaiting, error) {
+// which branch gives by root; every other item waits on the default branch. Every waiting item
+// with no open need at a station of l that waits for CI has its CI waits there read, all in one
+// call.
+func (s *server) waiting(ctx context.Context, f domain.FactoryID, l domain.Line, items []domain.Item, branch rootBranch, ref func(number int64) string) (map[domain.ItemID]*gen.ItemWaiting, error) {
 	ids := make([]domain.ItemID, 0, len(items))
 	for _, it := range items {
 		if it.State.Waiting() {
@@ -584,21 +596,20 @@ func (s *server) waiting(ctx context.Context, f domain.FactoryID, l domain.Line,
 		return nil, fmt.Errorf("open needs of the items: %w", err)
 	}
 
+	ci, err := s.ciWaits(ctx, l, items, needs)
+	if err != nil {
+		return nil, err
+	}
+
 	out := map[domain.ItemID]*gen.ItemWaiting{}
-	branches := map[domain.ItemID]string{}
 
 	for _, it := range items {
-		target, err := s.turnTarget(ctx, it, needs[it.ID], branches)
+		target, err := turnTarget(ctx, it, needs[it.ID], branch)
 		if err != nil {
 			return nil, err
 		}
 
-		ci, err := s.ciWaits(ctx, l, it, needs[it.ID])
-		if err != nil {
-			return nil, err
-		}
-
-		if w, ok := domain.WaitingFor(it, needs[it.ID], target, ci); ok {
+		if w, ok := domain.WaitingFor(it, needs[it.ID], target, ci[domain.CIWaitKey{Item: it.ID, Station: it.Station}]); ok {
 			out[it.ID] = waitingOf(w, ref)
 		}
 	}
@@ -606,45 +617,57 @@ func (s *server) waiting(ctx context.Context, f domain.FactoryID, l domain.Line,
 	return out, nil
 }
 
-// ciWaits are its CI waits at its station, open and ended, when it waits with no open need at a
-// station of l that waits for CI; none otherwise, since a need wins over a CI wait.
-func (s *server) ciWaits(ctx context.Context, l domain.Line, it domain.Item, needs []domain.OpenNeed) ([]domain.CIWaitRecord, error) {
-	if !it.State.Waiting() || len(needs) > 0 {
+// ciWaits are, by item and station, the CI waits, open and ended, of each of items that waits
+// with no open need at its station of l that waits for CI, read in one call; none for the others,
+// since a need wins over a CI wait.
+func (s *server) ciWaits(ctx context.Context, l domain.Line, items []domain.Item, needs map[domain.ItemID][]domain.OpenNeed) (map[domain.CIWaitKey][]domain.CIWaitRecord, error) {
+	var keys []domain.CIWaitKey
+
+	for _, it := range items {
+		if !it.State.Waiting() || len(needs[it.ID]) > 0 {
+			continue
+		}
+
+		if st, ok := l.Station(it.Station); ok && st.WaitsForCI() {
+			keys = append(keys, domain.CIWaitKey{Item: it.ID, Station: it.Station})
+		}
+	}
+
+	if len(keys) == 0 {
 		return nil, nil
 	}
 
-	if st, ok := l.Station(it.Station); !ok || !st.WaitsForCI() {
-		return nil, nil
-	}
-
-	waits, err := s.items.CIWaits(ctx, it.ID, it.Station)
+	waits, err := s.items.CIWaitsOf(ctx, keys)
 	if err != nil {
-		return nil, fmt.Errorf("item %s: ci waits at %s: %w", it.ID, it.Station, err)
+		return nil, fmt.Errorf("ci waits of %d items: %w", len(keys), err)
 	}
 
 	return waits, nil
 }
 
+// rootBranch is the integration branch of the assembly root ("" in mode trunk).
+type rootBranch func(ctx context.Context, root domain.ItemID) (string, error)
+
 // turnTarget is the branch whose turn it waits for: for a part with a turn need, its root's
-// integration branch ("" in mode trunk), read once into branches by root; "" for every other
-// item, which lands on the default branch.
-func (s *server) turnTarget(ctx context.Context, it domain.Item, needs []domain.OpenNeed, branches map[domain.ItemID]string) (string, error) {
+// integration branch, as branch gives it; "" for every other item, which lands on the default
+// branch.
+func turnTarget(ctx context.Context, it domain.Item, needs []domain.OpenNeed, branch rootBranch) (string, error) {
 	if it.ParentID == "" || !slices.ContainsFunc(needs, func(n domain.OpenNeed) bool { return n.Kind == domain.EdgeTurn }) {
 		return "", nil
 	}
 
-	if b, ok := branches[it.ParentID]; ok {
-		return b, nil
-	}
-
-	root, err := s.items.Item(ctx, it.ParentID)
+	b, err := branch(ctx, it.ParentID)
 	if err != nil {
 		return "", fmt.Errorf("item %s: root %s: %w", it.ID, it.ParentID, err)
 	}
 
-	branches[it.ParentID] = root.IntegrationBranch
+	return b, nil
+}
 
-	return root.IntegrationBranch, nil
+// assemblyBranches gives the integration branches of asms, read with them; "" for a root that is
+// not one of them.
+func assemblyBranches(asms map[domain.ItemID]domain.Assembly) rootBranch {
+	return func(_ context.Context, root domain.ItemID) (string, error) { return asms[root].IntegrationBranch, nil }
 }
 
 // waitingOf is w as the API shows it, its items written with ref and named in needs.
@@ -747,26 +770,16 @@ func liveFields(run domain.LiveRun) (*int, *string, *gen.PlanSteps) {
 	return &turns, activity, steps
 }
 
-// inProgress reads the leases of the stations where items are in progress, by item, and what
-// the runs under them have done so far; nothing when no item is in progress.
-func (s *server) inProgress(ctx context.Context, l domain.Line, items []domain.Item) (map[domain.ItemID]domain.Lease, map[domain.ItemID]domain.LiveRun, error) {
+// inProgress is the leases held at the stations where items are in progress, by item, read
+// through held, and what the runs under them have done so far; nothing when no item is in
+// progress.
+func (s *server) inProgress(ctx context.Context, items []domain.Item, held *heldLeases) (map[domain.ItemID]domain.Lease, map[domain.ItemID]domain.LiveRun, error) {
 	leases := map[domain.ItemID]domain.Lease{}
 	seen := map[string]bool{}
 
 	for _, it := range items {
-		if it.State != domain.StateInProgress || seen[it.Station] {
-			continue
-		}
-
-		seen[it.Station] = true
-
-		held, err := s.items.Leases(ctx, l.FactoryID, it.Station)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		for _, ls := range held {
-			leases[ls.ItemID] = ls
+		if it.State == domain.StateInProgress {
+			seen[it.Station] = true
 		}
 	}
 
@@ -774,10 +787,52 @@ func (s *server) inProgress(ctx context.Context, l domain.Line, items []domain.I
 		return leases, map[domain.ItemID]domain.LiveRun{}, nil
 	}
 
-	live, err := s.items.LiveRuns(ctx, l.FactoryID)
+	all, err := held.all(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for _, ls := range all {
+		if seen[ls.Station] {
+			leases[ls.ItemID] = ls
+		}
+	}
+
+	live, err := s.items.LiveRuns(ctx, held.factory)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	return leases, live, nil
+}
+
+// heldLeases reads a factory's live leases at most once, so the cards and the lanes of one
+// request share one read; nothing is read until they are first needed. It is not safe for
+// concurrent use.
+type heldLeases struct {
+	items   Items
+	factory domain.FactoryID
+	read    bool
+	leases  []domain.Lease
+}
+
+// heldLeases is a reader of factory's live leases for one request.
+func (s *server) heldLeases(factory domain.FactoryID) *heldLeases {
+	return &heldLeases{items: s.items, factory: factory}
+}
+
+// all is every live lease of the factory, read on the first call.
+func (h *heldLeases) all(ctx context.Context) ([]domain.Lease, error) {
+	if h.read {
+		return h.leases, nil
+	}
+
+	leases, err := h.items.FactoryLeases(ctx, h.factory)
+	if err != nil {
+		return nil, fmt.Errorf("leases of factory %s: %w", h.factory, err)
+	}
+
+	h.leases, h.read = leases, true
+
+	return leases, nil
 }

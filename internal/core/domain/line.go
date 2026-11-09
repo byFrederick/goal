@@ -226,7 +226,14 @@ type Runtime struct {
 	// included, which an item's repositories are matched against (ADR 0041 decision 2); nil for a
 	// factory with no code.
 	Repositories []RepositoryEntry
+	// BuildCache is runtime.buildCache: whether runs restore and save the per-repository cache of
+	// Go's module and build caches and the pnpm store; nil when the definition omits it.
+	BuildCache *bool
 }
+
+// BuildCacheEnabled reports whether runs use the build cache. An absent runtime.buildCache is
+// on, so versions published before the field existed keep the cache.
+func (r Runtime) BuildCacheEnabled() bool { return r.BuildCache == nil || *r.BuildCache }
 
 // RepositoryEntry is an entry of runtime.repositories: its name, the URL of one repository or of
 // an owner's every repository (an owner pattern ending in /*), the {{secret}} token that opens
@@ -313,7 +320,8 @@ type Station struct {
 }
 
 // CIWait is a station's waitFor: ci, with every default filled in (ADR 0044 decision 7). A wait
-// ends when no check appeared within Grace after the run ended, or when Max has passed; after
+// ends when no check appeared within Grace of the commit's first poll (or of the wait's start,
+// when earlier), or when Max has passed since the wait's start; after
 // Rounds CI rounds in one visit to the station, the item blocks for a person.
 type CIWait struct {
 	Grace, Max time.Duration
@@ -530,6 +538,58 @@ func (s Station) Capacity() int {
 	}
 
 	return n
+}
+
+// SlotLane is which items one of a station's slots takes: a kept slot (Lane set) only items of
+// Lane, a shared slot every item whose lane is not in Exclude, an item without a lane included.
+type SlotLane struct {
+	Lane    string
+	Exclude []string
+}
+
+// Takes reports whether the slot takes an item of lane.
+func (sl SlotLane) Takes(lane string) bool {
+	if sl.Lane != "" {
+		return lane == sl.Lane
+	}
+
+	return !slices.Contains(sl.Exclude, lane)
+}
+
+// TakesEvery reports whether the slot takes every item, whatever its lane.
+func (sl SlotLane) TakesEvery() bool {
+	return sl.Lane == "" && len(sl.Exclude) == 0
+}
+
+// SlotLanes lays out the station's Capacity() slots (ADR 0012 decision 9): each lane with a
+// route count keeps that many consecutive slots, the lanes sorted by name and cut off at the
+// capacity, and the slots after them are shared, excluding every lane with a count. Without
+// counts every slot is shared and excludes none.
+func (s Station) SlotLanes() []SlotLane {
+	n := s.Capacity()
+	slots := make([]SlotLane, 0, n)
+	lanes := slices.Sorted(maps.Keys(s.RouteAgents))
+
+	for _, lane := range lanes {
+		for range s.RouteAgents[lane] {
+			if len(slots) == n {
+				return slots
+			}
+
+			slots = append(slots, SlotLane{Lane: lane})
+		}
+	}
+
+	var exclude []string
+	if len(lanes) > 0 {
+		exclude = lanes
+	}
+
+	for len(slots) < n {
+		slots = append(slots, SlotLane{Exclude: exclude})
+	}
+
+	return slots
 }
 
 // AgentFor returns the agent that works an item of the given lane at this station.
