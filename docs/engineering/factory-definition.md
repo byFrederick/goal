@@ -246,7 +246,7 @@ Nothing reads the setting yet: the engine holds items for their target's turn in
 
 | Field | Values | Default | Meaning |
 | --- | --- | --- | --- |
-| `grace` | a positive whole number of `s`, `m` or `h` | `5m` | How long after the run ended a first check may take to appear. |
+| `grace` | a positive whole number of `s`, `m` or `h` | `5m` | How long a first check may take to appear, counted from goald's first poll of the commit, or from the wait's start when that is earlier. |
 | `max` | the same | `60m` | The longest goald waits on one commit. |
 | `rounds` | integer, 1 or more | `3` | CI rounds in one visit to the station before the item blocks. |
 

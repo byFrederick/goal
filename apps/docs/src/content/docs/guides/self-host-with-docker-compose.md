@@ -30,6 +30,8 @@ task up
 
 `task up` first builds the `goal` and `goald` binaries into `bin/`, the auth service, the egress proxy image and the agent image. Then it runs `goal up`, which starts PostgreSQL and RustFS in Compose, creates the database roles, applies the migrations, creates the bucket, starts the egress proxy, and runs `goald` and the auth service on this machine. With sign-in on, it also starts Mailpit. It keeps running until you press Ctrl-C.
 
+On Compose, a run's build cache (Go's module and build caches and the pnpm store of its repository) goes through `goald` to RustFS: the run's box cannot reach the bucket itself, so it downloads and uploads the cache through `goald`, which stores it in the bucket.
+
 Open `http://127.0.0.1:8080` and sign in with the owner's email. The sign-in code arrives in Mailpit, at `http://127.0.0.1:8025`. Its user and password are in the file `goal up` names when it starts.
 
 `goal up` does not push any factory. Create one with [Create a factory](/docs/getting-started/create-a-factory/). To make the starter templates appear, [seed the catalogs](#seed-the-catalogs) first.

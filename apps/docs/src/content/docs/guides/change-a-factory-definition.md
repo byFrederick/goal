@@ -9,7 +9,7 @@ Use the web app's Definition page to edit the same definition by hand. In its Ag
 
 ## Edit in the YAML view
 
-The Definition page's YAML view shows the draft's files. Pick a file in the file tree, edit it, and use Format to rewrite it in Goal's own layout. The Problems panel under the editor lists each validation problem of the draft with its file and line; select one to jump there. It says "No problems." when the draft is valid. The bar above the editor, "Ask the factory to change it", is not available yet: its input is disabled. Draft requests are not built, so neither that bar, Ask Jonah nor `goal factory ask` changes a draft today; edit the files or the form instead.
+The Definition page's YAML view shows the draft's files. Pick a file in the file tree, edit it, and use Format to rewrite it in Goal's own layout. The Problems panel under the editor lists each validation problem of the draft with its file and line; select one to jump there. It says "No problems." when the draft is valid. The bar above the editor, "Ask the factory to change it", is not available yet: its input is disabled. Draft requests are not built, so neither that bar, Ask Jonah nor `goal factory ask` changes a draft today. `goal factory ask` is refused with 501 `not-built`: the command prints that refusal and exits non-zero, with or without `--wait`. Edit the files or the form instead, or change the draft with `goal factory pull` and `goal factory push`.
 
 ## Before you start
 
@@ -35,7 +35,7 @@ The folder holds `factory.yaml` at its root, and the files it points to. Validat
 - `memory.yaml` (optional) for the factory's memory facts,
 - `triggers/<name>.md` (optional) for the briefs that triggers name as `./triggers/<name>.md`.
 
-What each field means is in the [factory definition reference](/docs/reference/definition/). To add an agent, a skill or a rule, follow [Add an agent, skill or rule](/docs/guides/add-an-agent-skill-or-rule/).
+What each field means is in the [factory definition reference](/docs/reference/definition/). For example, runs cache Go's and pnpm's downloads and builds per repository by default; set `runtime.buildCache: false` to turn the cache off. To add an agent, a skill or a rule, follow [Add an agent, skill or rule](/docs/guides/add-an-agent-skill-or-rule/).
 
 ## 3. Validate the folder
 

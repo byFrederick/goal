@@ -23,13 +23,14 @@ func TestStore_Conformance(t *testing.T) {
 		var orgs, factories, versions atomic.Int64
 
 		return storetest.Harness{
-			Store: s,
-			Flow:  s,
-			Spend: s,
-			Jonah: s,
-			Tries: s,
-			Kept:  s,
-			Audit: tn,
+			Store:       s,
+			Flow:        s,
+			Spend:       s,
+			Jonah:       s,
+			Tries:       s,
+			Kept:        s,
+			Audit:       tn,
+			BuildCaches: s,
 			LeaseSpans: func(_ *testing.T, org domain.OrgID, id domain.ItemID) []domain.LeaseSpan {
 				return s.LeaseSpans(org, id)
 			},

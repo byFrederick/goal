@@ -62,10 +62,14 @@ LIMIT sqlc.arg(max_items)::bigint;
 -- and while its start_at is after the claim's now (an item a trigger placed past the first
 -- station), and while it has an open CI wait at the station, whatever its phase (ADR 0044
 -- decisions 2 and 3; the partial index ci_waits_open_key serves it). WaitingItems lists it all
--- the same.
+-- the same. The slot's lanes filter it (ADR 0012 decision 9): a slot kept for a lane (lane set)
+-- takes only that lane's items, a shared slot none of exclude_lanes, and an item without a lane
+-- is excluded from no shared slot.
 SELECT * FROM work_items w
 WHERE w.factory_id = sqlc.arg(factory_id) AND w.station = sqlc.arg(station) AND w.state IN ('queued', 'ready')
   AND (w.start_at IS NULL OR w.start_at <= sqlc.arg(now)::timestamptz)
+  AND (sqlc.narg(lane)::text IS NULL OR w.lane = sqlc.narg(lane)::text)
+  AND (w.lane IS NULL OR NOT (w.lane = ANY(coalesce(sqlc.arg(exclude_lanes)::text[], '{}'))))
   AND NOT EXISTS (
     SELECT 1 FROM item_edges e JOIN work_items n ON n.id = e.needs_id
     WHERE e.item_id = w.id AND n.state NOT IN ('done', 'cancelled')
@@ -147,10 +151,10 @@ GROUP BY station;
 
 -- name: AssemblyParts :many
 -- The parts of those of the factory's items among ids that have any (work_items_parent_id_idx),
--- each with its assembly's number and title, by assembly then part number. A part is a child
--- with a part_key, as Parts counts them (ADR 0012).
+-- each with its assembly's number, title and integration branch, by assembly then part number. A
+-- part is a child with a part_key, as Parts counts them (ADR 0012).
 SELECT a.id AS assembly_id, a.number AS assembly_number, a.title AS assembly_title,
-       p.id, p.number, p.station, p.state
+       a.integration_branch AS assembly_integration_branch, p.id, p.number, p.station, p.state
 FROM work_items p
 JOIN work_items a ON a.id = p.parent_id
 WHERE p.parent_id = ANY (sqlc.arg(ids)::uuid[]) AND p.part_key IS NOT NULL AND a.factory_id = sqlc.arg(factory_id)

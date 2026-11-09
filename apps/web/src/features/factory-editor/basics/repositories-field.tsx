@@ -52,7 +52,16 @@ export function patchEntry(entries: readonly RepositoryEntry[], index: number, p
   });
 }
 
-export function RepositoriesField({ basics, shorthand }: { basics: BasicsSection; shorthand: boolean }) {
+export function RepositoriesField({
+  basics,
+  shorthand,
+  onRemoved,
+}: {
+  basics: BasicsSection;
+  shorthand: boolean;
+  /** Settings › Code: asked with the list a Remove leaves; true when it handled the edit itself. */
+  onRemoved?: (next: RepositoryEntry[]) => boolean;
+}) {
   const session = useDraftSession();
   const viewOnly = useViewOnly();
   const entries = basics.repositories ?? [];
@@ -86,6 +95,7 @@ export function RepositoriesField({ basics, shorthand }: { basics: BasicsSection
               index={index}
               readOnly={viewOnly}
               onChange={editEntries}
+              onRemoved={onRemoved}
             />
           ))}
         </ul>
@@ -110,11 +120,13 @@ function EntryRow({
   index,
   readOnly,
   onChange,
+  onRemoved,
 }: {
   entries: RepositoryEntry[];
   index: number;
   readOnly: boolean;
   onChange: (next: RepositoryEntry[], coalesce?: string) => void;
+  onRemoved?: ((next: RepositoryEntry[]) => boolean) | undefined;
 }) {
   const entry = entries[index] as RepositoryEntry;
   const at = `/basics/repositories/${index}`;
@@ -206,12 +218,10 @@ function EntryRow({
               size="sm"
               className="ml-auto"
               aria-label={`Remove repository ${entry.name}`}
-              onClick={() =>
-                onChange(
-                  entries.filter((_, i) => i !== index),
-                  undefined,
-                )
-              }
+              onClick={() => {
+                const next = entries.filter((_, i) => i !== index);
+                if (!onRemoved?.(next)) onChange(next, undefined);
+              }}
             >
               <X size={14} strokeWidth={1.5} aria-hidden="true" />
               Remove

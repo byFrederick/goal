@@ -190,6 +190,10 @@ type harnessDeps struct {
 	noChecks bool
 	// knowledge gives the gateway a knowledge base and a bucket, h.kb and h.objects (knowledge_test.go).
 	knowledge bool
+	// buildCaches gives the gateway the build cache index (h.store) and a bucket, h.objects
+	// (buildcache_test.go); wrapObjects, when set, wraps the bucket the gateway reads.
+	buildCaches bool
+	wrapObjects func(*porttest.ObjectStore) Objects
 	// mcpCap is the organization policy's MCP tool mode cap (none when nil).
 	mcpCap map[string]domain.ConnectionToolMode
 }
@@ -293,11 +297,25 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 	var (
 		kb      Knowledge
 		objects Objects
+		caches  BuildCaches
 	)
 
 	if d.knowledge {
-		h.kb, h.objects = porttest.NewKnowledge(tenancy), porttest.NewObjectStore()
-		kb, objects = h.kb, h.objects
+		h.kb = porttest.NewKnowledge(tenancy)
+		kb = h.kb
+	}
+
+	if d.knowledge || d.buildCaches {
+		h.objects = porttest.NewObjectStore()
+		objects = h.objects
+	}
+
+	if d.buildCaches {
+		caches = h.store
+	}
+
+	if d.wrapObjects != nil {
+		objects = d.wrapObjects(h.objects)
 	}
 
 	h.gw, err = New(Deps{
@@ -319,6 +337,7 @@ func newHarnessWith(t *testing.T, cfg Config, d harnessDeps) *harness {
 		Checks:        checksOf(d),
 		Knowledge:     kb,
 		Objects:       objects,
+		BuildCaches:   caches,
 		Logger:        slog.New(slog.NewTextHandler(h.logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}, cfg)
 	if err != nil {

@@ -169,7 +169,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 		return err
 	}
 
-	pool, err := openDatabase(ctx, s, log)
+	pool, err := openDatabase(ctx, s, clock, log)
 	if err != nil {
 		return err
 	}
@@ -240,7 +240,7 @@ func run(ctx context.Context, s settings, log *slog.Logger) error {
 	// bundle; the engine's RunDefinition signs its token.
 	gw, err := gateway.New(gateway.Deps{
 		Definitions: defs, Items: store, StandingRules: rules, Policies: policies, Events: store, Clock: clock, Logger: log,
-		Knowledge: kb.kb, Objects: objects, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, Watches: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore, Tries: store, Proposed: gatewayProposed{defs: defs}, Grades: jonahGrades(store), Checks: intake,
+		Knowledge: kb.kb, Objects: objects, BuildCaches: store, Questions: engineQuestions{eng: &eng}, ToolApprovals: engineToolApprovals{eng: &eng}, Jonah: store, Watches: store, DraftRequests: postgres.NewDraftRequests(store), Drafts: definitionStore, Tries: store, Proposed: gatewayProposed{defs: defs}, Grades: jonahGrades(store), Checks: intake,
 	}, gateway.Config{Key: []byte(key), KnowledgeURLTTL: knowledgeURLTTL(s)})
 	if err != nil {
 		return err
@@ -591,7 +591,7 @@ func routes(separate bool, apiHandler, hooks, gw, spa, site http.Handler) (prima
 	mux.Handle(api.DocsPath, site)
 	mux.Handle(api.DocsPath+"/", site)
 
-	gatewayPaths := []string{api.GatewayPath, api.RunPath, api.ToolApprovalPath, api.KnowledgePath}
+	gatewayPaths := []string{api.GatewayPath, api.RunPath, api.ToolApprovalPath, api.KnowledgePath, api.BuildCachePath}
 
 	if !separate {
 		for _, p := range gatewayPaths {
@@ -612,13 +612,14 @@ func routes(separate bool, apiHandler, hooks, gw, spa, site http.Handler) (prima
 }
 
 // gatewayHandler serves the gateway's paths: the MCP endpoint, the run bundle, the run's tool
-// approvals and its knowledge snapshots.
+// approvals, its knowledge snapshots and its build caches.
 func gatewayHandler(gw *gateway.Gateway) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle(api.GatewayPath, gw)
 	mux.HandleFunc(api.RunPath, gw.ServeRun)
 	mux.HandleFunc(api.ToolApprovalPath, gw.ServeToolApproval)
 	mux.HandleFunc(api.KnowledgePath, gw.ServeKnowledge)
+	mux.HandleFunc(api.BuildCachePath, gw.ServeBuildCache)
 
 	return mux
 }
@@ -779,8 +780,9 @@ func serve(ctx context.Context, log *slog.Logger, s settings, servers []*http.Se
 
 // openDatabase applies pending migrations as goal_owner on a pool of its own, closed before goald
 // serves anything, then opens goald's pool as goal_app and refuses a role that row-level security
-// would not bind. The caller closes the pool.
-func openDatabase(ctx context.Context, s settings, log *slog.Logger) (*pgxpool.Pool, error) {
+// would not bind. It logs the pool's "db pool" line once a minute until ctx ends, so pool
+// starvation shows in the logs. The caller closes the pool.
+func openDatabase(ctx context.Context, s settings, clock ports.Clock, log *slog.Logger) (*pgxpool.Pool, error) {
 	owner, err := postgres.Open(ctx, s.MigrateDatabaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("GOAL_MIGRATE_DATABASE_URL: %w (goal db init creates the roles)", err)
@@ -805,6 +807,8 @@ func openDatabase(ctx context.Context, s settings, log *slog.Logger) (*pgxpool.P
 	}
 
 	log.InfoContext(ctx, "database ready", slog.String("role_check", "passed"))
+
+	go postgres.LogPoolStats(ctx, postgres.PoolStats(pool), clock, postgres.PoolStatsInterval, log)
 
 	return pool, nil
 }

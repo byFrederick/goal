@@ -246,6 +246,30 @@ func (e BridgeStepComponent) Valid() bool {
 	}
 }
 
+// Defines values for BuildCache.
+const (
+	BuildCacheError BuildCache = "error"
+	BuildCacheHit   BuildCache = "hit"
+	BuildCacheMiss  BuildCache = "miss"
+	BuildCacheOff   BuildCache = "off"
+)
+
+// Valid indicates whether the value is a known member of the BuildCache enum.
+func (e BuildCache) Valid() bool {
+	switch e {
+	case BuildCacheError:
+		return true
+	case BuildCacheHit:
+		return true
+	case BuildCacheMiss:
+		return true
+	case BuildCacheOff:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CICheckResult.
 const (
 	CICheckResultFailed  CICheckResult = "failed"
@@ -3288,6 +3312,9 @@ type BridgeStep struct {
 
 // BridgeStepComponent The kind of time. waiting is time queued or ready at the station; ci is time held at the station waiting for CI on the item's commits, and is not counted in waiting.
 type BridgeStepComponent string
+
+// BuildCache What happened to a run's build cache: hit restored a matching cache; miss found none, and the box saved one; off is a factory that turned the cache off; error is a restore that failed, so the run went on cold
+type BuildCache string
 
 // BuilderCapabilities What this install enforces; the editor shows the controls for what it does not read-only
 type BuilderCapabilities struct {
@@ -6486,7 +6513,10 @@ type OrgRun struct {
 
 	// BoxSize The box size the run ran in; null for a run from before box sizes were recorded
 	BoxSize *SandboxSize `json:"box_size"`
-	CostUsd float64      `json:"cost_usd"`
+
+	// BuildCache What happened to the run's build cache (Go's module and build caches and the pnpm store) while its box prepared; null when the run had no Go or pnpm repository, or for a run from before it was recorded
+	BuildCache *BuildCache `json:"build_cache"`
+	CostUsd    float64     `json:"cost_usd"`
 
 	// CpuSeconds The CPU time the run's box used, in seconds; null while the run is running, when the box could not read it or for a run from before it was recorded
 	CpuSeconds *float64 `json:"cpu_seconds"`
@@ -7109,7 +7139,10 @@ type Run struct {
 
 	// BoxSize The box size the run ran in; null for a run from before box sizes were recorded
 	BoxSize *SandboxSize `json:"box_size"`
-	CostUsd float64      `json:"cost_usd"`
+
+	// BuildCache What happened to the run's build cache (Go's module and build caches and the pnpm store) while its box prepared; null when the run had no Go or pnpm repository, or for a run from before it was recorded
+	BuildCache *BuildCache `json:"build_cache"`
+	CostUsd    float64     `json:"cost_usd"`
 
 	// CpuSeconds The CPU time the run's box used, in seconds; null while the run is running, when the box could not read it or for a run from before it was recorded
 	CpuSeconds *float64 `json:"cpu_seconds"`
@@ -8791,7 +8824,7 @@ type WebhookDeliveryDay struct {
 	// Day The UTC day
 	Day openapi_types.Date `json:"day"`
 
-	// Delivered Deliveries accepted
+	// Delivered Deliveries accepted, with or without an item created, including those no enabled trigger names
 	Delivered int `json:"delivered"`
 	Refused   int `json:"refused"`
 }
@@ -8838,6 +8871,9 @@ type WebhookDeliveryPage struct {
 
 	// NextAfter Pass as `after` for the next page; null on the last page
 	NextAfter *string `json:"next_after"`
+
+	// UnnamedDays The webhook's daily counts of accepted deliveries no enabled trigger names, which the log does not keep, from the UTC day 30 days ago through today, oldest first; a day without one has no entry
+	UnnamedDays []WebhookUnnamedDay `json:"unnamed_days"`
 }
 
 // WebhookDeliveryRequest defines model for WebhookDeliveryRequest.
@@ -8940,6 +8976,15 @@ type WebhookTrigger struct {
 	Factory     string `json:"factory"`
 	FactoryName string `json:"factory_name"`
 	Trigger     string `json:"trigger"`
+}
+
+// WebhookUnnamedDay defines model for WebhookUnnamedDay.
+type WebhookUnnamedDay struct {
+	// Count Accepted deliveries no enabled trigger named that day
+	Count int `json:"count"`
+
+	// Day The UTC day
+	Day openapi_types.Date `json:"day"`
 }
 
 // WeekCost defines model for WeekCost.
@@ -10200,7 +10245,7 @@ type ClientInterface interface {
 
 	// ImportCredentialsWithBody Import credentials from a .env or YAML text
 	//
-	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older name, is taken too). Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -10211,7 +10256,7 @@ type ClientInterface interface {
 
 	// ImportCredentials Import credentials from a .env or YAML text
 	//
-	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older name, is taken too). Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -10574,7 +10619,7 @@ type ClientInterface interface {
 
 	// CreateDraftRequestWithBody Ask for a change to the factory's definition (a draft request)
 	//
-	// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+	// Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes every check below is refused with 501 not-built and nothing is queued. Once a runner is wired, goald will run a request in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 501 not-built for every request that passes these checks.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -10583,7 +10628,7 @@ type ClientInterface interface {
 
 	// CreateDraftRequest Ask for a change to the factory's definition (a draft request)
 	//
-	// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+	// Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes every check below is refused with 501 not-built and nothing is queued. Once a runner is wired, goald will run a request in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 501 not-built for every request that passes these checks.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -11637,7 +11682,7 @@ type ClientInterface interface {
 
 	// ImportSecretsWithBody Import secrets from a .env or YAML text
 	//
-	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older name, is taken too). Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -11646,7 +11691,7 @@ type ClientInterface interface {
 
 	// ImportSecrets Import secrets from a .env or YAML text
 	//
-	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older name, is taken too). Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -11918,7 +11963,7 @@ type ClientInterface interface {
 
 	// ListOrgWebhookDeliveries One page of a webhook's deliveries, newest first
 	//
-	// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
+	// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). The log keeps only deliveries an enabled trigger names; the others, such as GitHub's ping or one that arrives before a trigger names the webhook, are only counted per UTC day, and unnamed_days carries those counts for the log's 30 days. Every page carries the same unnamed_days. 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
 	//
 	// Corresponds with GET /v1/orgs/{org}/webhooks/{webhook}/deliveries (the `ListOrgWebhookDeliveries` operationId).
 	ListOrgWebhookDeliveries(ctx context.Context, org OrgRef, webhook WebhookRef, params *ListOrgWebhookDeliveriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -12503,7 +12548,7 @@ func (c *Client) CreateCredential(ctx context.Context, org OrgRef, body CreateCr
 
 // ImportCredentialsWithBody Import credentials from a .env or YAML text
 //
-// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older name, is taken too). Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 //
 // Takes any type of body and a specified content type.
 //
@@ -12523,7 +12568,7 @@ func (c *Client) ImportCredentialsWithBody(ctx context.Context, org OrgRef, cont
 
 // ImportCredentials Import credentials from a .env or YAML text
 //
-// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older name, is taken too). Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -13331,7 +13376,7 @@ func (c *Client) ListDraftRequests(ctx context.Context, org OrgRef, factory Fact
 
 // CreateDraftRequestWithBody Ask for a change to the factory's definition (a draft request)
 //
-// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+// Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes every check below is refused with 501 not-built and nothing is queued. Once a runner is wired, goald will run a request in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 501 not-built for every request that passes these checks.
 //
 // Takes any type of body and a specified content type.
 //
@@ -13350,7 +13395,7 @@ func (c *Client) CreateDraftRequestWithBody(ctx context.Context, org OrgRef, fac
 
 // CreateDraftRequest Ask for a change to the factory's definition (a draft request)
 //
-// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+// Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes every check below is refused with 501 not-built and nothing is queued. Once a runner is wired, goald will run a request in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 501 not-built for every request that passes these checks.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -15744,7 +15789,7 @@ func (c *Client) CreateSecret(ctx context.Context, org OrgRef, body CreateSecret
 
 // ImportSecretsWithBody Import secrets from a .env or YAML text
 //
-// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older name, is taken too). Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 //
 // Takes any type of body and a specified content type.
 //
@@ -15763,7 +15808,7 @@ func (c *Client) ImportSecretsWithBody(ctx context.Context, org OrgRef, contentT
 
 // ImportSecrets Import secrets from a .env or YAML text
 //
-// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older name, is taken too). Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -16375,7 +16420,7 @@ func (c *Client) PatchWebhook(ctx context.Context, org OrgRef, webhook WebhookRe
 
 // ListOrgWebhookDeliveries One page of a webhook's deliveries, newest first
 //
-// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
+// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). The log keeps only deliveries an enabled trigger names; the others, such as GitHub's ping or one that arrives before a trigger names the webhook, are only counted per UTC day, and unnamed_days carries those counts for the log's 30 days. Every page carries the same unnamed_days. 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
 //
 // Corresponds with GET /v1/orgs/{org}/webhooks/{webhook}/deliveries (the `ListOrgWebhookDeliveries` operationId).
 func (c *Client) ListOrgWebhookDeliveries(ctx context.Context, org OrgRef, webhook WebhookRef, params *ListOrgWebhookDeliveriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -26988,7 +27033,7 @@ type ClientWithResponsesInterface interface {
 
 	// ImportCredentialsWithBodyWithResponse Import credentials from a .env or YAML text
 	//
-	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older name, is taken too). Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -26999,7 +27044,7 @@ type ClientWithResponsesInterface interface {
 
 	// ImportCredentialsWithResponse Import credentials from a .env or YAML text
 	//
-	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older name, is taken too). Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -27406,7 +27451,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateDraftRequestWithBodyWithResponse Ask for a change to the factory's definition (a draft request)
 	//
-	// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+	// Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes every check below is refused with 501 not-built and nothing is queued. Once a runner is wired, goald will run a request in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 501 not-built for every request that passes these checks.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -27415,7 +27460,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateDraftRequestWithResponse Ask for a change to the factory's definition (a draft request)
 	//
-	// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+	// Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes every check below is refused with 501 not-built and nothing is queued. Once a runner is wired, goald will run a request in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 501 not-built for every request that passes these checks.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -28601,7 +28646,7 @@ type ClientWithResponsesInterface interface {
 
 	// ImportSecretsWithBodyWithResponse Import secrets from a .env or YAML text
 	//
-	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older name, is taken too). Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -28610,7 +28655,7 @@ type ClientWithResponsesInterface interface {
 
 	// ImportSecretsWithResponse Import secrets from a .env or YAML text
 	//
-	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+	// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older name, is taken too). Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -28912,7 +28957,7 @@ type ClientWithResponsesInterface interface {
 
 	// ListOrgWebhookDeliveriesWithResponse One page of a webhook's deliveries, newest first
 	//
-	// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
+	// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). The log keeps only deliveries an enabled trigger names; the others, such as GitHub's ping or one that arrives before a trigger names the webhook, are only counted per UTC day, and unnamed_days carries those counts for the log's 30 days. Every page carries the same unnamed_days. 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -38657,7 +38702,7 @@ func (c *ClientWithResponses) CreateCredentialWithResponse(ctx context.Context, 
 
 // ImportCredentialsWithBodyWithResponse Import credentials from a .env or YAML text
 //
-// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older name, is taken too). Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -38674,7 +38719,7 @@ func (c *ClientWithResponses) ImportCredentialsWithBodyWithResponse(ctx context.
 
 // ImportCredentialsWithResponse Import credentials from a .env or YAML text
 //
-// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older name, is taken too). Every name is checked before anything is written: 400 credential-invalid for an unknown format, text that does not parse, a name that is not a credential name or whose env variable is reserved. A dry run answers each name as new or existing, with how many connections use it, and stores nothing. A real run creates each new name as an api_key with no factories, and replaces (on_conflict replace, audited as credential.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 credentials-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -39349,7 +39394,7 @@ func (c *ClientWithResponses) ListDraftRequestsWithResponse(ctx context.Context,
 
 // CreateDraftRequestWithBodyWithResponse Ask for a change to the factory's definition (a draft request)
 //
-// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+// Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes every check below is refused with 501 not-built and nothing is queued. Once a runner is wired, goald will run a request in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 501 not-built for every request that passes these checks.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -39364,7 +39409,7 @@ func (c *ClientWithResponses) CreateDraftRequestWithBodyWithResponse(ctx context
 
 // CreateDraftRequestWithResponse Ask for a change to the factory's definition (a draft request)
 //
-// Queues a draft request (ADR 0021): goald runs it in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 409 draft-request-open while the factory has a queued or running request.
+// Not built yet: goald has no runner for draft requests (ADR 0021), so a request that passes every check below is refused with 501 not-built and nothing is queued. Once a runner is wired, goald will run a request in a box that writes its result into the factory's draft and never publishes. agent, when set, names the agent the request is about (Ask Jonah for a fix): an agent of the open draft, or of the current version when no draft is open. 422 draft-request-text-invalid for text outside 1 to 2000 characters once trimmed; 404 agent-not-found for an agent the definition does not have; 409 yaml-invalid while the draft's factory.yaml does not parse and agent is set; 501 not-built for every request that passes these checks.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -41354,7 +41399,7 @@ func (c *ClientWithResponses) CreateSecretWithResponse(ctx context.Context, org 
 
 // ImportSecretsWithBodyWithResponse Import secrets from a .env or YAML text
 //
-// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older name, is taken too). Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -41369,7 +41414,7 @@ func (c *ClientWithResponses) ImportSecretsWithBodyWithResponse(ctx context.Cont
 
 // ImportSecretsWithResponse Import secrets from a .env or YAML text
 //
-// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level credentials: map of name to value. Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
+// env: KEY=value lines, each key lower-cased with _ turned into - (SENTRY_TOKEN is sentry-token); yaml: a top-level secrets: map of name to value (credentials:, its older name, is taken too). Every name is checked before anything is written: 400 secret-invalid for an unknown format, text that does not parse, an empty import, or a name that is not a secret name or whose env variable is reserved. A dry run answers each name as new or existing, with what uses the existing one, and stores nothing. A real run creates each new name open to no factory, and replaces (on_conflict replace, audited as secret.value_replaced) or skips (on_conflict skip, the default) each existing one. A real run is not one transaction: should a write fail, the names before it stay applied. 503 secrets-unavailable while goald has no master key. Needs a sign-in from the last 10 minutes.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -41875,7 +41920,7 @@ func (c *ClientWithResponses) PatchWebhookWithResponse(ctx context.Context, org 
 
 // ListOrgWebhookDeliveriesWithResponse One page of a webhook's deliveries, newest first
 //
-// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
+// What the webhook received in the last 30 days, each with its outcome, without its headers and body (getOrgWebhookDelivery). The log keeps only deliveries an enabled trigger names; the others, such as GitHub's ping or one that arrives before a trigger names the webhook, are only counted per UTC day, and unnamed_days carries those counts for the log's 30 days. Every page carries the same unnamed_days. 400 webhook-invalid for a cursor this route did not answer; 404 webhook-not-found.
 //
 // Returns a wrapper object for the known response body format(s).
 //
