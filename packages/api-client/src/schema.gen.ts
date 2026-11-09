@@ -5540,6 +5540,14 @@ export interface components {
             slots: number | null;
             /** @description Agent lanes: the station's live leases held by that agent; a person lane: the items waiting on a person there */
             busy: number;
+            /** @description The station's slots kept for the item lanes routed to this agent with a count (`agents:`), cut off at the station's slots; 0 when none has a count; null for a person lane */
+            kept_slots: number | null;
+            /** @description The live leases this agent holds in its kept slots; null for a person lane */
+            kept_busy: number | null;
+            /** @description The station's shared slots, those kept for no lane, when this agent works a lane without a count or is the station's one agent; else 0; null for a person lane */
+            shared_slots: number | null;
+            /** @description The live leases in the shared slots, held by any agent of the station; 0 when shared_slots is; null for a person lane */
+            shared_busy: number | null;
         };
         Metrics: {
             /** @description The range's length in days, as in 7d */
