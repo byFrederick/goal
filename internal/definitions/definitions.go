@@ -40,6 +40,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/byFrederick/goal/internal/config"
@@ -57,6 +58,15 @@ type Orgs interface {
 // look them up, so goald can hand them to the engine (engine.SetLines). When it fails the
 // reload is dropped and the cache keeps what it had.
 type LoadFunc func(ctx context.Context, lines []domain.Line) error
+
+// orgLoads and blobReads bound a reload's reads: up to orgLoads organizations load at once, and
+// up to blobReads files are read at once across all of them. Each read of the store takes one
+// connection of goald's pool for its query, so a reload holds at most orgLoads+blobReads (8) of
+// the pool's 14 (docs/engineering/cloudflare-operations.md, "Connection budget").
+const (
+	orgLoads  = 4
+	blobReads = 4
+)
 
 // DefaultCacheBytes bounds the files of the versions kept besides the current ones.
 const DefaultCacheBytes = 64 << 20
@@ -108,7 +118,8 @@ type Cache struct {
 	onLoad LoadFunc
 	log    *slog.Logger
 
-	reload sync.Mutex // one reload at a time, so onLoad sees them in order
+	reload sync.Mutex    // one reload at a time, so onLoad sees them in order
+	blobs  chan struct{} // a slot for each file read in flight (blobReads)
 	// misses folds the reloads of lookups that miss together, by organization.
 	misses singleflight.Group
 
@@ -134,7 +145,7 @@ func New(store ports.DefinitionStore, orgs Orgs, onLoad LoadFunc, cfg Config, lo
 	return &Cache{
 		store: store, orgs: orgs, onLoad: onLoad, log: log,
 		current: map[domain.FactoryID]current{}, byID: map[domain.DefinitionVersionID]*version{}, live: map[domain.OrgID]bool{},
-		pinned: newLRU(cfg.CacheBytes),
+		pinned: newLRU(cfg.CacheBytes), blobs: make(chan struct{}, blobReads),
 	}
 }
 
@@ -173,12 +184,32 @@ func (c *Cache) reloadOrgs(ctx context.Context, only []domain.OrgID) ([]domain.L
 		targets = slices.DeleteFunc(slices.Clone(only), func(o domain.OrgID) bool { return !live[o] })
 	}
 
-	var errs []error
+	// Each organization loads against the same snapshot and builds its own factories; they are
+	// merged in the order of the organizations' ids, as a load one after another would.
+	orgs := slices.Compact(slices.Sorted(slices.Values(targets)))
+	loaded := make([]map[domain.FactoryID]current, len(orgs))
+	errs := make([]error, len(orgs))
 
-	for _, org := range slices.Compact(slices.Sorted(slices.Values(targets))) {
-		if err := c.reloadOrg(ctx, org, next); err != nil {
-			errs = append(errs, err)
+	var g errgroup.Group
+
+	g.SetLimit(orgLoads)
+
+	for i, org := range orgs {
+		g.Go(func() error {
+			loaded[i], errs[i] = c.reloadOrg(ctx, org, next)
+			return nil
+		})
+	}
+
+	_ = g.Wait() // the loads report their errors in errs
+
+	for i, org := range orgs {
+		if errs[i] != nil {
+			continue
 		}
+
+		maps.DeleteFunc(next, func(_ domain.FactoryID, cur current) bool { return cur.org == org })
+		maps.Copy(next, loaded[i])
 	}
 
 	lines := linesOf(next)
@@ -208,27 +239,26 @@ func (c *Cache) reloadOrgs(ctx context.Context, only []domain.OrgID) ([]domain.L
 	return lines, errors.Join(errs...)
 }
 
-// reloadOrg sets the current versions of org's factories in next: a version already loaded is
-// kept, a new one is loaded, and a factory that has no current version any more (deleted, or
-// never published) is dropped. A version that fails to load leaves the factory on the one it
-// had, if any.
-func (c *Cache) reloadOrg(ctx context.Context, org domain.OrgID, next map[domain.FactoryID]current) error {
+// reloadOrg returns the current versions of org's factories, given the ones in prev, which it
+// only reads: a version already loaded is kept, a new one is loaded, and a factory that has no
+// current version any more (deleted, or never published) is left out. A version that fails to
+// load leaves the factory on the one it had, if any.
+func (c *Cache) reloadOrg(ctx context.Context, org domain.OrgID, prev map[domain.FactoryID]current) (map[domain.FactoryID]current, error) {
 	octx := domain.WithOrg(ctx, org)
 
 	recs, err := c.store.FactoryRecords(octx)
 	if err != nil {
-		return fmt.Errorf("list factories of organization %s: %w", org, err)
+		return nil, fmt.Errorf("list factories of organization %s: %w", org, err)
 	}
 
-	running := map[domain.FactoryID]bool{}
+	next := map[domain.FactoryID]current{}
 
 	for _, r := range recs {
 		if r.Current == nil {
 			continue
 		}
 
-		running[r.ID] = true
-		prev, had := next[r.ID]
+		prev, had := prev[r.ID]
 
 		if had && prev.id == r.Current.ID {
 			next[r.ID] = currentOf(prev.version, r)
@@ -245,8 +275,6 @@ func (c *Cache) reloadOrg(ctx context.Context, org domain.OrgID, next map[domain
 
 			if had {
 				next[r.ID] = currentOf(prev.version, r)
-			} else {
-				delete(next, r.ID)
 			}
 
 			continue
@@ -257,9 +285,7 @@ func (c *Cache) reloadOrg(ctx context.Context, org domain.OrgID, next map[domain
 		next[r.ID] = currentOf(v, r)
 	}
 
-	maps.DeleteFunc(next, func(id domain.FactoryID, cur current) bool { return cur.org == org && !running[id] })
-
-	return nil
+	return next, nil
 }
 
 // load reads a published version of the organization in ctx and validates it. Files with the
@@ -282,25 +308,15 @@ func (c *Cache) load(ctx context.Context, id domain.DefinitionVersionID, reuse *
 		}
 	}
 
+	if err := c.readBlobs(ctx, id, dv.Manifest, known); err != nil {
+		return nil, err
+	}
+
 	v := &version{id: dv.ID, org: dv.OrgID, number: dv.Number, manifest: dv.Manifest, files: make(config.Files, len(dv.Manifest))}
 
 	for p, h := range dv.Manifest {
-		b, ok := known[h]
-		if !ok {
-			if b, err = c.store.Blob(ctx, h); err != nil {
-				return nil, fmt.Errorf("definition version %s: file %s: %w", id, p, err)
-			}
-
-			// The store verifies too; a cache must never serve content under the wrong hash.
-			if domain.HashBlob(b) != h {
-				return nil, fmt.Errorf("definition version %s: file %s: %w", id, p, ports.ErrBlobCorrupt)
-			}
-
-			known[h] = b
-		}
-
-		v.files[p] = b
-		v.size += int64(len(b))
+		v.files[p] = known[h]
+		v.size += int64(len(known[h]))
 	}
 
 	if v.factory, err = config.Load(v.files); err != nil {
@@ -312,6 +328,66 @@ func (c *Cache) load(ctx context.Context, id domain.DefinitionVersionID, reuse *
 	}
 
 	return v, nil
+}
+
+// readBlobs adds to known the content of every file of manifest whose hash it lacks, read from
+// the store at the same time, each in one of the cache's blobReads slots. A file that fails fails
+// the version: the error is the first failing file's, in the order of the paths.
+func (c *Cache) readBlobs(ctx context.Context, id domain.DefinitionVersionID, manifest domain.Manifest, known map[domain.BlobHash][]byte) error {
+	paths := map[domain.BlobHash]string{} // the first path of each hash to read
+	for _, p := range slices.Sorted(maps.Keys(manifest)) {
+		h := manifest[p]
+		_, have := known[h]
+		_, taken := paths[h]
+
+		if !have && !taken {
+			paths[h] = p
+		}
+	}
+
+	hashes := slices.Collect(maps.Keys(paths))
+	slices.SortFunc(hashes, func(a, b domain.BlobHash) int { return cmp.Compare(paths[a], paths[b]) })
+
+	read := make([][]byte, len(hashes))
+	errs := make([]error, len(hashes))
+
+	var wg sync.WaitGroup
+
+	for i, h := range hashes {
+		wg.Go(func() {
+			select {
+			case c.blobs <- struct{}{}:
+			case <-ctx.Done():
+				errs[i] = fmt.Errorf("definition version %s: file %s: %w", id, paths[h], ctx.Err())
+				return
+			}
+
+			defer func() { <-c.blobs }()
+
+			b, err := c.store.Blob(ctx, h)
+			switch {
+			case err != nil:
+				errs[i] = fmt.Errorf("definition version %s: file %s: %w", id, paths[h], err)
+			// The store verifies too; a cache must never serve content under the wrong hash.
+			case domain.HashBlob(b) != h:
+				errs[i] = fmt.Errorf("definition version %s: file %s: %w", id, paths[h], ports.ErrBlobCorrupt)
+			default:
+				read[i] = b
+			}
+		})
+	}
+
+	wg.Wait()
+
+	if i := slices.IndexFunc(errs, func(err error) bool { return err != nil }); i >= 0 {
+		return errs[i]
+	}
+
+	for i, h := range hashes {
+		known[h] = read[i]
+	}
+
+	return nil
 }
 
 // version returns a published version of the organization in ctx: a current one, one kept for
