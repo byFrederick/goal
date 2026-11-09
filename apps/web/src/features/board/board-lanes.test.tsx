@@ -137,6 +137,54 @@ async function phonePanel(): Promise<HTMLElement> {
 }
 
 describe('board lanes', () => {
+  const laneHeader = async (over: Partial<BoardLane>) => {
+    const stationOf = board({ lanes: [lane(over)] }, [workItem]).stations[0] as BoardStation;
+    renderBoardPage({
+      page: () => <StationBody station={stationOf} onMove={vi.fn()} draggable={false} compact />,
+      org,
+      factory,
+    });
+    const h = await screen.findByRole('heading', { name: 'Investigator' });
+    return h.closest('header') as HTMLElement;
+  };
+  const boxes = (el: HTMLElement) => el.querySelectorAll('[data-mode="segments"] i');
+
+  it("draws a counted lane's kept boxes filled and no shared group", async () => {
+    const region = await laneHeader({
+      slots: 4,
+      busy: 2,
+      kept_slots: 2,
+      kept_busy: 2,
+      shared_slots: 0,
+      shared_busy: 0,
+    });
+    expect(within(region).getByText('2 of 2 kept slots busy')).toBeTruthy();
+    expect(within(region).queryByText(/shared/)).toBeNull();
+    expect(boxes(region)).toHaveLength(2);
+    expect(region.querySelectorAll('i[data-done="true"]')).toHaveLength(2);
+  });
+
+  it("draws an uncounted lane's shared box empty", async () => {
+    const region = await laneHeader({
+      slots: 1,
+      busy: 0,
+      kept_slots: 0,
+      kept_busy: 0,
+      shared_slots: 1,
+      shared_busy: 0,
+    });
+    expect(within(region).getByText('0 of 1 shared slot busy')).toBeTruthy();
+    expect(within(region).queryByText(/kept/)).toBeNull();
+    expect(boxes(region)).toHaveLength(1);
+    expect(region.querySelectorAll('i[data-done="true"]')).toHaveLength(0);
+  });
+
+  it('names both groups when a lane has kept and shared slots', async () => {
+    const region = await laneHeader({ kept_slots: 2, kept_busy: 1, shared_slots: 1, shared_busy: 1 });
+    expect(within(region).getByText('1 of 2 kept slots busy, 1 of 1 shared slot busy')).toBeTruthy();
+    expect(boxes(region)).toHaveLength(3);
+  });
+
   it('shows a person lane without slot boxes at a human station', async () => {
     const approve: Board = {
       ...board(),
@@ -171,7 +219,7 @@ describe('board lanes', () => {
     // The station's panel is named Approve, and its lane inside it.
     const [person] = within(columns).getAllByRole('region');
     expect(within(person as HTMLElement).getAllByRole('heading', { name: 'Approve' }).length).toBeGreaterThan(0);
-    expect(within(person as HTMLElement).queryByText(/slots busy/)).toBeNull();
+    expect(within(person as HTMLElement).queryByText(/slots? busy/)).toBeNull();
   });
 
   it('gives every truncating element on a lane card its full text as a title', async () => {

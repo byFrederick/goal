@@ -11,7 +11,8 @@ Open a factory's Board at `/o/<org>/f/<factory>/board`.
 
 - **Your role:** when your role on the factory is viewer or approver, a chip next to the title says so, such as "You’re a viewer of sre". On a phone it sits under the top bar. Editors, admins and owners see no chip.
 - **Columns** are the line's stations, in the order work moves through them. Each card is an item.
-- **Cards** show what the run on the item is doing now, and name the item's agent. Columns are not split by agent role: to see one role's work, use the **Agent role** filter.
+- **Cards** show what the run on the item is doing now, and name the item's agent. A station with several agent roles draws one lane per role, and the **Agent role** filter shows one role's work.
+- **Slot boxes:** an agent lane's header draws one box per slot the lane can use: first the slots the station keeps for that lane, then, after a wider gap, the station's shared slots. A box is filled while a run holds that slot. A lane with no kept slots shows only shared boxes, and a person lane shows none.
 - **Column order:** a station with a buffer, such as Build, shows its **In progress** cards first, at the top. The **Ready, buffer n of m** cards sit below them, dimmed, under their own label. The same order holds on a phone.
 - **Show N more:** a column shows its first six In progress cards, then a **Show N more** button that reveals the rest. In a station with a buffer, the button ends the In progress group, above the Ready cards. **Show fewer** folds the column back.
 - **Assembly line:** a card that is part of an assembly shows the assembly's title, one pip per part (filled for each merged part) and its place, such as `2 of 4`. An assembly with many parts shows one bar, filled to the share merged, instead of one pip per part.
