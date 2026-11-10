@@ -241,7 +241,7 @@ func (e *Engine) applyHeld(ctx context.Context, log *slog.Logger, c claimed, run
 // ciRoundsReason is why an item blocks after limit CI rounds in visit: the checks that failed in
 // the latest round, on each repository and commit.
 func (e *Engine) ciRoundsReason(ctx context.Context, c claimed, visit string, limit int) string {
-	reason := fmt.Sprintf("CI on what the item pushed did not pass in %d rounds at %s", limit, c.station.ID)
+	reason := fmt.Sprintf("CI on the item's commits did not pass in %d rounds at %s", limit, c.station.ID)
 
 	waits, err := e.store.CIWaits(ctx, c.item.ID, c.station.ID)
 	if err != nil {

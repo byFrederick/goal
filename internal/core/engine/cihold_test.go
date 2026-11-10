@@ -313,7 +313,7 @@ func TestCIHold_RoundsCapBlocks(t *testing.T) {
 	}
 
 	reason, _ := blocked[0].Data["reason"].(string)
-	for _, want := range []string{"2 rounds", "e2e", appKey, pushSHA2} {
+	for _, want := range []string{"CI on the item's commits did not pass in 2 rounds", "e2e", appKey, pushSHA2} {
 		if !strings.Contains(reason, want) {
 			t.Errorf("block reason %q lacks %q", reason, want)
 		}
