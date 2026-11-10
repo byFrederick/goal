@@ -192,11 +192,19 @@ describe('booting goald', () => {
 
   it('starts a stopped goald once when the cron and page loads arrive together', async () => {
     const c = await stopped();
-    const [, first, second] = await Promise.all([
-      worker.scheduled(createScheduledController(), env),
-      fetchPage(),
-      fetchPage(),
-    ]);
+    // The port answers only once the test releases it, so both page loads arrive during the boot.
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    c.port = async () => {
+      await held;
+      return new Response('ok');
+    };
+    const scheduled = worker.scheduled(createScheduledController(), env);
+    const [first, second] = await Promise.all([fetchPage(), fetchPage()]);
+    release();
+    await scheduled;
     expect(first.status).toBe(503);
     expect(second.status).toBe(503);
     expect(c.started).toHaveLength(1);
