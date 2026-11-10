@@ -88,7 +88,7 @@ func cacheRequest(t *testing.T, method, url, token string, body []byte) (int, []
 
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := ownClient(t).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,7 +404,7 @@ func TestBuildCache_UploadTooLarge(t *testing.T) {
 
 	req.Header.Set("Authorization", "Bearer "+tok)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := ownClient(t).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
