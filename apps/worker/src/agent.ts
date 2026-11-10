@@ -1,6 +1,7 @@
 import { realpath } from 'node:fs/promises';
 import { posix } from 'node:path';
 import type { CanUseTool, McpServerConfig, Options, PermissionResult, Settings } from '@anthropic-ai/claude-agent-sdk';
+import { gatewayFetch } from './gateway.js';
 import {
   type AgentFiles,
   type Connection,
@@ -235,15 +236,20 @@ function serverToolMode(server: EnvironmentServer, tool: string): 'allow' | 'ask
 export interface GatewayReach {
   fetch: typeof globalThis.fetch;
   token: string | undefined;
+  /** The wait before the report retries a 503 goald-starting (src/gateway.ts); setTimeout when absent. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
-/** How long the report of an Ask-first call may take; past it the call is denied without interrupt. */
+/**
+ * How long each attempt to report an Ask-first call may take; past it the call is denied without
+ * interrupt. A 503 goald-starting is retried for up to two minutes (src/gateway.ts).
+ */
 const reportTimeoutMs = 30_000;
 
 /**
  * Reports an Ask-first call to the gateway, which records it and ends the run (ADR 0031 decision 4),
  * and denies the call here so it never runs. A 202 interrupts the agent: the item waits for a person.
- * Any other answer, or no way to report, denies the call without interrupt and the run goes on. The
+ * The report waits out a goald restart (src/gateway.ts). Any other answer, or no way to report, denies the call without interrupt and the run goes on. The
  * report never names the input: stderr gets the connection, the tool and the status or error only.
  */
 async function askFirst(
@@ -262,12 +268,16 @@ async function askFirst(
 
   let res: Response;
   try {
-    res = await reach.fetch(new URL('/run/tool-approval', spec.gateway_url), {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${reach.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ connection: conn, tool, input }),
-      signal: AbortSignal.timeout(reportTimeoutMs),
-    });
+    res = await gatewayFetch(
+      { fetch: reach.fetch, ...(reach.sleep ? { sleep: reach.sleep } : {}) },
+      new URL('/run/tool-approval', spec.gateway_url),
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${reach.token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connection: conn, tool, input }),
+      },
+      { attemptTimeoutMs: reportTimeoutMs },
+    );
   } catch (err) {
     return refused(err instanceof Error ? err.message : String(err));
   }

@@ -259,7 +259,7 @@ describe('the permission check of off and Ask-first connection tools', () => {
   /** The issues connection with these tool modes, and the run's gateway. */
   const permissionWith = (
     modes: Record<string, 'ask' | 'off'>,
-    reach: { fetch: typeof globalThis.fetch; token?: string | undefined },
+    reach: { fetch: typeof globalThis.fetch; token?: string | undefined; sleep?: (ms: number) => Promise<void> },
     extra: Partial<TaskSpec> = {},
   ): CanUseTool =>
     connectionPermission(
@@ -329,6 +329,35 @@ describe('the permission check of off and Ask-first connection tools', () => {
       tool: 'create_comment',
       input: body,
     });
+  });
+
+  it('waits out a goald restart, reports the call again and interrupts on the 202', async () => {
+    const requests: RequestInit[] = [];
+    const answers = [
+      Response.json({ code: 'goald-starting' }, { status: 503, headers: { 'Retry-After': '5' } }),
+      new Response(null, { status: 202 }),
+    ];
+    const fetch = (async (_: string | URL, init?: RequestInit) => {
+      requests.push(init ?? {});
+      return answers.shift() ?? new Response(null, { status: 500 });
+    }) as typeof globalThis.fetch;
+    const sleeps: number[] = [];
+    const sleep = async (ms: number) => {
+      sleeps.push(ms);
+    };
+
+    const check = permissionWith({ create_comment: 'ask' }, { fetch, sleep });
+    const verdict = await verdictOf({ canUseTool: check }, create, body);
+
+    expect(verdict).toMatchObject({ behavior: 'deny', interrupt: true });
+    expect(sleeps).toEqual([5_000]);
+    expect(requests).toHaveLength(2);
+    expect(requests[0]?.body).toBe(requests[1]?.body);
+    // Each attempt has its own time limit, so the first one's does not cut the second short.
+    expect(requests[0]?.signal).not.toBe(requests[1]?.signal);
+    expect(stderr).toHaveBeenCalledWith(
+      'goal-agent: gateway /run/tool-approval is starting (503 goald-starting); attempt 1 failed, retrying in 5s\n',
+    );
   });
 
   it.each([409, 413, 500])('denies without interrupt and sends on when the gateway answers %i', async (status) => {

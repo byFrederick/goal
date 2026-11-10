@@ -7,8 +7,8 @@ import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
 import { fileURLToPath } from 'node:url';
 import { archiveFile, restoreBuildCache, stateFile, writeBuildCacheState } from './cache.js';
-import { type GatewayDeps, gatewayFetch } from './gateway.js';
 import { cpuStartFile, saveCpuStart } from './cgroup.js';
+import { type GatewayDeps, gatewayFetch } from './gateway.js';
 import { gitWithRetry } from './retry.js';
 import { Bundle, type ClonedRepository, type GitCredential, type Knowledge, paths } from './spec.js';
 
