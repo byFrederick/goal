@@ -7,6 +7,7 @@ import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
 import { fileURLToPath } from 'node:url';
 import { archiveFile, restoreBuildCache, stateFile, writeBuildCacheState } from './cache.js';
+import { type GatewayDeps, gatewayFetch } from './gateway.js';
 import { cpuStartFile, saveCpuStart } from './cgroup.js';
 import { gitWithRetry } from './retry.js';
 import { Bundle, type ClonedRepository, type GitCredential, type Knowledge, paths } from './spec.js';
@@ -42,7 +43,10 @@ export interface PrepareDeps {
    * node and dist/credential.js beside this file when absent.
    */
   credentialHelper?: { node: string; script: string };
-  /** The wait between attempts of a network git step; setTimeout when absent. */
+  /**
+   * The wait between attempts of a network git step, and before a gateway call retries a 503
+   * goald-starting (src/gateway.ts); setTimeout when absent.
+   */
   sleep?: (ms: number) => Promise<void>;
   /** Where a retry, or a cgroup counter that can't be read, is logged; stderr when absent. */
   log?: (line: string) => void;
@@ -227,6 +231,7 @@ export async function prepare(deps: PrepareDeps): Promise<Prepared> {
         token,
         archive: join(deps.dirs.goal, archiveFile),
         log: deps.log ?? ((line) => process.stderr.write(`${line}\n`)),
+        ...(deps.sleep ? { sleep: deps.sleep } : {}),
         workspace: deps.dirs.workspace,
         ...(deps.buildCacheTimeoutMs === undefined ? {} : { timeoutMs: deps.buildCacheTimeoutMs }),
       },
@@ -416,7 +421,7 @@ async function unpackSnapshot(
   const url = new URL(s.url, gateway);
   const headers: Record<string, string> =
     url.origin === new URL(gateway).origin ? { Authorization: `Bearer ${token}` } : {};
-  const res = await deps.fetch(url, { headers });
+  const res = await gatewayFetch(gatewayDeps(deps), url, { headers });
   if (!res.ok || !res.body) {
     const why = (await res.text()).trim().slice(0, 200);
     throw new Error(`knowledge ${s.source}: GET ${url.pathname}: ${res.status}${why ? ` ${why}` : ''}`);
@@ -620,12 +625,23 @@ async function storeCredentials(deps: PrepareDeps, stored: GitCredential[]): Pro
 }
 
 async function fetchBundle(deps: PrepareDeps, url: URL, token: string): Promise<Bundle> {
-  const res = await deps.fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
+  const res = await gatewayFetch(gatewayDeps(deps), url, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  });
   if (!res.ok) {
     const why = (await res.text()).trim().slice(0, 200);
     throw new Error(`GET ${url.pathname}: ${res.status}${why ? ` ${why}` : ''}`);
   }
   return Bundle.parse(await res.json());
+}
+
+/** How prepare's gateway calls wait out a goald restart: its fetch, sleep and log (src/gateway.ts). */
+function gatewayDeps(deps: PrepareDeps): GatewayDeps {
+  return {
+    fetch: deps.fetch,
+    ...(deps.sleep ? { sleep: deps.sleep } : {}),
+    ...(deps.log ? { log: deps.log } : {}),
+  };
 }
 
 /** A network git step through gitWithRetry: retried on the transport, with a time limit per attempt. */

@@ -1010,6 +1010,36 @@ describe('prepare', () => {
     await expect(prepare(depsWith(fake, recorder().exec))).rejects.toThrow('GET /run: 403 forbidden');
   });
 
+  it('waits out a goald restart on the bundle fetch', async () => {
+    const { fake, requests } = gatewayServing({ spec, files: {}, git_credentials: [] });
+    let starting = true;
+    const restarting = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (starting) {
+        starting = false;
+        requests.push({ url: String(input), auth: new Headers(init?.headers).get('Authorization') });
+        return Response.json({ code: 'goald-starting' }, { status: 503, headers: { 'Retry-After': '4' } });
+      }
+      return fake(input, init);
+    }) as typeof fetch;
+    const sleeps: number[] = [];
+    const logs: string[] = [];
+
+    const prepared = await prepare({
+      ...depsWith(restarting, recorder().exec),
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+      log: (line) => logs.push(line),
+    });
+
+    expect(prepared.type).toBe('prepared');
+    expect(requests.map((r) => r.url)).toEqual(['http://goal-egress:3128/run', 'http://goal-egress:3128/run']);
+    expect(sleeps).toEqual([4_000]);
+    expect(logs).toEqual([
+      'goal-agent: gateway /run is starting (503 goald-starting); attempt 1 failed, retrying in 4s',
+    ]);
+  });
+
   it('fails without the gateway URL or token', async () => {
     const { fake, requests } = gatewayServing({ spec, files: {} });
     await expect(prepare(depsWith(fake, recorder().exec, { GOAL_GATEWAY_TOKEN: '' }))).rejects.toThrow(
