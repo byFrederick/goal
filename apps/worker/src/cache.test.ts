@@ -285,6 +285,46 @@ describe('build cache', () => {
     expect(state?.outcome).toBe('error');
   });
 
+  it('waits out a goald restart on the restore GET and then hits', async () => {
+    const bucket = fakeBucket();
+    const first = await box('one', both);
+    expect((await restoreBuildCache(restoreDeps(first, bucket.fake), true))?.outcome).toBe('miss');
+    await build(first);
+    const state = (await restoreBuildCache(restoreDeps(first, bucket.fake), true)) as BuildCacheState;
+    expect(await saveBuildCache(saveDeps(first, bucket.fake), state)).toBe(true);
+
+    const second = await box('two', both, join(root, 'caches-two'));
+    let starting = 1;
+    const restarting = (async (input: string | URL | Request, init?: RequestInit) => {
+      if (starting-- > 0)
+        return Response.json({ code: 'goald-starting' }, { status: 503, headers: { 'Retry-After': '2' } });
+      return bucket.fake(input, init);
+    }) as typeof fetch;
+    const logs: string[] = [];
+    const sleeps: number[] = [];
+    const sleep = async (ms: number) => {
+      sleeps.push(ms);
+    };
+
+    const restored = await restoreBuildCache({ ...restoreDeps(second, restarting, logs), sleep }, true);
+
+    expect(restored?.outcome).toBe('hit');
+    expect(sleeps).toEqual([2_000]);
+    expect(logs).toEqual([expect.stringMatching(/^goal-agent: gateway \/run\/build-cache\/[0-9a-f]{64} is starting/)]);
+    expect(logs.join('\n')).not.toContain(token);
+  });
+
+  it('ends a restart wait at the restore time limit', async () => {
+    const b = await box('one', both);
+    const starting = (async () =>
+      Response.json({ code: 'goald-starting' }, { status: 503, headers: { 'Retry-After': '30' } })) as typeof fetch;
+    const state = await restoreBuildCache(
+      { ...restoreDeps(b, starting), timeoutMs: 20, sleep: () => new Promise(() => undefined) },
+      true,
+    );
+    expect(state?.outcome).toBe('error');
+  });
+
   it('is off without fetching when the run turns the cache off', async () => {
     const bucket = fakeBucket();
     const b = await box('one', both);

@@ -5,6 +5,7 @@ import { dirname, join, relative } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
+import { gatewayFetch } from './gateway.js';
 import type { Exec, Output } from './prepare.js';
 
 /**
@@ -64,8 +65,10 @@ export interface CacheIO {
   token: string;
   /** Where the archive is written while it downloads or uploads. */
   archive: string;
-  /** Where a failure is logged; never a URL or a token. */
+  /** Where a failure, or a wait for goald to start, is logged; never a URL or a token. */
   log: (line: string) => void;
+  /** The wait before a call retries a 503 goald-starting (src/gateway.ts); setTimeout when absent. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export interface RestoreDeps extends CacheIO {
@@ -184,7 +187,7 @@ export async function restoreBuildCache(deps: RestoreDeps, enabled: boolean): Pr
   const { key, dirs } = found;
   const signal = AbortSignal.timeout(deps.timeoutMs ?? restoreTimeoutMs);
   try {
-    const res = await deps.fetch(gatewayRoute(deps, key), { headers: authFor(deps, gatewayRoute(deps, key)), signal });
+    const res = await call(deps, gatewayRoute(deps, key), { headers: authFor(deps, gatewayRoute(deps, key)), signal });
     if (res.status === 404) {
       await res.body?.cancel();
       return { outcome: 'miss', key, dirs };
@@ -193,7 +196,7 @@ export async function restoreBuildCache(deps: RestoreDeps, enabled: boolean): Pr
     const { url } = (await res.json()) as { url?: unknown };
     if (typeof url !== 'string' || url === '') throw new Error(`GET ${routes}<key>: no url`);
     const from = new URL(url, deps.gateway);
-    const download = await deps.fetch(from, { headers: authFor(deps, from), signal });
+    const download = await call(deps, from, { headers: authFor(deps, from), signal });
     if (!download.ok || !download.body) throw new Error(`download: ${download.status}`);
     await mkdir(dirname(deps.archive), { recursive: true });
     await pipeline(Readable.fromWeb(download.body as ReadableStream<Uint8Array>), createWriteStream(deps.archive), {
@@ -225,7 +228,7 @@ export async function saveBuildCache(deps: SaveDeps, state: BuildCacheState): Pr
     if (present.length === 0) return false;
 
     const reserve = gatewayRoute(deps, key);
-    const res = await deps.fetch(reserve, { method: 'POST', headers: authFor(deps, reserve) });
+    const res = await call(deps, reserve, { method: 'POST', headers: authFor(deps, reserve) });
     if (res.status === 409) {
       await res.body?.cancel();
       deps.log('goal-agent run: build cache: another box saves this key; skipped');
@@ -245,7 +248,7 @@ export async function saveBuildCache(deps: SaveDeps, state: BuildCacheState): Pr
     }
 
     const to = new URL(upload.url, deps.gateway);
-    const put = await deps.fetch(to, {
+    const put = await call(deps, to, {
       method: typeof upload.method === 'string' && upload.method !== '' ? upload.method : 'PUT',
       headers: { ...authFor(deps, to), 'Content-Length': String(size), 'Content-Type': 'application/zstd' },
       body: Readable.toWeb(createReadStream(deps.archive)) as unknown as RequestInit['body'],
@@ -255,7 +258,7 @@ export async function saveBuildCache(deps: SaveDeps, state: BuildCacheState): Pr
     if (!put.ok) throw new Error(`upload: ${put.status}`);
 
     const done = gatewayRoute(deps, key, 'done');
-    const committed = await deps.fetch(done, {
+    const committed = await call(deps, done, {
       method: 'POST',
       headers: { ...authFor(deps, done), 'Content-Type': 'application/json' },
       body: JSON.stringify({ size_bytes: size }),
@@ -289,6 +292,11 @@ export async function writeBuildCacheState(path: string, state: BuildCacheState)
 }
 
 /** The route of key, or of one of its sub-paths, on the gateway's origin. */
+/** One build-cache request through gatewayFetch: it waits out a goald restart, never a stream upload's. */
+function call(deps: CacheIO, url: URL, init: RequestInit): Promise<Response> {
+  return gatewayFetch({ fetch: deps.fetch, log: deps.log, ...(deps.sleep ? { sleep: deps.sleep } : {}) }, url, init);
+}
+
 function gatewayRoute(deps: CacheIO, key: string, sub?: string): URL {
   return new URL(`${routes}${key}${sub ? `/${sub}` : ''}`, deps.gateway);
 }
