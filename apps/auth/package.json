@@ -19,9 +19,9 @@
     "test:integration": "vitest run --project integration"
   },
   "dependencies": {
-    "@hono/node-server": "2.1.5",
+    "@hono/node-server": "2.1.6",
     "better-auth": "catalog:",
-    "hono": "4.13.13",
+    "hono": "4.13.16",
     "kysely": "0.29.7",
     "nodemailer": "10.1.7",
     "pg": "8.23.1"
