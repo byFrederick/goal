@@ -47,8 +47,8 @@ overrides:
   'httpsnippet>form-data': 4.0.6
   # miniflare 5.20261012.0-beta (through wrangler and @cloudflare/vitest-plugin, for the control
   # worker) pins undici 7.29.1 (GHSA-4qv8-2p9j-2685 and seven further advisories in 7.x before
-  # 7.30.1, three high and five moderate in all); 7.30.1 fixes them all and is a patch release
-  # of the same line.
+  # 7.30.1, four high and four moderate in all); 7.30.1 fixes them all and is a forward release
+  # of the same major line.
   'miniflare>undici': 7.30.1
   # @cloudflare/vitest-plugin 1.4.2 pins zod 4.6.5 (GHSA-mrhx-c7xc-m3w5, high: memory exhaustion
   # while validating oversized constrained collections); 4.6.6 fixes it. 4.6.7 is what the
