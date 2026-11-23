@@ -44,7 +44,7 @@ RUN mise="mise-v${MISE_VERSION}-linux-$([ "${TARGETARCH}" = amd64 ] && echo x64 
 # image's Go, Node and Python, installed as the sandbox's user into /opt/mise.
 FROM ${DEBIAN_IMAGE} AS base
 ARG PG_MAJOR=18
-ARG GO_VERSION=1.26.10
+ARG GO_VERSION=1.26.11
 ARG NODE_VERSION=22.23.3
 ARG PYTHON_VERSION=3.14.8
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
